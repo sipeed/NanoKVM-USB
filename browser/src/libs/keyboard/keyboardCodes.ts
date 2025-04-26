@@ -108,6 +108,11 @@ export const KeyboardCodes: Map<string, number> = new Map([
 
   ['Menu', 118],
 
+  ['IntlRo', 135],
+  ['IntlYen', 137],
+  ['Convert', 138],
+  ['NonConvert', 139],
+
   ['ControlLeft', 224],
   ['ShiftLeft', 225],
   ['AltLeft', 226],
