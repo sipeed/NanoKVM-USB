@@ -45,7 +45,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.sipeed.usbkvm')
 
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
-    if (permission === 'media') {
+    if (['media', 'clipboard-read'].includes(permission)) {
       callback(true)
     } else {
       callback(false)
