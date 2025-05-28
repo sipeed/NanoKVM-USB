@@ -4,9 +4,7 @@ import { KeyboardIcon } from 'lucide-react';
 
 import { Paste } from './paste.tsx';
 import { VirtualKeyboard } from './virtual-keyboard.tsx';
-import { CtrlAltDel } from './ctrl-alt-del';
-import { CtrlD } from './ctrl-d.tsx';
-import { WinTab } from './win-tab.tsx';
+import { KeyboardShortcutsMenu } from './shortcuts-menu.tsx';
 
 export const Keyboard = () => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -14,10 +12,8 @@ export const Keyboard = () => {
   const content = (
     <>
       <Paste />
-      <CtrlAltDel />
-      <CtrlD />
-      <WinTab />
       <VirtualKeyboard />
+      <KeyboardShortcutsMenu />
     </>
   );
 
