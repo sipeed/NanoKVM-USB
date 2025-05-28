@@ -37,7 +37,9 @@ const de = {
       keyboard: {
         paste: 'Einfügen',
         virtualKeyboard: 'Virtuelle Tastatur',
-        ctrlAltDel: 'Strg + Alt + Entfernen'
+        ctrlAltDel: 'Strg + Alt + Entfernen',
+        ctrlD: 'Strg + D',
+        winTab: 'Win + Tab',
       },
       mouse: {
         cursor: {
@@ -62,5 +64,5 @@ const de = {
       }
     }
   };
-  
+
   export default de;
