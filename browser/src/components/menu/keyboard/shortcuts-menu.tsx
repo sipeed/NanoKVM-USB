@@ -3,9 +3,7 @@ import { SendHorizonal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Popover } from 'antd';
 
-import { CtrlAltDel } from './ctrl-alt-del';
-import { CtrlD } from './ctrl-d.tsx';
-import { WinTab } from './win-tab.tsx';
+import { Shortcut } from './shortcut.tsx';
 
 export const KeyboardShortcutsMenu = () => {
   const { t } = useTranslation();
@@ -15,9 +13,30 @@ export const KeyboardShortcutsMenu = () => {
     <Popover
       content={
         <div className="flex flex-col gap-1">
-          <CtrlAltDel />
-          <CtrlD />
-          <WinTab />
+          {[
+            {
+              label: t('keyboard.ctrlAltDel'),
+              modifiers: { leftCtrl: true, leftAlt: true },
+              keyCode: 'Delete',
+            },
+            {
+              label: t('keyboard.ctrlD'),
+              modifiers: { leftCtrl: true },
+              keyCode: 'KeyD',
+            },
+            {
+              label: t('keyboard.winTab'),
+              modifiers: { leftWindows: true },
+              keyCode: 'Tab',
+            },
+          ].map((shortcut) => (
+            <Shortcut
+              key={shortcut.keyCode}
+              label={shortcut.label}
+              modifiers={shortcut.modifiers}
+              keyCode={shortcut.keyCode}
+            />
+          ))}
         </div>
       }
       trigger="click"
