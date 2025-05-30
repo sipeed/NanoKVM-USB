@@ -1,10 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { message } from 'antd';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 
 import { resolutionAtom } from '@/jotai/device.ts';
-import { scrollDirectionAtom, scrollIntervalAtom } from '@/jotai/mouse.ts';
+import {
+  mouseJigglerModeAtom,
+  mouseLastMoveTimeAtom,
+  scrollDirectionAtom,
+  scrollIntervalAtom
+} from '@/jotai/mouse.ts';
 import { device } from '@/libs/device';
 import { Key } from '@/libs/device/mouse.ts';
 
@@ -15,6 +20,8 @@ export const Relative = () => {
   const resolution = useAtomValue(resolutionAtom);
   const scrollDirection = useAtomValue(scrollDirectionAtom);
   const scrollInterval = useAtomValue(scrollIntervalAtom);
+  const mouseJigglerMode = useAtomValue(mouseJigglerModeAtom);
+  const setMouseLastMoveTime = useSetAtom(mouseLastMoveTimeAtom);
 
   const isLockedRef = useRef(false);
   const keyRef = useRef<Key>(new Key());
@@ -110,6 +117,11 @@ export const Relative = () => {
       if (x === 0 && y === 0) return;
 
       await send(Math.abs(x) < 10 ? x * 2 : x, Math.abs(y) < 10 ? y * 2 : y, 0);
+
+      // mouse jiggler record last move time
+      if (mouseJigglerMode === 'enable') {
+        setMouseLastMoveTime(Date.now());
+      }
     }
 
     // mouse scroll
@@ -138,7 +150,7 @@ export const Relative = () => {
       canvas.removeEventListener('wheel', handleWheel);
       canvas.removeEventListener('contextmenu', disableEvent);
     };
-  }, [resolution, scrollDirection, scrollInterval]);
+  }, [resolution, scrollDirection, scrollInterval, mouseJigglerMode, setMouseLastMoveTime]);
 
   async function send(x: number, y: number, scroll: number) {
     await device.sendMouseRelativeData(keyRef.current, x, y, scroll);
