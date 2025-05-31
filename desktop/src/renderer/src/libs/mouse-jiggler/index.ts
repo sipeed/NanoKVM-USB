@@ -37,6 +37,7 @@ class MouseJiggler {
 
   timeoutCallback(): void {
     if (Date.now() - this.lastMoveTime > MOUSE_JIGGLER_INTERVAL) {
+      this.lastMoveTime = Date.now() - 1_000
       this.sendJiggle()
     }
   }
