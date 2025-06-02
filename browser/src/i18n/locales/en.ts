@@ -24,6 +24,7 @@ const en = {
     },
     video: {
       resolution: 'Resolution',
+      scale: 'Scale',
       customResolution: 'Custom',
       device: 'Device',
       custom: {

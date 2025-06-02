@@ -10,7 +10,12 @@ import { Keyboard } from '@/components/keyboard';
 import { Menu } from '@/components/menu';
 import { Mouse } from '@/components/mouse';
 import { VirtualKeyboard } from '@/components/virtual-keyboard';
-import { resolutionAtom, serialStateAtom, videoStateAtom } from '@/jotai/device.ts';
+import {
+  resolutionAtom,
+  serialStateAtom,
+  videoScaleAtom,
+  videoStateAtom
+} from '@/jotai/device.ts';
 import { isKeyboardEnableAtom } from '@/jotai/keyboard.ts';
 import { mouseStyleAtom } from '@/jotai/mouse.ts';
 import { camera } from '@/libs/camera';
@@ -23,6 +28,7 @@ const App = () => {
   const isBigScreen = useMediaQuery({ minWidth: 850 });
 
   const mouseStyle = useAtomValue(mouseStyleAtom);
+  const videoScale = useAtomValue(videoScaleAtom);
   const videoState = useAtomValue(videoStateAtom);
   const serialState = useAtomValue(serialStateAtom);
   const isKeyboardEnable = useAtomValue(isKeyboardEnableAtom);
@@ -107,7 +113,13 @@ const App = () => {
       <video
         id="video"
         className={clsx('block min-h-[480px] min-w-[640px] select-none', mouseStyle)}
-        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'scale-down' }}
+        style={{
+          transform: `scale(${videoScale})`,
+          transformOrigin: 'center',
+          maxWidth: '100%',
+          maxHeight: '100%',
+          objectFit: 'scale-down'
+        }}
         autoPlay
         playsInline
       />
