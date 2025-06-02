@@ -19,6 +19,7 @@ const ko = {
     },
     video: {
       resolution: '해상도',
+      scale: '배율',
       customResolution: '사용자 정의',
       device: '장치',
       custom: {

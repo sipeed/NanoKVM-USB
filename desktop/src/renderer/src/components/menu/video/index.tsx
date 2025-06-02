@@ -4,11 +4,13 @@ import { MonitorIcon } from 'lucide-react'
 
 import { Device } from './device'
 import { Resolution } from './resolution'
+import { Scale } from './scale'
 
 export const Video = (): ReactElement => {
   const content = (
     <div className="flex flex-col space-y-1">
       <Resolution />
+      <Scale />
       <Device />
     </div>
   )
