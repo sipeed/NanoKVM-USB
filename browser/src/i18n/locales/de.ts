@@ -24,6 +24,7 @@ const de = {
       },
       video: {
         resolution: 'Auflösung',
+        scale: 'Skalierung',
         customResolution: 'Benutzerdefiniert',
         device: 'Gerät',
         custom: {
@@ -62,5 +63,5 @@ const de = {
       }
     }
   };
-  
+
   export default de;

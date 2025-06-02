@@ -24,6 +24,7 @@ const ru = {
     },
     video: {
       resolution: 'Разрешение',
+      scale: 'Масштаб',
       customResolution: 'Пользовательское',
       device: 'Видеоустройство',
       custom: {
