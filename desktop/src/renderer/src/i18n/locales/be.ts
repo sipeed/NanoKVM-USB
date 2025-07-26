@@ -8,15 +8,22 @@ const be = {
         failed: 'Kan geen verbinding maken met de camera. Probeer opnieuw.'
       },
       modal: {
-        title: 'Kies USB-apparaat',
-        selectVideo: 'Kies een video-invoerapparaat',
-        selectSerial: 'Kies serieel apparaat'
-      },
+                title: 'Kies USB-apparaat',
+                selectVideo: 'Selecteer een video-invoerapparaat',
+                selectSerial: 'Kies serieel apparaat',
+                selectBaudRate: 'Selecteer baudrate'
+        },
       menu: {
-        serial: 'Serieel',
-        keyboard: 'Klavier',
-        mouse: 'Muis'
-      },
+                serial: 'Serieel',
+                keyboard: 'Toetsenbord',
+                mouse: 'Muis',
+                serialPort: {
+                        device: 'Serieel apparaat',
+                        baudRate: 'Baudrate',
+                        noDeviceFound: 'Geen seriële apparaten gevonden',
+                        clickToSelect: 'Klik om seriële poort te selecteren'
+                }
+        },
       video: {
         resolution: 'Resolutie',
         customResolution: 'Aangepast',
@@ -72,6 +79,17 @@ const be = {
           title: 'Over',
           version: 'Versie',
           community: 'Community'
+        },
+        reset: {
+          title: 'Instellingen resetten',
+          description: 'Alle applicatie-instellingen resetten naar standaardwaarden',
+          warning: 'Waarschuwing',
+          warningDescription: 'Deze actie kan niet ongedaan worden gemaakt. Alle aangepaste instellingen gaan verloren.',
+          button: 'Alle instellingen resetten',
+          confirmTitle: 'Reset bevestigen',
+          confirmMessage: 'Weet u zeker dat u alle instellingen wilt resetten? Deze actie kan niet ongedaan worden gemaakt.',
+          confirm: 'Reset',
+          cancel: 'Annuleren'
         }
       }
     }

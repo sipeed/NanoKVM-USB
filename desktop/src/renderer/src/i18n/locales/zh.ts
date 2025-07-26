@@ -9,12 +9,19 @@ const zh = {
     modal: {
       title: '选择 USB 设备',
       selectVideo: '请选择视频输入设备',
-      selectSerial: '请选择串口设备'
+      selectSerial: '请选择串口设备',
+      selectBaudRate: '请选择波特率'
     },
     menu: {
       serial: '串口',
       keyboard: '键盘',
-      mouse: '鼠标'
+      mouse: '鼠标',
+      serialPort: {
+        device: '串口设备',
+        baudRate: '波特率',
+        noDeviceFound: '未找到串口设备',
+        clickToSelect: '点击选择串口'
+      }
     },
     video: {
       resolution: '分辨率',
@@ -73,6 +80,17 @@ const zh = {
         title: '关于',
         version: '版本',
         community: '社区'
+      },
+      reset: {
+        title: '重置设置',
+        description: '将所有应用程序设置重置为默认值',
+        warning: '警告',
+        warningDescription: '此操作无法撤销。所有自定义设置将丢失。',
+        button: '重置所有设置',
+        confirmTitle: '确认重置',
+        confirmMessage: '您确定要重置所有设置吗？此操作无法撤销。',
+        confirm: '重置',
+        cancel: '取消'
       }
     }
   }
