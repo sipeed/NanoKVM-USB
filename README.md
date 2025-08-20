@@ -18,9 +18,9 @@ NanoKVM-USB captures HDMI video signals and transmits them to the host via USB 3
 
 | | NanoKVM-USB | Mini-KVM | KIWI-KVM |
 | --- | :---: | :---: | :---: |
-| HDMI Input | 4K@30fps | 1080P@60fps | 4K@30fps |
-| HDMI Loopout | 4K@30fps | None | None |
-| USB Capture | 2K@30fps | 1080P@60fps | 1080P@60fps |
+| HDMI Input | 4K@30fps / Pro 4K@60fps  | 1080P@60fps | 4K@30fps |
+| HDMI Loopout | 4K@30fps / Pro 4K@60fps | None | None |
+| USB Capture | 2K@30fps / Pro 4K@60fps | 1080P@60fps | 1080P@60fps |
 | USB Interface | USB3.0 | USB2.0 | USB3.0 |
 | USB Switch | Yes | Yes | No |
 | Keyboard & Mouse | Yes | Yes | Yes |
@@ -30,7 +30,7 @@ NanoKVM-USB captures HDMI video signals and transmits them to the host via USB 3
 | Volume | 57x25x23mm | 61x13.5x53mm | 80x80x10mm |
 | Shell Material | Aluminum Alloy | Aluminum Alloy | Plastics |
 | Color | Black / Blue / Red | Black | Black |
-| Price | `$39.9 / $49.9` | `$89 / $109` | `$69 / $99` |
+| Price | `$39.9/$49.9`, Pro `$59.9/$69.9` | `$89 / $109` | `$69 / $99` |
 
 ![interface](https://wiki.sipeed.com/hardware/assets/NanoKVM/usb/interface.jpg)
 
