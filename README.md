@@ -20,7 +20,7 @@ NanoKVM-USB captures HDMI video signals and transmits them to the host via USB 3
 | --- | :---: | :---: | :---: |
 | HDMI Input | 4K@30fps / Pro 4K@60fps  | 1080P@60fps | 4K@30fps |
 | HDMI Loopout | 4K@30fps / Pro 4K@60fps | None | None |
-| USB Capture | 2K@30fps / Pro 4K@60fps | 1080P@60fps | 1080P@60fps |
+| USB Capture | 1080P@60fps / Pro 4K@60fps | 1080P@60fps | 1080P@60fps |
 | USB Interface | USB3.0 | USB2.0 | USB3.0 |
 | USB Switch | Yes | Yes | No |
 | Keyboard & Mouse | Yes | Yes | Yes |
