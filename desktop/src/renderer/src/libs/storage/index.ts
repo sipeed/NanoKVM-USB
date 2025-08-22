@@ -13,6 +13,7 @@ const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode'
 const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction'
 const SKIP_UPDATE_KEY = 'nano-kvm-check-update'
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
+const BAUD_RATE_KEY = 'nanokvm-usb-baud-rate'
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -69,6 +70,18 @@ export function getSerialPort(): string | null {
 
 export function setSerialPort(port: string): void {
   localStorage.setItem(SERIAL_PORT_KEY, port)
+}
+
+export function getBaudRate(): number {
+  const baudRate = localStorage.getItem(BAUD_RATE_KEY)
+  if (!baudRate) {
+    return 57600 
+  }
+  return parseInt(baudRate, 10)
+}
+
+export function setBaudRate(baudRate: number): void {
+  localStorage.setItem(BAUD_RATE_KEY, baudRate.toString())
 }
 
 export function getIsMenuOpen(): boolean {
@@ -131,4 +144,19 @@ export function getSkipUpdate(): boolean {
 export function setSkipUpdate(skip: boolean): void {
   const expiry = 3 * 24 * 60 * 60 * 1000
   setWithExpiry(SKIP_UPDATE_KEY, String(skip), expiry)
+}
+
+export function clearAllSettings(): void {
+  localStorage.removeItem(LANGUAGE_KEY)
+  localStorage.removeItem(VIDEO_DEVICE_ID_KEY)
+  localStorage.removeItem(VIDEO_RESOLUTION_KEY)
+  localStorage.removeItem(CUSTOM_RESOLUTION_KEY)
+  localStorage.removeItem(SERIAL_PORT_KEY)
+  localStorage.removeItem(IS_MENU_OPEN_KEY)
+  localStorage.removeItem(MOUSE_STYLE_KEY)
+  localStorage.removeItem(MOUSE_MODE_KEY)
+  localStorage.removeItem(MOUSE_SCROLL_DIRECTION_KEY)
+  localStorage.removeItem(SKIP_UPDATE_KEY)
+  localStorage.removeItem(MOUSE_SCROLL_INTERVAL_KEY)
+  localStorage.removeItem(BAUD_RATE_KEY)
 }
