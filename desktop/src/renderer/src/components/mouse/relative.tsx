@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { IpcEvents } from '@common/ipc-events'
 import { resolutionAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
+import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
 import type { Mouse as MouseKey } from '@renderer/types'
 
 export const Relative = (): ReactElement => {
@@ -110,6 +111,8 @@ export const Relative = (): ReactElement => {
       if (x === 0 && y === 0) return
 
       await send(Math.abs(x) < 10 ? x * 2 : x, Math.abs(y) < 10 ? y * 2 : y, 0)
+
+      mouseJiggler.moveEventCallback()
     }
 
     async function handleWheel(event: WheelEvent): Promise<void> {
