@@ -48,6 +48,9 @@ const de = {
         direction: 'Scrollrichtung',
         scrollUp: 'Hochscrollen',
         scrollDown: 'Runterscrollen',
+        speed: 'Scrollgeschwindigkeit',
+        fast: 'Schnell',
+        slow: 'Langsam',
         requestPointer: 'Benutze relativen Modus. Bitte auf den Desktop klicken, um den Mauszeiger anzuzeigen.'
       },
       settings: {
