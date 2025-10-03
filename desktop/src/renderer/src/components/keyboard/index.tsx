@@ -64,14 +64,15 @@ export const Keyboard = (): ReactElement => {
   }
 
   function getModifier(e: KeyboardEvent): number {
+    const altGraphKey = e.getModifierState('AltGraph')
     const pressedKeys = [
-      e.ctrlKey && pressedKeysRef.current.has('ControlLeft'),
+      altGraphKey || (e.ctrlKey && pressedKeysRef.current.has('ControlLeft')),
       e.shiftKey && pressedKeysRef.current.has('ShiftLeft'),
       e.altKey && pressedKeysRef.current.has('AltLeft'),
       e.metaKey && pressedKeysRef.current.has('MetaLeft'),
       e.ctrlKey && pressedKeysRef.current.has('ControlRight'),
       e.shiftKey && pressedKeysRef.current.has('ShiftRight'),
-      e.altKey && pressedKeysRef.current.has('AltRight'),
+      altGraphKey || (e.altKey && pressedKeysRef.current.has('AltRight')),
       e.metaKey && pressedKeysRef.current.has('MetaRight')
     ]
 
