@@ -5,7 +5,7 @@ import { useAtom } from 'jotai'
 import { CpuIcon, LoaderCircleIcon, RadioIcon } from 'lucide-react'
 
 import { IpcEvents } from '@common/ipc-events'
-import { serialPortAtom, serialPortBaudRateAtom } from '@renderer/jotai/device'
+import { serialPortAtom, serialBaudRateAtom } from '@renderer/jotai/device'
 
 export const SerialPort = (): ReactElement => {
   const [serialPort, setSerialPort] = useAtom(serialPortAtom)
