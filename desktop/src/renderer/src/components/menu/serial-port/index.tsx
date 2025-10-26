@@ -30,11 +30,11 @@ export const SerialPort = (): ReactElement => {
     setSerialPorts(ports)
   }
 
-  async function openSerialPort(port: string): Promise<void> {
+  async function openSerialPort(port: string, baudRate: string): Promise<void> {
     if (connectingPort) return
     setConnectingPort(port)
 
-    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port)
+    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, baudRate)
     if (success) {
       setSerialPort(port)
     }
@@ -49,7 +49,11 @@ export const SerialPort = (): ReactElement => {
             'flex cursor-pointer items-center space-x-2 rounded px-3 py-2 hover:bg-neutral-700/60',
             port === serialPort ? 'text-blue-500' : 'text-white'
           )}
-          onClick={() => openSerialPort(port)}
+          onClick={() => {
+              let baudRate = window.prompt("Baudrate for 9600 for CH340, 57600 for CH341 (NanoKVM)", "57600");
+              openSerialPort(port, baudRate);
+            }
+          }
         >
           {port === connectingPort ? (
             <LoaderCircleIcon className="animate-spin" size={16} />
