@@ -45,4 +45,4 @@ export const videoStateAtom = atom<VideoState>('disconnected')
 
 export const serialPortAtom = atom('')
 export const serialPortStateAtom = atom<SerialState>('disconnected')
-export const serialBaudRate = atom<BaudRate>('57600')
+export const serialBaudRateAtom = atom<BaudRate>('57600')
