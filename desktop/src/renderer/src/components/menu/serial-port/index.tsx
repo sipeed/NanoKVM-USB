@@ -5,10 +5,11 @@ import { useAtom } from 'jotai'
 import { CpuIcon, LoaderCircleIcon, RadioIcon } from 'lucide-react'
 
 import { IpcEvents } from '@common/ipc-events'
-import { serialPortAtom } from '@renderer/jotai/device'
+import { serialPortAtom, serialPortBaudRateAtom } from '@renderer/jotai/device'
 
 export const SerialPort = (): ReactElement => {
   const [serialPort, setSerialPort] = useAtom(serialPortAtom)
+  const [serialBaudRate, setSerialBaudRate] = useAtom(serialBaudRateAtom)
 
   const [connectingPort, setConnectingPort] = useState('')
   const [serialPorts, setSerialPorts] = useState<string[]>([])
@@ -37,6 +38,7 @@ export const SerialPort = (): ReactElement => {
     const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, baudRate)
     if (success) {
       setSerialPort(port)
+      setSerialBaudRate(baudRate)
     }
   }
 
@@ -50,7 +52,7 @@ export const SerialPort = (): ReactElement => {
             port === serialPort ? 'text-blue-500' : 'text-white'
           )}
           onClick={() => {
-              let baudRate = window.prompt("Baudrate for 9600 for CH340, 57600 for CH341 (NanoKVM)", "57600");
+              var baudRate = window.prompt("Baudrate: 9600 for CH340, 57600 for CH341 (NanoKVM)", "57600");
               openSerialPort(port, baudRate);
             }
           }
