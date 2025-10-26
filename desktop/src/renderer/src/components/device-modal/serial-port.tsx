@@ -64,7 +64,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
     setIsFailed(false)
     setMsg('')
     
-    const baudRate = window.prompt("Baudrate for 9600 for CH340, 57600 for CH341 (NanoKVM)", "57600");
+    const baudRate = window.prompt("Baudrate: 9600 for CH340, 57600 for CH341 (NanoKVM)", "57600");
     const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, baudRate)
 
     if (success) {
