@@ -4,7 +4,7 @@ import { useAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
-import { serialPortAtom, serialPortStateAtom } from '@renderer/jotai/device'
+import { serialPortAtom, serialPortStateAtom, serialBaudRateAtom } from '@renderer/jotai/device'
 import * as storage from '@renderer/libs/storage'
 
 type Option = {
@@ -21,6 +21,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
 
   const [serialPort, setSerialPort] = useAtom(serialPortAtom)
   const [serialPortState, setSerialPortState] = useAtom(serialPortStateAtom)
+  const [serialBaudRate, setSerialBaudRate] = useAtom(serialBaudRateAtom)
 
   const [options, setOptions] = useState<Option[]>([])
   const [isFailed, setIsFailed] = useState(false)
@@ -62,11 +63,13 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
     setSerialPortState('connecting')
     setIsFailed(false)
     setMsg('')
-
-    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port)
+    
+    const baudRate = window.prompt("Baudrate for 9600 for CH340, 57600 for CH341 (NanoKVM)", "57600");
+    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, baudRate)
 
     if (success) {
       setSerialPort(port)
+      setSerialBaudRate(baudRate)
       storage.setSerialPort(port)
     } else {
       setSerialPortState('disconnected')
