@@ -4,14 +4,17 @@ import { useAtom, useSetAtom } from 'jotai'
 import { MouseIcon } from 'lucide-react'
 
 import {
+  mouseJigglerModeAtom,
   mouseModeAtom,
   mouseStyleAtom,
   scrollDirectionAtom,
   scrollIntervalAtom
 } from '@renderer/jotai/mouse'
+import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
 import * as storage from '@renderer/libs/storage'
 
 import { Direction } from './direction'
+import { Jiggler } from './jiggler'
 import { Mode } from './mode'
 import { Speed } from './speed'
 import { Style } from './style'
@@ -21,6 +24,7 @@ export const Mouse = (): ReactElement => {
   const setMouseMode = useSetAtom(mouseModeAtom)
   const setScrollDirection = useSetAtom(scrollDirectionAtom)
   const setScrollInterval = useSetAtom(scrollIntervalAtom)
+  const setMouseJigglerMode = useSetAtom(mouseJigglerModeAtom)
 
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
 
@@ -44,6 +48,9 @@ export const Mouse = (): ReactElement => {
     if (interval) {
       setScrollInterval(interval)
     }
+    const jiggler = storage.getMouseJigglerMode()
+    mouseJiggler.setMode(jiggler)
+    setMouseJigglerMode(jiggler)
   }, [])
 
   const content = (
@@ -52,6 +59,7 @@ export const Mouse = (): ReactElement => {
       <Mode />
       <Direction />
       <Speed />
+      <Jiggler />
     </div>
   )
 

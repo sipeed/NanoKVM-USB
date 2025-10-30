@@ -13,6 +13,7 @@ const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode'
 const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction'
 const SKIP_UPDATE_KEY = 'nano-kvm-check-update'
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
+const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -131,4 +132,13 @@ export function getSkipUpdate(): boolean {
 export function setSkipUpdate(skip: boolean): void {
   const expiry = 3 * 24 * 60 * 60 * 1000
   setWithExpiry(SKIP_UPDATE_KEY, String(skip), expiry)
+}
+
+export function getMouseJigglerMode(): 'enable' | 'disable' {
+  const jiggler = localStorage.getItem(MOUSE_JIGGLER_MODE_KEY)
+  return jiggler && jiggler === 'enable' ? 'enable' : 'disable'
+}
+
+export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
+  localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler)
 }
