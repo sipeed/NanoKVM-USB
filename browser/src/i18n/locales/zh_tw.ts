@@ -1,4 +1,4 @@
-const zh-TW = {
+const zh_tw = {
   translation: {
     serial: {
       notSupported: '當前瀏覽器不支援序列埠，無法使用鍵鼠。請使用桌面版 Chrome 瀏覽器。',
@@ -64,4 +64,4 @@ const zh-TW = {
   }
 };
 
-export default zh-TW;
+export default zh_tw;

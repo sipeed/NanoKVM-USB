@@ -1,4 +1,4 @@
-const pt_BR = {
+const pt_br = {
   translation: {
     camera: {
       tip: 'Esperando autorização...',
@@ -51,7 +51,8 @@ const pt_BR = {
       speed: 'Velocidade do scroll',
       fast: 'Rápido',
       slow: 'Lento',
-      requestPointer: 'Usando modo relativo. Por favor, clique na área de trabalho para restaurar o ponteiro do mouse.'
+      requestPointer:
+        'Usando modo relativo. Por favor, clique na área de trabalho para restaurar o ponteiro do mouse.'
     },
     settings: {
       title: 'Ajustes',
@@ -80,4 +81,4 @@ const pt_BR = {
   }
 }
 
-export default pt_BR
+export default pt_br

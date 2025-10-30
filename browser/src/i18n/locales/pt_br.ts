@@ -1,4 +1,4 @@
-const pt_BR = {
+const pt_br = {
   translation: {
     serial: {
       notSupported:
@@ -66,4 +66,4 @@ const pt_BR = {
   }
 };
 
-export default pt_BR;
+export default pt_br;
