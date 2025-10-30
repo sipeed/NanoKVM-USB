@@ -9,6 +9,7 @@ const MOUSE_STYLE_KEY = 'nanokvm-usb-mouse-style';
 const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode';
 const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
+const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
 
 export function getLanguage() {
   return localStorage.getItem(LANGUAGE_KEY);
@@ -106,4 +107,13 @@ export function getMouseScrollInterval(): number | null {
 
 export function setMouseScrollInterval(interval: number): void {
   localStorage.setItem(MOUSE_SCROLL_INTERVAL_KEY, String(interval));
+}
+
+export function getMouseJigglerMode(): string {
+  const jiggler = localStorage.getItem(MOUSE_JIGGLER_MODE_KEY);
+  return jiggler && jiggler === 'enable' ? 'enable' : 'disable';
+}
+
+export function setMouseJigglerMode(jiggler: string): void {
+  localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler);
 }
