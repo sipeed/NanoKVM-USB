@@ -6,7 +6,8 @@ const languages = [
   { key: 'de', name: 'Deutsch' },
   { key: 'nl', name: 'Nederlands' },
   { key: 'be', name: 'België' },
-  { key: 'ko', name: '한국어' }
+  { key: 'ko', name: '한국어' },
+  { key: 'pt_BR', name: 'Português (Brasil)' }
 ];
 
 languages.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
