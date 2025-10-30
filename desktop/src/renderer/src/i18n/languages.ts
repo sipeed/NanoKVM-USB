@@ -5,8 +5,9 @@ const languages = [
   { key: 'zh-TW', name: '繁體中文' }, // 新增繁體中文
   { key: 'de', name: 'Deutsch' },
   { key: 'nl', name: 'Nederlands' },
-  { key: 'be', name: 'België' }
-];
+  { key: 'be', name: 'België' },
+  { key: 'ko', name: '한국어' }
+]
 
 languages.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
 

@@ -5,6 +5,7 @@ import { getWithExpiry, setWithExpiry } from './expiry'
 const LANGUAGE_KEY = 'nanokvm-usb-language'
 const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id'
 const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-video-resolution'
+const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale'
 const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-custom-resolution'
 const SERIAL_PORT_KEY = 'nanokvm-serial-port'
 const IS_MENU_OPEN_KEY = 'nanokvm-is-menu-open'
@@ -13,6 +14,7 @@ const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode'
 const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction'
 const SKIP_UPDATE_KEY = 'nano-kvm-check-update'
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
+const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -61,6 +63,18 @@ export function setCustomResolution(width: number, height: number): void {
 
 export function removeCustomResolutions(): void {
   localStorage.removeItem(CUSTOM_RESOLUTION_KEY)
+}
+
+export function getVideoScale(): number | null {
+  const scale = localStorage.getItem(VIDEO_SCALE_KEY)
+  if (scale && Number(scale)) {
+    return Number(scale)
+  }
+  return null
+}
+
+export function setVideoScale(scale: number): void {
+  localStorage.setItem(VIDEO_SCALE_KEY, String(scale))
 }
 
 export function getSerialPort(): string | null {
@@ -131,4 +145,13 @@ export function getSkipUpdate(): boolean {
 export function setSkipUpdate(skip: boolean): void {
   const expiry = 3 * 24 * 60 * 60 * 1000
   setWithExpiry(SKIP_UPDATE_KEY, String(skip), expiry)
+}
+
+export function getMouseJigglerMode(): 'enable' | 'disable' {
+  const jiggler = localStorage.getItem(MOUSE_JIGGLER_MODE_KEY)
+  return jiggler && jiggler === 'enable' ? 'enable' : 'disable'
+}
+
+export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
+  localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler)
 }
