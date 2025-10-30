@@ -2,6 +2,7 @@ const languages = [
   { key: 'en', name: 'English' },
   { key: 'ru', name: 'Русский' },
   { key: 'zh', name: '中文' },
+  { key: 'zh-TW', name: '繁體中文' }, // 新增繁體中文
   { key: 'de', name: 'Deutsch' },
   { key: 'nl', name: 'Nederlands' },
   { key: 'be', name: 'België' },
