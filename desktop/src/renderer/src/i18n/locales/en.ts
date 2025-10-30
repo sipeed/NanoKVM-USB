@@ -19,6 +19,7 @@ const en = {
     },
     video: {
       resolution: 'Resolution',
+      scale: 'Scale',
       customResolution: 'Custom',
       device: 'Device',
       custom: {
@@ -51,7 +52,12 @@ const en = {
       speed: 'Wheel speed',
       fast: 'Fast',
       slow: 'Slow',
-      requestPointer: 'Using relative mode. Please click desktop to get mouse pointer.'
+      requestPointer: 'Using relative mode. Please click desktop to get mouse pointer.',
+      jiggler: {
+        title: 'Mouse Jiggler',
+        enable: 'Enable',
+        disable: 'Disable'
+      }
     },
     settings: {
       title: 'Settings',

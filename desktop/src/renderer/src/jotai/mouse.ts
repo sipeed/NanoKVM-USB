@@ -10,4 +10,7 @@ export const mouseModeAtom = atom('absolute')
 export const scrollDirectionAtom = atom(1)
 
 // mouse scroll interval (unit: ms)
-export const scrollIntervalAtom = atom(0);
+export const scrollIntervalAtom = atom(0)
+
+// mouse jiggler mode: enable or disable
+export const mouseJigglerModeAtom = atom<'enable' | 'disable'>('disable')

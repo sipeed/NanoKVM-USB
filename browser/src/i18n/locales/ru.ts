@@ -24,6 +24,7 @@ const ru = {
     },
     video: {
       resolution: 'Разрешение',
+      scale: 'Масштаб',
       customResolution: 'Пользовательское',
       device: 'Видеоустройство',
       custom: {
@@ -37,7 +38,10 @@ const ru = {
     keyboard: {
       paste: 'Вставить текст',
       virtualKeyboard: 'Виртуальная клавиатура',
-      ctrlAltDel: 'Ctrl + Alt + Delete'
+      shortcuts: 'Сочетания клавиш',
+      ctrlAltDel: 'Ctrl + Alt + Delete',
+      ctrlD: 'Ctrl + D',
+      winTab: 'Win + Tab',
     },
     mouse: {
       cursor: {
@@ -53,6 +57,9 @@ const ru = {
       direction: 'Направление прокрутки',
       scrollUp: 'Обычное',
       scrollDown: 'Инвертированное',
+      speed: 'Скорость прокрутки',
+      fast: 'Быстро',
+      slow: 'Медленно',
       requestPointer: 'Используется относительное позиционирование мыши. Чтобы захватить курсор, щелкните по видео на экране'
     },
     settings: {
