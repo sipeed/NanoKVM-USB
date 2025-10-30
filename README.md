@@ -51,8 +51,11 @@ For self-deployment, download the `NanoKVM-USB-xxx-browser.zip` and serve it. Re
 Download the appropriate package for your operating system and install it.
 
 > For Linux users, a permission error may occur when connecting to the serial port.  
-> To resolve this, run `sudo usermod -a -G dialout $USER`, then log out and log back in or restart your system.
-
+> To resolve this run the commands below matching your system, then log out and log back in or restart your system.
+> #### Debian
+> `sudo usermod -a -G dialout $USER`
+> #### Arch
+> `sudo usermod -a -G uucp $USER`
 ## Where to Buy
 
 * [AliExpress Store]() (To be released)
