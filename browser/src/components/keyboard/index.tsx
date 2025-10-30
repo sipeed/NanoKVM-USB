@@ -86,6 +86,10 @@ export const Keyboard = () => {
       modifiers.leftWindows = pressedKeysRef.current.has('MetaLeft');
       modifiers.rightWindows = pressedKeysRef.current.has('MetaRight');
     }
+    if (event.getModifierState('AltGraph')) {
+      modifiers.leftCtrl = true;
+      modifiers.rightAlt = true;
+    }
 
     return modifiers;
   }
