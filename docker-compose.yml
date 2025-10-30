@@ -1,0 +1,9 @@
+services:
+  nanokvm-usb:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: sipeed/nanokvm-usb:latest
+    container_name: nanokvm-usb
+    ports:
+      - "9000:80"   

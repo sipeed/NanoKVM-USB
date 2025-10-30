@@ -2,12 +2,15 @@ const languages = [
   { key: 'en', name: 'English' },
   { key: 'ru', name: 'Русский' },
   { key: 'zh', name: '中文' },
+  { key: 'zh-TW', name: '繁體中文' }, // 新增繁體中文
   { key: 'de', name: 'Deutsch' },
   { key: 'nl', name: 'Nederlands' },
   { key: 'be', name: 'België' },
-  { key: 'pl', name: 'Polski' }
+  { key: 'ko', name: '한국어' },
+  { key: 'pt_BR', name: 'Português (Brasil)' },
+  { ket: 'pl', name: 'Polski' }
 ]
 
-languages.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }))
+languages.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
 
-export default languages
+export default languages;

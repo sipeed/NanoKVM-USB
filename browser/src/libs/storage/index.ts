@@ -4,11 +4,13 @@ const LANGUAGE_KEY = 'nanokvm-usb-language';
 const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id';
 const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-video-resolution';
 const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-custom-resolution';
+const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale'
 const IS_MENU_OPEN_KEY = 'nanokvm-is-menu-open';
 const MOUSE_STYLE_KEY = 'nanokvm-usb-mouse-style';
 const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode';
 const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
+const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
 
 export function getLanguage() {
   return localStorage.getItem(LANGUAGE_KEY);
@@ -54,6 +56,18 @@ export function setCustomResolution(width: number, height: number) {
 
 export function removeCustomResolutions() {
   localStorage.removeItem(CUSTOM_RESOLUTION_KEY);
+}
+
+export function getVideoScale(): number | null {
+  const scale = localStorage.getItem(VIDEO_SCALE_KEY)
+  if (scale && Number(scale)) {
+    return Number(scale)
+  }
+  return null
+}
+
+export function setVideoScale(scale: number): void {
+  localStorage.setItem(VIDEO_SCALE_KEY, String(scale))
 }
 
 export function getIsMenuOpen(): boolean {
@@ -106,4 +120,13 @@ export function getMouseScrollInterval(): number | null {
 
 export function setMouseScrollInterval(interval: number): void {
   localStorage.setItem(MOUSE_SCROLL_INTERVAL_KEY, String(interval));
+}
+
+export function getMouseJigglerMode(): string {
+  const jiggler = localStorage.getItem(MOUSE_JIGGLER_MODE_KEY);
+  return jiggler && jiggler === 'enable' ? 'enable' : 'disable';
+}
+
+export function setMouseJigglerMode(jiggler: string): void {
+  localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler);
 }
