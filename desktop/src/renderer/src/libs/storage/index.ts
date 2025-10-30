@@ -5,6 +5,7 @@ import { getWithExpiry, setWithExpiry } from './expiry'
 const LANGUAGE_KEY = 'nanokvm-usb-language'
 const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id'
 const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-video-resolution'
+const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale'
 const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-custom-resolution'
 const SERIAL_PORT_KEY = 'nanokvm-serial-port'
 const IS_MENU_OPEN_KEY = 'nanokvm-is-menu-open'
@@ -62,6 +63,18 @@ export function setCustomResolution(width: number, height: number): void {
 
 export function removeCustomResolutions(): void {
   localStorage.removeItem(CUSTOM_RESOLUTION_KEY)
+}
+
+export function getVideoScale(): number | null {
+  const scale = localStorage.getItem(VIDEO_SCALE_KEY)
+  if (scale && Number(scale)) {
+    return Number(scale)
+  }
+  return null
+}
+
+export function setVideoScale(scale: number): void {
+  localStorage.setItem(VIDEO_SCALE_KEY, String(scale))
 }
 
 export function getSerialPort(): string | null {
