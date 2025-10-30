@@ -26,7 +26,7 @@ async function getSerialPorts(): Promise<string[]> {
 async function openSerialPort(
   e: IpcMainInvokeEvent,
   path: string,
-  baudRate = 57600
+  baudRate: number = 57600
 ): Promise<boolean> {
   try {
     await device.serialPort.init(path, baudRate, (err) => {

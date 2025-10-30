@@ -15,12 +15,17 @@ export class SerialPort {
   ): Promise<void> {
     try {
       if (this.port?.isOpen) {
+        console.log('Closing existing serial port before opening new one')
         await this.close()
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
 
+      console.log(`Opening serial port: ${path} at ${baudRate} baud`)
       this.port = new SP({ path, baudRate }, (err) => {
         if (err) {
           console.error('Error opening port: ', err.message)
+        } else {
+          console.log(`Serial port ${path} opened successfully at ${baudRate} baud`)
         }
         onOpen(err)
       })
@@ -72,10 +77,24 @@ export class SerialPort {
   async close(): Promise<void> {
     if (this.port?.isOpen) {
       try {
-        this.port.close()
+        console.log('Closing serial port...')
+        await new Promise<void>((resolve, reject) => {
+          this.port!.close((err) => {
+            if (err) {
+              console.error('close-serial-port error', err)
+              reject(err)
+            } else {
+              console.log('Serial port closed successfully')
+              resolve()
+            }
+          })
+        })
       } catch (error) {
         console.error('close-serial-port error', error)
+        throw error
       }
+    } else {
+      console.log('Serial port is already closed or not initialized')
     }
   }
 }
