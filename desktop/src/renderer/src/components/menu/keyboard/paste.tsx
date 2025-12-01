@@ -2,8 +2,9 @@ import { ReactElement, useState } from 'react'
 import { ClipboardIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { IpcEvents } from '@common/ipc-events'
 import { CharCodes, ShiftChars } from '@renderer/libs/keyboard'
+import { Modifiers } from '@renderer/libs/device/keyboard';
+import { IpcEvents } from '@common/ipc-events'
 
 export const Paste = (): ReactElement => {
   const { t } = useTranslation()
@@ -23,10 +24,12 @@ export const Paste = (): ReactElement => {
         const code = CharCodes.get(ascii)
         if (!code) continue
 
-        const modifier = (ascii >= 65 && ascii <= 90) || ShiftChars.has(ascii) ? 2 : 0
-        await send(modifier, code)
+        const modifiers = new Modifiers()
+        if ((ascii >= 65 && ascii <= 90) || ShiftChars.has(ascii)) {
+          modifiers.leftShift = true
+        }
 
-        await send(0, 0)
+        await send(modifiers, code)
       }
     } catch (e) {
       console.log(e)
@@ -35,13 +38,21 @@ export const Paste = (): ReactElement => {
     }
   }
 
-  async function send(modifier: number, key: number): Promise<void> {
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifier, key)
+  async function send(modifiers: Modifiers, code: number): Promise<void> {
+    const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00]
+
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifiers.encode(), keys)
+
+    await window.electron.ipcRenderer.invoke(
+      IpcEvents.SEND_KEYBOARD,
+      new Modifiers().encode(),
+      [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+    )
   }
 
   return (
     <div
-      className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/60"
+      className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
       onClick={paste}
     >
       <ClipboardIcon size={18} />
