@@ -1,14 +1,13 @@
 import { useEffect, useRef } from 'react';
-
 import { device } from '@/libs/device';
 import { Modifiers } from '@/libs/device/keyboard.ts';
 import { KeyboardCodes } from '@/libs/keyboard';
 
 export const Keyboard = () => {
-  const controlKeys = new Set(['Control', 'Shift', 'Alt', 'Meta']);
-
-  const lastKeyRef = useRef<KeyboardEvent>();
-  const pressedKeysRef = useRef<Set<string>>(new Set());
+  const MAX_SIMULTANEOUS_KEYS = 4;
+  const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta']);
+  const commonKeysRef = useRef<Set<number>>(new Set());
+  const modifierKeysRef = useRef<Set<string>>(new Set());
 
   // listen keyboard events
   useEffect(() => {
@@ -26,14 +25,20 @@ export const Keyboard = () => {
     event.preventDefault();
     event.stopPropagation();
 
-    lastKeyRef.current = event;
-
-    if (controlKeys.has(event.key)) {
-      pressedKeysRef.current.add(event.code);
-      return;
+    if (modifierKeys.has(event.key)) {
+      modifierKeysRef.current.add(event.code);
+    } else {
+      const commonKeyCode = KeyboardCodes.get(event.code);
+      if (
+        commonKeyCode !== undefined &&
+        !commonKeysRef.current.has(commonKeyCode) &&
+        commonKeysRef.current.size < MAX_SIMULTANEOUS_KEYS
+      ) {
+        commonKeysRef.current.add(commonKeyCode);
+      }
     }
 
-    await sendKeyDown(event);
+    await sendKeyData(event);
   }
 
   // release button
@@ -41,50 +46,50 @@ export const Keyboard = () => {
     event.preventDefault();
     event.stopPropagation();
 
-    if (controlKeys.has(event.key) && lastKeyRef.current?.code === event.code) {
-      await sendKeyDown(lastKeyRef.current);
-
-      lastKeyRef.current = undefined;
-      pressedKeysRef.current.clear();
+    if (modifierKeys.has(event.key)) {
+      modifierKeysRef.current.delete(event.code);
+    } else {
+      const commonKeyCode = KeyboardCodes.get(event.code);
+      if (
+        commonKeyCode !== undefined &&
+        commonKeysRef.current.has(commonKeyCode)
+      ) {
+        commonKeysRef.current.delete(commonKeyCode);
+      }
     }
 
-    await sendKeyUp();
+    await sendKeyData(event);
   }
 
-  async function sendKeyDown(event: KeyboardEvent) {
-    const code = KeyboardCodes.get(event.code);
-    if (!code) return;
-
+  async function sendKeyData(event: KeyboardEvent) {
     const ctrl = getCtrl(event);
-    const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00];
+    const keys = [
+      0x00, 0x00,
+      ...Array.from(commonKeysRef.current),
+      ...new Array(MAX_SIMULTANEOUS_KEYS - commonKeysRef.current.size).fill(0x00)
+    ];
 
     await device.sendKeyboardData(ctrl, keys);
-  }
-
-  async function sendKeyUp() {
-    const modifiers = new Modifiers();
-    const keys = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    await device.sendKeyboardData(modifiers, keys);
   }
 
   function getCtrl(event: KeyboardEvent) {
     const modifiers = new Modifiers();
 
     if (event.ctrlKey) {
-      modifiers.leftCtrl = pressedKeysRef.current.has('ControlLeft');
-      modifiers.rightCtrl = pressedKeysRef.current.has('ControlRight');
+      modifiers.leftCtrl = modifierKeysRef.current.has('ControlLeft');
+      modifiers.rightCtrl = modifierKeysRef.current.has('ControlRight');
     }
     if (event.shiftKey) {
-      modifiers.leftShift = pressedKeysRef.current.has('ShiftLeft');
-      modifiers.rightShift = pressedKeysRef.current.has('ShiftRight');
+      modifiers.leftShift = modifierKeysRef.current.has('ShiftLeft');
+      modifiers.rightShift = modifierKeysRef.current.has('ShiftRight');
     }
     if (event.altKey) {
-      modifiers.leftAlt = pressedKeysRef.current.has('AltLeft');
-      modifiers.rightAlt = pressedKeysRef.current.has('AltRight');
+      modifiers.leftAlt = modifierKeysRef.current.has('AltLeft');
+      modifiers.rightAlt = modifierKeysRef.current.has('AltRight');
     }
     if (event.metaKey) {
-      modifiers.leftWindows = pressedKeysRef.current.has('MetaLeft');
-      modifiers.rightWindows = pressedKeysRef.current.has('MetaRight');
+      modifiers.leftWindows = modifierKeysRef.current.has('MetaLeft');
+      modifiers.rightWindows = modifierKeysRef.current.has('MetaRight');
     }
     if (event.getModifierState('AltGraph')) {
       modifiers.leftCtrl = true;
