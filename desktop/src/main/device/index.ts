@@ -20,8 +20,8 @@ export class Device {
     return new InfoPacket(rspPacket.DATA)
   }
 
-  async sendKeyboardData(modifier: number, key: number): Promise<void> {
-    const data = [modifier, 0x00, 0x00, 0x00, key, 0x00, 0x00, 0x00]
+  async sendKeyboardData(modifier: number, keys: number[]): Promise<void> {
+    const data = [modifier, 0x00, ...keys]
     const cmdData = new CmdPacket(this.addr, CmdEvent.SEND_KB_GENERAL_DATA, data).encode()
     await this.serialPort.write(cmdData)
   }
