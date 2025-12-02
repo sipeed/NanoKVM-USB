@@ -2,20 +2,44 @@ name: Build Browser and Desktop Apps
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches:
-  #     - main
-  # pull_request:
-  #   branches:
-  #     - main
-  
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    
 env:
   NODE_VERSION: '20'
 
 jobs:
+  detect-changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      browser: ${{ steps.filter.outputs.browser }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Filter changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            browser:
+              - 'browser/**'
+            desktop:
+              - 'desktop/**'
+
   build-browser:
     name: Build Browser Bundle
+    needs: detect-changes
     runs-on: ubuntu-latest
+    if: needs.detect-changes.outputs.browser == 'true'
     defaults:
       run:
         working-directory: browser
@@ -43,7 +67,9 @@ jobs:
 
   build-desktop:
     name: Build Desktop Apps
+    needs: detect-changes
     runs-on: ${{ matrix.os }}
+    if: needs.detect-changes.outputs.desktop == 'true'
     strategy:
       fail-fast: false
       matrix:
