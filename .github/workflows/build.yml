@@ -1,0 +1,90 @@
+name: Build Browser and Desktop Apps
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
+  #   branches:
+  #     - main
+  
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  build-browser:
+    name: Build Browser Bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Upload browser dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-dist
+          path: browser/dist
+          if-no-files-found: error
+
+  build-desktop:
+    name: Build Desktop Apps
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            build_script: build:linux
+            artifact_name: desktop-linux
+          - os: windows-latest
+            target: windows
+            build_script: build:win
+            artifact_name: desktop-windows
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 libudev-dev
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build desktop package
+        run: npm run ${{ matrix.build_script }}
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: desktop/dist
+          if-no-files-found: error
