@@ -13,6 +13,7 @@ import { Mouse } from './mouse';
 import { SerialPort } from './serial-port';
 import { Settings } from './settings';
 import { Video } from './video';
+import { Recorder } from './recorder';
 
 export const Menu = () => {
   const serialState = useAtomValue(serialStateAtom);
@@ -52,6 +53,10 @@ export const Menu = () => {
               <Mouse />
             </>
           )}
+
+          <Divider type="vertical" />
+
+          <Recorder />
 
           <Divider type="vertical" />
 

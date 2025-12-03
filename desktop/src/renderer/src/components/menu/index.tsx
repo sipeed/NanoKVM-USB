@@ -11,6 +11,7 @@ import { Mouse } from './mouse'
 import { SerialPort } from './serial-port'
 import { Settings } from './settings'
 import { Video } from './video'
+import { Recorder } from './recorder'
 
 export const Menu = (): ReactElement => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -39,6 +40,10 @@ export const Menu = (): ReactElement => {
 
           <Mouse />
           <Keyboard />
+          <Divider type="vertical" className="px-[2px]" />
+
+          <Recorder />
+
           <Divider type="vertical" className="px-[2px]" />
 
           <Fullscreen />
