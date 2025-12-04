@@ -89,7 +89,7 @@ export function setSerialPort(port: string): void {
 export function getBaudRate(): number {
   const baudRate = localStorage.getItem(BAUD_RATE_KEY)
   if (!baudRate) {
-    return 57600 
+    return 57600
   }
   return parseInt(baudRate, 10)
 }
@@ -173,6 +173,8 @@ export function clearAllSettings(): void {
   localStorage.removeItem(SKIP_UPDATE_KEY)
   localStorage.removeItem(MOUSE_SCROLL_INTERVAL_KEY)
   localStorage.removeItem(BAUD_RATE_KEY)
+}
+
 export function getMouseJigglerMode(): 'enable' | 'disable' {
   const jiggler = localStorage.getItem(MOUSE_JIGGLER_MODE_KEY)
   return jiggler && jiggler === 'enable' ? 'enable' : 'disable'
