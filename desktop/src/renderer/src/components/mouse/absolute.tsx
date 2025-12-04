@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai'
 import { IpcEvents } from '@common/ipc-events'
 import { resolutionAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
+import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
 import type { Mouse as MouseKey } from '@renderer/types'
 
 export const Absolute = (): ReactElement => {
@@ -77,6 +78,8 @@ export const Absolute = (): ReactElement => {
     async function handleMouseMove(event: MouseEvent): Promise<void> {
       disableEvent(event)
       await send(event)
+
+      mouseJiggler.moveEventCallback()
     }
 
     // mouse scroll

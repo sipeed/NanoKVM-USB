@@ -26,6 +26,7 @@ const nl = {
         },
       video: {
         resolution: 'Resolutie',
+        scale: 'Schaal',
         customResolution: 'Aangepast',
         device: 'Apparaat',
         custom: {
@@ -94,5 +95,5 @@ const nl = {
       }
     }
   }
-  
+
   export default nl

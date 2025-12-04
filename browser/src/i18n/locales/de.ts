@@ -24,6 +24,7 @@ const de = {
       },
       video: {
         resolution: 'Auflösung',
+        scale: 'Skalierung',
         customResolution: 'Benutzerdefiniert',
         device: 'Gerät',
         custom: {
@@ -37,7 +38,10 @@ const de = {
       keyboard: {
         paste: 'Einfügen',
         virtualKeyboard: 'Virtuelle Tastatur',
-        ctrlAltDel: 'Strg + Alt + Entfernen'
+        shortcuts: 'Tastenkürzel',
+        ctrlAltDel: 'Strg + Alt + Entfernen',
+        ctrlD: 'Strg + D',
+        winTab: 'Win + Tab',
       },
       mouse: {
         cursor: {
@@ -53,6 +57,9 @@ const de = {
         direction: 'Scrollrichtung',
         scrollUp: 'Hochscrollen',
         scrollDown: 'Runterscrollen',
+        speed: 'Scrollgeschwindigkeit',
+        fast: 'Schnell',
+        slow: 'Langsam',
         requestPointer: 'Benutze relativen Modus. Bitte auf den Desktop klicken, um den Mauszeiger anzuzeigen.'
       },
       settings: {
@@ -62,5 +69,5 @@ const de = {
       }
     }
   };
-  
+
   export default de;

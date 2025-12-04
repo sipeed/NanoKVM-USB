@@ -26,6 +26,7 @@ const be = {
         },
       video: {
         resolution: 'Resolutie',
+        scale: 'Schaal',
         customResolution: 'Aangepast',
         device: 'Toestel',
         custom: {
@@ -94,5 +95,5 @@ const be = {
       }
     }
   }
-  
+
   export default be
