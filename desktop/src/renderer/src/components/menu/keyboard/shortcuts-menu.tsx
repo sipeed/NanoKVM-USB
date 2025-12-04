@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Button, Divider, Popover } from 'antd';
 import { SendHorizonal, Trash } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { ShortcutProps } from '@/libs/device/keyboard.ts';
-import { Shortcut } from './shortcut.tsx';
-import { KeyboardShortcutCustom } from './shortcut-custom.tsx';
+import { ShortcutProps } from '@renderer/libs/device/keyboard';
+import { Shortcut } from './shortcut';
+import { KeyboardShortcutCustom } from './shortcut-custom';
 
 export const KeyboardShortcutsMenu = () => {
   const { t } = useTranslation();

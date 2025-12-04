@@ -1,12 +1,14 @@
 import { useState, PropsWithChildren } from 'react';
-import { device } from '@/libs/device';
-import { Modifiers } from '@/libs/device/keyboard.ts';
-import { KeyboardCodes } from '@/libs/keyboard';
-import { ShortcutProps } from '@/libs/device/keyboard.ts'
+import { SendHorizonal } from 'lucide-react';
+import { Modifiers, ShortcutProps } from '@renderer/libs/device/keyboard';
+import { KeyboardCodes } from '@renderer/libs/keyboard'
+import { IpcEvents } from '@common/ipc-events'
 
 type ShortcutPropsWithChildren = ShortcutProps & PropsWithChildren
 
-export const Shortcut = ({ label, modifiers = {}, keyCode , children}: ShortcutPropsWithChildren) => {
+export const Shortcut = (
+  { label, modifiers = {}, keyCode , children}: ShortcutPropsWithChildren
+) => {
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleClick(): Promise<void> {
@@ -26,8 +28,12 @@ export const Shortcut = ({ label, modifiers = {}, keyCode , children}: ShortcutP
 
   async function send(mods: Modifiers, code: number) {
     const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00];
-    await device.sendKeyboardData(mods, keys);
-    await device.sendKeyboardData(new Modifiers(), [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, mods.encode(), keys)
+    await window.electron.ipcRenderer.invoke(
+      IpcEvents.SEND_KEYBOARD,
+      new Modifiers().encode(),
+      [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+    );
   }
 
   return (
@@ -35,6 +41,7 @@ export const Shortcut = ({ label, modifiers = {}, keyCode , children}: ShortcutP
       className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/60"
       onClick={handleClick}
     >
+      <SendHorizonal size={18} />
       <span className="w-full">{label}</span>
       {children}
     </div>
