@@ -22,8 +22,14 @@ export const Fullscreen = () => {
     if (!document.fullscreenElement) {
       const element = document.documentElement;
       element.requestFullscreen().then();
+
+      // @ts-expect-error - https://developer.mozilla.org/en-US/docs/Web/API/Keyboard/lock
+      navigator.keyboard?.lock();
     } else {
       document.exitFullscreen().then();
+
+      // @ts-expect-error - https://developer.mozilla.org/en-US/docs/Web/API/Keyboard/unlock
+      navigator.keyboard?.unlock();
     }
   }
 

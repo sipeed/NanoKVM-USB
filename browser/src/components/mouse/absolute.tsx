@@ -106,7 +106,7 @@ export const Absolute = () => {
     }
 
     async function send(event: MouseEvent, scroll: number = 0) {
-      const {x, y} = getCorrectedCoords(event.clientX, event.clientY);
+      const { x, y } = getCorrectedCoords(event.clientX, event.clientY);
       await device.sendMouseAbsoluteData(keyRef.current, 1, 1, x, y, scroll);
     }
 

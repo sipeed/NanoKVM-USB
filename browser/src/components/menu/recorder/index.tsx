@@ -6,6 +6,7 @@ import { camera } from '@/libs/camera';
 export const Recorder = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
+
   const mediaRecorderRef = useRef<MediaRecorder>();
   const fileWritableRef = useRef<FileSystemWritableFileStream | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -57,8 +58,7 @@ export const Recorder = () => {
         ]
       });
 
-      const writable = await handle.createWritable();
-      fileWritableRef.current = writable;
+      fileWritableRef.current = await handle.createWritable();
 
       const recorder = new MediaRecorder(stream, {
         mimeType: 'video/webm'
@@ -103,13 +103,24 @@ export const Recorder = () => {
     }
   };
 
+  if (isRecording) {
+    return (
+      <div
+        className="flex h-[28px] min-w-[28px] cursor-pointer items-center justify-center space-x-1 rounded px-1 text-white hover:bg-neutral-700/70"
+        onClick={handleStopRecording}
+      >
+        <Video className="animate-pulse text-red-400" size={18} />
+        <span className="text-xs text-red-300">{formatElapsed(elapsedMs)}</span>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="flex h-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70"
-      onClick={isRecording ? handleStopRecording : handleStartRecording}
+      className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70"
+      onClick={handleStartRecording}
     >
-      <Video className={isRecording ? 'animate-pulse text-red-400' : ''} size={18} />
-      {isRecording && <span className="p-1 text-xs text-red-300">{formatElapsed(elapsedMs)}</span>}
+      <Video size={18} />
     </div>
   );
 };
