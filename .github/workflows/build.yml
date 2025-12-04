@@ -1,0 +1,116 @@
+name: Build Browser and Desktop Apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  detect-changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      browser: ${{ steps.filter.outputs.browser }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Filter changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            browser:
+              - 'browser/**'
+            desktop:
+              - 'desktop/**'
+
+  build-browser:
+    name: Build Browser Bundle
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: needs.detect-changes.outputs.browser == 'true'
+    defaults:
+      run:
+        working-directory: browser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Upload browser dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-dist
+          path: browser/dist
+          if-no-files-found: error
+
+  build-desktop:
+    name: Build Desktop Apps
+    needs: detect-changes
+    runs-on: ${{ matrix.os }}
+    if: needs.detect-changes.outputs.desktop == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            build_script: build:linux
+            artifact_name: desktop-linux
+          - os: windows-latest
+            target: windows
+            build_script: build:win
+            artifact_name: desktop-windows
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 libudev-dev
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build desktop package
+        run: npm run ${{ matrix.build_script }}
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: desktop/dist
+          if-no-files-found: error
