@@ -15,6 +15,9 @@ The NanoKVM-USB is a convenient tool for operations and multi-device collaborati
 NanoKVM-USB captures HDMI video signals and transmits them to the host via USB 3.0. Unlike typical USB capture cards, NanoKVM-USB also captures keyboard and mouse input from the host and sends it to the target machine in real-time, eliminating the need for traditional screen and peripheral connections. It also supports HDMI loop-out, with a maximum resolution of 4K@30Hz, making it easy to connect to a large display.
 
 ![wiring](https://wiki.sipeed.com/hardware/assets/NanoKVM/usb/wiring.png)
+<br>
+
+## Technical Specifications
 
 | | NanoKVM-USB | Mini-KVM | KIWI-KVM |
 | --- | :---: | :---: | :---: |
@@ -32,9 +35,13 @@ NanoKVM-USB captures HDMI video signals and transmits them to the host via USB 3
 | Color | Black / Blue / Red | Black | Black |
 | Price | `$39.9/$49.9`, Pro `$59.9/$69.9` | `$89 / $109` | `$69 / $99` |
 
+<br>
+
 ![interface](https://wiki.sipeed.com/hardware/assets/NanoKVM/usb/interface.jpg)
 
-## Versions
+> **Note:** For the best experience, please use a USB 3.0 cable to connect the device.
+
+## Resources
 
 We offer two versions of the application: [Browser](https://github.com/sipeed/NanoKVM-USB/tree/main/browser) and [Desktop](https://github.com/sipeed/NanoKVM-USB/tree/main/desktop). Both are available on the [Releases page](https://github.com/sipeed/NanoKVM-USB/releases).
 
@@ -42,7 +49,8 @@ We offer two versions of the application: [Browser](https://github.com/sipeed/Na
 
 Access our online service at [usbkvm.sipeed.com](https://usbkvm.sipeed.com).
 
-For self-deployment, download the `NanoKVM-USB-xxx-browser.zip` and serve it. Refer to the [Deployment Guide](https://wiki.sipeed.com/hardware/en/kvm/NanoKVM_USB/development.html) for details.
+For self-deployment, download the `NanoKVM-USB-xxx-browser.zip` and serve it. Refer to the [Deployment Guide](https://wiki.sipeed.com/hardware/en/kvm/NanoKVM_USB/development.html) for details. If you are using Docker, simply run `docker-compose up -d`.
+
 
 > Please use the desktop Chrome browser.
 
