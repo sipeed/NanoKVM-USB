@@ -1,83 +1,102 @@
 import { ReactElement, useEffect, useRef } from 'react'
-
-import { IpcEvents } from '@common/ipc-events'
+import { Modifiers } from '@renderer/libs/device/keyboard';
 import { KeyboardCodes } from '@renderer/libs/keyboard'
+import { IpcEvents } from '@common/ipc-events'
 
 export const Keyboard = (): ReactElement => {
+  const MAX_SIMULTANEOUS_KEYS = 4
   const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta'])
-
-  const lastKeyRef = useRef<KeyboardEvent>()
-  const pressedKeysRef = useRef<Set<string>>(new Set())
+  const pressedKeysRef = useRef<Set<number>>(new Set())
+  const pressedModifiersRef = useRef<Set<string>>(new Set())
 
   // listen keyboard events
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
 
-    // press button
-    async function handleKeyDown(event: KeyboardEvent): Promise<void> {
-      event.preventDefault()
-      event.stopPropagation()
-
-      lastKeyRef.current = event
-
-      if (modifierKeys.has(event.key)) {
-        pressedKeysRef.current.add(event.code)
-        return
-      }
-
-      await sendKeyDown(event)
-    }
-
-    // release button
-    async function handleKeyUp(event: KeyboardEvent): Promise<void> {
-      event.preventDefault()
-      event.stopPropagation()
-
-      if (modifierKeys.has(event.key) && lastKeyRef.current?.code === event.code) {
-        await sendKeyDown(lastKeyRef.current)
-
-        lastKeyRef.current = undefined
-        pressedKeysRef.current.clear()
-      }
-
-      await send(0, 0x00)
-    }
-
-    return (): void => {
+    return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
   }, [])
 
-  async function sendKeyDown(event: KeyboardEvent): Promise<void> {
-    const code = KeyboardCodes.get(event.code)
-    if (!code) return
+  // press button
+  async function handleKeyDown(event: KeyboardEvent) {
+    event.preventDefault()
+    event.stopPropagation()
 
-    const modifier = getModifier(event)
+    if (modifierKeys.has(event.key)) {
+      pressedModifiersRef.current.add(event.code)
+    } else {
+      const keyCode = KeyboardCodes.get(event.code)
+      if (
+        keyCode !== undefined &&
+        !pressedKeysRef.current.has(keyCode) &&
+        pressedKeysRef.current.size < MAX_SIMULTANEOUS_KEYS
+      ) {
+        pressedKeysRef.current.add(keyCode)
+      }
+    }
 
-    await send(modifier, code)
+    await sendKeyData(event)
   }
 
-  async function send(modifier: number, key: number): Promise<void> {
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifier, key)
+  // release button
+  async function handleKeyUp(event: KeyboardEvent) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (modifierKeys.has(event.key)) {
+      pressedModifiersRef.current.delete(event.code)
+    } else {
+      const commonKeyCode = KeyboardCodes.get(event.code)
+      if (commonKeyCode !== undefined && pressedKeysRef.current.has(commonKeyCode)) {
+        pressedKeysRef.current.delete(commonKeyCode)
+      }
+    }
+
+    await sendKeyData(event)
   }
 
-  function getModifier(e: KeyboardEvent): number {
-    const altGraphKey = e.getModifierState('AltGraph')
-    const pressedKeys = [
-      altGraphKey || (e.ctrlKey && pressedKeysRef.current.has('ControlLeft')),
-      e.shiftKey && pressedKeysRef.current.has('ShiftLeft'),
-      e.altKey && pressedKeysRef.current.has('AltLeft'),
-      e.metaKey && pressedKeysRef.current.has('MetaLeft'),
-      e.ctrlKey && pressedKeysRef.current.has('ControlRight'),
-      e.shiftKey && pressedKeysRef.current.has('ShiftRight'),
-      altGraphKey || (e.altKey && pressedKeysRef.current.has('AltRight')),
-      e.metaKey && pressedKeysRef.current.has('MetaRight')
+  async function sendKeyData(event: KeyboardEvent) {
+    const modifiers = getModifiers(event)
+    const keys = [
+      0x00,
+      0x00,
+      ...Array.from(pressedKeysRef.current),
+      ...new Array(MAX_SIMULTANEOUS_KEYS - pressedKeysRef.current.size).fill(0x00)
     ]
 
-    return pressedKeys.reduce((acc, isPressed, bit) => (isPressed ? acc | (1 << bit) : acc), 0)
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifiers.encode(), keys)
+  }
+
+  function getModifiers(event: KeyboardEvent) {
+    const modifiers = new Modifiers()
+
+    if (event.ctrlKey) {
+      modifiers.leftCtrl = pressedModifiersRef.current.has('ControlLeft')
+      modifiers.rightCtrl = pressedModifiersRef.current.has('ControlRight')
+    }
+    if (event.shiftKey) {
+      modifiers.leftShift = pressedModifiersRef.current.has('ShiftLeft')
+      modifiers.rightShift = pressedModifiersRef.current.has('ShiftRight')
+    }
+    if (event.altKey) {
+      modifiers.leftAlt = pressedModifiersRef.current.has('AltLeft')
+      modifiers.rightAlt = pressedModifiersRef.current.has('AltRight')
+    }
+    if (event.metaKey) {
+      modifiers.leftWindows = pressedModifiersRef.current.has('MetaLeft')
+      modifiers.rightWindows = pressedModifiersRef.current.has('MetaRight')
+    }
+    if (event.getModifierState('AltGraph')) {
+      modifiers.leftCtrl = true
+      modifiers.rightAlt = true
+    }
+
+    return modifiers
   }
 
   return <></>
 }
+

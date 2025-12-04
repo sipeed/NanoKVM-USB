@@ -63,20 +63,20 @@ export const VirtualKeyboard = ({ isBigScreen }: KeyboardProps) => {
       return;
     }
 
-    const ctrl = getCtrl();
+    const modifiers = getModifiers();
     const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00];
-    await device.sendKeyboardData(ctrl, keys);
+    await device.sendKeyboardData(modifiers, keys);
   }
 
   async function sendKeyup() {
-    const ctrl = new Modifiers();
+    const modifiers = new Modifiers();
     const keys = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    await device.sendKeyboardData(ctrl, keys);
+    await device.sendKeyboardData(modifiers, keys);
 
     setActiveModifierKeys([]);
   }
 
-  function getCtrl() {
+  function getModifiers() {
     const modifiers = new Modifiers();
 
     activeModifierKeys.forEach((modifierKey) => {
