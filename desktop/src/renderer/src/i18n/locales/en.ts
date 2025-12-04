@@ -10,12 +10,19 @@ const en = {
     modal: {
       title: 'Select USB Device',
       selectVideo: 'Please select a video input device',
-      selectSerial: 'Please select serial device'
+      selectSerial: 'Please select serial device',
+      selectBaudRate: 'Please select baud rate'
     },
     menu: {
       serial: 'Serial',
       keyboard: 'Keyboard',
-      mouse: 'Mouse'
+      mouse: 'Mouse',
+      serialPort: {
+        device: 'Serial Device',
+        baudRate: 'Baud Rate',
+        noDeviceFound: 'No serial devices found',
+        clickToSelect: 'Click to select serial port'
+      }
     },
     video: {
       resolution: 'Resolution',
@@ -81,6 +88,17 @@ const en = {
         title: 'About',
         version: 'Version',
         community: 'Community'
+      },
+      reset: {
+        title: 'Reset Settings',
+        description: 'Reset all application settings to default values',
+        warning: 'Warning',
+        warningDescription: 'This action cannot be undone. All your custom settings will be lost.',
+        button: 'Reset All Settings',
+        confirmTitle: 'Confirm Reset',
+        confirmMessage: 'Are you sure you want to reset all settings? This action cannot be undone.',
+        confirm: 'Reset',
+        cancel: 'Cancel'
       }
     }
   }

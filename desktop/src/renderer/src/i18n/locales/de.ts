@@ -8,15 +8,22 @@ const de = {
         failed: 'Kamera konnte nicht verbunden werden. Bitte versuche es erneut.'
       },
       modal: {
-        title: 'USB-Gerät auswählen',
-        selectVideo: 'Bitte wähle ein Video-Eingabegerät aus',
-        selectSerial: 'Serielles Gerät auswählen'
-      },
+                title: 'USB-Gerät auswählen',
+                selectVideo: 'Bitte wählen Sie ein Video-Eingabegerät',
+                selectSerial: 'Serielles Gerät auswählen',
+                selectBaudRate: 'Bitte wählen Sie die Baudrate'
+        },
       menu: {
-        serial: 'Seriell',
-        keyboard: 'Tastatur',
-        mouse: 'Maus'
-      },
+                serial: 'Seriell',
+                keyboard: 'Tastatur',
+                mouse: 'Maus',
+                serialPort: {
+                        device: 'Serielles Gerät',
+                        baudRate: 'Baudrate',
+                        noDeviceFound: 'Keine seriellen Geräte gefunden',
+                        clickToSelect: 'Klicken Sie, um seriellen Port auszuwählen'
+                }
+        },
       video: {
         resolution: 'Auflösung',
         scale: 'Skalierung',
@@ -76,6 +83,17 @@ const de = {
           title: 'Über',
           version: 'Version',
           community: 'Community'
+        },
+        reset: {
+          title: 'Einstellungen zurücksetzen',
+          description: 'Alle Anwendungseinstellungen auf Standardwerte zurücksetzen',
+          warning: 'Warnung',
+          warningDescription: 'Diese Aktion kann nicht rückgängig gemacht werden. Alle benutzerdefinierten Einstellungen gehen verloren.',
+          button: 'Alle Einstellungen zurücksetzen',
+          confirmTitle: 'Zurücksetzen bestätigen',
+          confirmMessage: 'Sind Sie sicher, dass Sie alle Einstellungen zurücksetzen möchten? Diese Aktion kann nicht rückgängig gemacht werden.',
+          confirm: 'Zurücksetzen',
+          cancel: 'Abbrechen'
         }
       }
     }
