@@ -18,3 +18,13 @@ pnpm dev
 2. Execute `npm install -g http-server` to install http-server.
 3. Execute `http-server -p 8080 -a localhost` to run the service.
 4. Open the Chrome browser and visit `http://localhost:8080`.
+
+### Deploy in Docker
+
+```shell
+git clone https://github.com/sipeed/NanoKVM-USB.git
+cd NanoKVM-USB
+docker-compose up -d
+```
+
+Then visit `http://localhost:9000` in your browser.
