@@ -106,11 +106,47 @@ export const Absolute = () => {
     }
 
     async function send(event: MouseEvent, scroll: number = 0) {
-      const rect = canvas!.getBoundingClientRect();
-      const x = Math.abs(event.clientX - rect.left);
-      const y = Math.abs(event.clientY - rect.top);
+      const {x, y} = getCorrectedCoords(event.clientX, event.clientY);
+      await device.sendMouseAbsoluteData(keyRef.current, 1, 1, x, y, scroll);
+    }
 
-      await device.sendMouseAbsoluteData(keyRef.current, rect.width, rect.height, x, y, scroll);
+    function getCorrectedCoords(clientX: number, clientY: number) {
+      if (!canvas) {
+        return { x: 0, y: 0 };
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const videoElement = canvas as HTMLVideoElement;
+
+      if (!videoElement.videoWidth || !videoElement.videoHeight) {
+        const x = (clientX - rect.left) / rect.width;
+        const y = (clientY - rect.top) / rect.height;
+        return { x, y };
+      }
+
+      const videoRatio = videoElement.videoWidth / videoElement.videoHeight;
+      const elementRatio = rect.width / rect.height;
+
+      let renderedWidth = rect.width;
+      let renderedHeight = rect.height;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (videoRatio > elementRatio) {
+        renderedHeight = rect.width / videoRatio;
+        offsetY = (rect.height - renderedHeight) / 2;
+      } else {
+        renderedWidth = rect.height * videoRatio;
+        offsetX = (rect.width - renderedWidth) / 2;
+      }
+
+      const x = (clientX - rect.left - offsetX) / renderedWidth;
+      const y = (clientY - rect.top - offsetY) / renderedHeight;
+
+      const finalX = Math.max(0, Math.min(1, x));
+      const finalY = Math.max(0, Math.min(1, y));
+
+      return { x: finalX, y: finalY };
     }
 
     return () => {
