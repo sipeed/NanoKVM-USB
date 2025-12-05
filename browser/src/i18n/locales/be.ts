@@ -38,10 +38,12 @@ const be = {
       keyboard: {
         paste: 'Plakken',
         virtualKeyboard: 'Virtueel klavier',
-        shortcuts: 'Sneltoetsen',
-        ctrlAltDel: 'Ctrl + Alt + Delete',
-        ctrlD: 'Ctrl + D',
-        winTab: 'Win + Tab',
+        shortcut: {
+          title: 'Sneltoetsen',
+          ctrlAltDel: 'Ctrl + Alt + Delete',
+          ctrlD: 'Ctrl + D',
+          winTab: 'Win + Tab',
+        },
       },
       mouse: {
         cursor: {

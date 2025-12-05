@@ -32,7 +32,11 @@ const pl = {
     keyboard: {
       paste: 'Wklej',
       virtualKeyboard: 'Klawiatura',
-      ctrlAltDel: 'Ctrl + Alt + Delete'
+      shortcut: {
+        ctrlAltDel: 'Ctrl + Alt + Delete',
+        ctrlD: 'Ctrl + D',
+        winTab: 'Win + Tab',
+      },
     },
     mouse: {
       cursor: {

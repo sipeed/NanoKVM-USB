@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useRef } from 'react'
-import { Modifiers } from '@renderer/libs/device/keyboard';
+import { Modifiers } from '@renderer/libs/device/keyboard'
 import { KeyboardCodes } from '@renderer/libs/keyboard'
 import { IpcEvents } from '@common/ipc-events'
 
@@ -59,7 +59,7 @@ export const Keyboard = (): ReactElement => {
   }
 
   async function sendKeyData(event: KeyboardEvent) {
-    const modifiers = getModifiers(event)
+    const modifiers = Modifiers.getModifiers(event, pressedModifiersRef.current)
     const keys = [
       0x00,
       0x00,
@@ -68,33 +68,6 @@ export const Keyboard = (): ReactElement => {
     ]
 
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifiers.encode(), keys)
-  }
-
-  function getModifiers(event: KeyboardEvent) {
-    const modifiers = new Modifiers()
-
-    if (event.ctrlKey) {
-      modifiers.leftCtrl = pressedModifiersRef.current.has('ControlLeft')
-      modifiers.rightCtrl = pressedModifiersRef.current.has('ControlRight')
-    }
-    if (event.shiftKey) {
-      modifiers.leftShift = pressedModifiersRef.current.has('ShiftLeft')
-      modifiers.rightShift = pressedModifiersRef.current.has('ShiftRight')
-    }
-    if (event.altKey) {
-      modifiers.leftAlt = pressedModifiersRef.current.has('AltLeft')
-      modifiers.rightAlt = pressedModifiersRef.current.has('AltRight')
-    }
-    if (event.metaKey) {
-      modifiers.leftWindows = pressedModifiersRef.current.has('MetaLeft')
-      modifiers.rightWindows = pressedModifiersRef.current.has('MetaRight')
-    }
-    if (event.getModifierState('AltGraph')) {
-      modifiers.leftCtrl = true
-      modifiers.rightAlt = true
-    }
-
-    return modifiers
   }
 
   return <></>

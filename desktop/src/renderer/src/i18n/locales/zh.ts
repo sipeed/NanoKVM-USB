@@ -36,10 +36,22 @@ const zh = {
         cancel: '取消'
       }
     },
-    keyboard: {
+    kkeyboard: {
       paste: '粘贴',
       virtualKeyboard: '虚拟键盘',
-      ctrlAltDel: 'Ctrl + Alt + Delete'
+      shortcut: {
+        title: '快捷键',
+        custom: '自定义快捷键',
+        capture: '点击此处捕获快捷键',
+        label: '备注',
+        cancel: '取消',
+        save: '保存',
+        ctrlAltDel: 'Ctrl + Alt + Delete',
+        ctrlD: 'Ctrl + D',
+        winTab: 'Win + Tab',
+        enterFullScreen: '进入全屏',
+        captureTips: '单独捕获 Meta 键需要在全屏下操作，'
+      },
     },
     mouse: {
       cursor: {

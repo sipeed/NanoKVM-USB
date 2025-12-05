@@ -38,7 +38,11 @@ const ko = {
     keyboard: {
       paste: '붙여넣기',
       virtualKeyboard: '가상 키보드',
-      ctrlAltDel: 'Ctrl + Alt + Delete'
+      shortcut: {
+        ctrlAltDel: 'Ctrl + Alt + Delete',
+        ctrlD: 'Ctrl + D',
+        winTab: 'Win + Tab',
+      },
     },
     mouse: {
       cursor: {
