@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ShortcutProps } from '@/libs/device/keyboard.ts';
 import { Shortcut } from './shortcut.tsx';
 import { KeyboardShortcutCustom } from './shortcut-custom.tsx';
+import { getShortcuts, setShortcuts } from '@/libs/storage';
 
 export const KeyboardShortcutsMenu = () => {
   const { t } = useTranslation();
@@ -30,35 +31,28 @@ export const KeyboardShortcutsMenu = () => {
 
   const addShortcut = (shortcut: ShortcutProps) => {
     if (shortcut == null) return;
-
-    let shortcuts = localStorage.getItem("shortcuts");
-    if (shortcuts === null) {
-      shortcuts = "[]";
-    }
-
-    const shortcutsObject: ShortcutProps[] = JSON.parse(shortcuts);
-    shortcutsObject.push(shortcut);
-    localStorage.setItem("shortcuts", JSON.stringify(shortcutsObject));
-    setStoredShortcuts(shortcutsObject);
+    const shortcuts = getShortcuts();
+    shortcuts.push(shortcut);
+    setStoredShortcuts(shortcuts);
+    setShortcuts(shortcuts);
   }
 
   const removeShortcut = (indexToRemove: number) => {
     const newShortcuts = storedShortcuts.filter(
       (_, index) => index !== indexToRemove
     );
-    localStorage.setItem("shortcuts", JSON.stringify(newShortcuts));
     setStoredShortcuts(newShortcuts);
+    setShortcuts(newShortcuts);
   }
 
   useEffect(() => {
-    const shortcuts = localStorage.getItem("shortcuts");
-    if (shortcuts === null) {
+    const shortcuts = getShortcuts();
+    if (shortcuts.length === 0) {
       predefinedShortcuts.forEach(shortcut => {
         addShortcut(shortcut);
       })
     } else {
-      const shortcutsObject: ShortcutProps[] = JSON.parse(shortcuts);
-      setStoredShortcuts(shortcutsObject);
+      setStoredShortcuts(shortcuts);
     }
   }, []);
 
