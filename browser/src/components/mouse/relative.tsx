@@ -3,7 +3,7 @@ import { message } from 'antd';
 import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 
-import { resolutionAtom } from '@/jotai/device.ts';
+import { resolutionAtom, videoRotateAtom } from '@/jotai/device.ts';
 import { scrollDirectionAtom, scrollIntervalAtom } from '@/jotai/mouse.ts';
 import { device } from '@/libs/device';
 import { Key } from '@/libs/device/mouse.ts';
@@ -14,6 +14,7 @@ export const Relative = () => {
   const [messageApi, contextHolder] = message.useMessage();
 
   const resolution = useAtomValue(resolutionAtom);
+  const videoRotate = useAtomValue(videoRotateAtom);
   const scrollDirection = useAtomValue(scrollDirectionAtom);
   const scrollInterval = useAtomValue(scrollIntervalAtom);
 
@@ -35,7 +36,7 @@ export const Relative = () => {
 
   // listen mouse events
   useEffect(() => {
-    const canvas = document.getElementById('video');
+    const canvas = document.getElementById(videoRotate === 0 ? 'video': 'video-canvas');
     if (!canvas) return;
 
     document.addEventListener('pointerlockchange', handlePointerLockChange);
@@ -141,7 +142,7 @@ export const Relative = () => {
       canvas.removeEventListener('wheel', handleWheel);
       canvas.removeEventListener('contextmenu', disableEvent);
     };
-  }, [resolution, scrollDirection, scrollInterval]);
+  }, [resolution, scrollDirection, scrollInterval, videoRotate]);
 
   async function send(x: number, y: number, scroll: number) {
     await device.sendMouseRelativeData(keyRef.current, x, y, scroll);
