@@ -49,11 +49,12 @@ export const SerialPort = (): ReactElement => {
     setSerialPorts(ports)
   }
 
-  async function openSerialPort(port: string): Promise<void> {
+  async function openSerialPort(port: string, customBaudRate?: number): Promise<void> {
     if (connectingPort) return
     setConnectingPort(port)
 
-    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, baudRate)
+    const rate = customBaudRate ?? baudRate
+    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, rate)
     if (success) {
       setSerialPort(port)
       storage.setSerialPort(port)
@@ -69,12 +70,12 @@ export const SerialPort = (): ReactElement => {
   async function handleBaudRateChange(newBaudRate: number): Promise<void> {
     setBaudRate(newBaudRate)
     storage.setBaudRate(newBaudRate)
-    
+
     if (serialPort) {
-      const currentPort = serialPort 
+      const currentPort = serialPort
       await closeSerialPort()
       setTimeout(() => {
-        openSerialPort(currentPort)
+        openSerialPort(currentPort, newBaudRate)
       }, 200)
     }
   }

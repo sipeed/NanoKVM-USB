@@ -41,7 +41,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
   useEffect(() => {
     const savedBaudRate = storage.getBaudRate()
     setBaudRate(savedBaudRate)
-    
+
     getSerialPorts(true)
 
     const rmListener = window.electron.ipcRenderer.on(IpcEvents.OPEN_SERIAL_PORT_RSP, (_, err) => {
@@ -68,18 +68,20 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
     if (autoOpen) {
       const port = storage.getSerialPort()
       if (port && serialPorts.includes(port)) {
-        await selectSerialPort(port)
+        const savedBaudRate = storage.getBaudRate()
+        await selectSerialPort(port, savedBaudRate)
       }
     }
   }
 
-  async function selectSerialPort(port: string): Promise<void> {
+  async function selectSerialPort(port: string, customBaudRate?: number): Promise<void> {
     if (serialPortState === 'connecting') return
     setSerialPortState('connecting')
     setIsFailed(false)
     setMsg('')
 
-    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, baudRate)
+    const rate = customBaudRate ?? baudRate
+    const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, rate)
 
     if (success) {
       setSerialPort(port)
@@ -99,12 +101,12 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
   async function handleBaudRateChange(newBaudRate: number): Promise<void> {
     setBaudRate(newBaudRate)
     storage.setBaudRate(newBaudRate)
-    
+
     if (serialPort && serialPortState === 'connected') {
-      const currentPort = serialPort 
+      const currentPort = serialPort
       await closeSerialPort()
       setTimeout(() => {
-        selectSerialPort(currentPort)
+        selectSerialPort(currentPort, newBaudRate)
       }, 200)
     }
   }
@@ -118,7 +120,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
         loading={serialPortState === 'connecting'}
         status={isFailed ? 'error' : undefined}
         placeholder={t('modal.selectSerial')}
-        onChange={selectSerialPort}
+        onChange={(serialPort) => selectSerialPort(serialPort)}
         onClick={() => getSerialPorts(false)}
       />
       <Select
