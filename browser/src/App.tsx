@@ -186,6 +186,9 @@ const App = () => {
         id="video"
         className={clsx(videoRotate === 0 ? [videoStyle, "min-h-[480px] min-w-[640px]"] : "hidden")}
         ref={videoRef}
+        style={{
+          transform: `scale(${videoScale})`,
+        }}
         autoPlay
         playsInline
         onLoadedMetadata={setCanvas}

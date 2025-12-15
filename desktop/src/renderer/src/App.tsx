@@ -30,8 +30,8 @@ const App = (): ReactElement => {
   const { t } = useTranslation()
   const isBigScreen = useMediaQuery({ minWidth: 850 })
 
-  const videoScale = useAtomValue(videoScaleAtom)
   const [videoRotate, setVideoRotate] = useAtom(videoRotateAtom)
+  const [videoScale, setVideoScale] = useAtom(videoScaleAtom)
   const videoState = useAtomValue(videoStateAtom)
   const serialPortState = useAtomValue(serialPortStateAtom)
   const mouseStyle = useAtomValue(mouseStyleAtom)
@@ -112,17 +112,22 @@ const App = (): ReactElement => {
   }, [videoRotate])
 
   useEffect(() => {
-    const rotate = storage.getVideoRotate()
-    if (rotate) {
-      setVideoRotate(rotate)
-    }
-
     const resolution = storage.getVideoResolution()
     if (resolution) {
       setResolution(resolution)
     }
 
     requestMediaPermissions(resolution)
+
+    const rotate = storage.getVideoRotate()
+    if (rotate) {
+      setVideoRotate(rotate)
+    }
+
+    const scale = storage.getVideoScale()
+    if (scale) {
+      setVideoScale(scale)
+    }
 
     return (): void => {
       camera.close()
@@ -199,6 +204,9 @@ const App = (): ReactElement => {
         id="video"
         className={clsx(videoRotate === 0 ? [videoStyle, 'min-h-[480px] min-w-[640px]'] : 'hidden')}
         ref={videoRef}
+        style={{
+          transform: `scale(${videoScale})`
+        }}
         autoPlay
         playsInline
         onLoadedMetadata={setCanvas}
