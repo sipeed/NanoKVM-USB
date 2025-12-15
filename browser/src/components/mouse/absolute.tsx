@@ -5,6 +5,7 @@ import { resolutionAtom } from '@/jotai/device.ts';
 import { scrollDirectionAtom, scrollIntervalAtom } from '@/jotai/mouse.ts';
 import { device } from '@/libs/device';
 import { Key } from '@/libs/device/mouse.ts';
+import { mouseJiggler } from '@/libs/mouse-jiggler';
 
 export const Absolute = () => {
   const resolution = useAtomValue(resolutionAtom);
@@ -74,6 +75,8 @@ export const Absolute = () => {
     async function handleMouseMove(event: any) {
       disableEvent(event);
       await send(event);
+
+      mouseJiggler.moveEventCallback();
     }
 
     // mouse scroll
