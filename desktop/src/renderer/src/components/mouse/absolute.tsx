@@ -4,19 +4,15 @@ import { useAtomValue } from 'jotai'
 import { IpcEvents } from '@common/ipc-events'
 import { resolutionAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
+import { Key } from '@renderer/libs/device/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
-import type { Mouse as MouseKey } from '@renderer/types'
 
 export const Absolute = (): ReactElement => {
   const resolution = useAtomValue(resolutionAtom)
   const scrollDirection = useAtomValue(scrollDirectionAtom)
   const scrollInterval = useAtomValue(scrollIntervalAtom)
 
-  const keyRef = useRef<MouseKey>({
-    left: false,
-    right: false,
-    mid: false
-  })
+  const keyRef = useRef<Key>(new Key())
   const lastScrollTimeRef = useRef(0)
 
   useEffect(() => {
@@ -100,57 +96,50 @@ export const Absolute = (): ReactElement => {
     }
 
     async function send(event: MouseEvent, scroll: number = 0): Promise<void> {
-      const key =
-        (keyRef.current.left ? 1 : 0) |
-        (keyRef.current.right ? 2 : 0) |
-        (keyRef.current.mid ? 4 : 0)
-
-      const {x, y} = getCorrectedCoords(event.clientX, event.clientY);
-
+      const { x, y } = getCorrectedCoords(event.clientX, event.clientY)
       await window.electron.ipcRenderer.invoke(
         IpcEvents.SEND_MOUSE_ABSOLUTE,
-        key,
-        1, 1, x, y, scroll
+        keyRef.current.encode(), 1, 1, x, y, scroll
       )
     }
 
     function getCorrectedCoords(clientX: number, clientY: number) {
       if (!canvas) {
-        return { x: 0, y: 0 };
+        return { x: 0, y: 0 }
       }
 
-      const rect = canvas.getBoundingClientRect();
-      const videoElement = canvas as HTMLVideoElement;
+      const rect = canvas.getBoundingClientRect()
+      const videoElement = canvas as HTMLVideoElement
 
       if (!videoElement.videoWidth || !videoElement.videoHeight) {
-        const x = (clientX - rect.left) / rect.width;
-        const y = (clientY - rect.top) / rect.height;
-        return { x, y };
+        const x = (clientX - rect.left) / rect.width
+        const y = (clientY - rect.top) / rect.height
+        return { x, y }
       }
 
-      const videoRatio = videoElement.videoWidth / videoElement.videoHeight;
-      const elementRatio = rect.width / rect.height;
+      const videoRatio = videoElement.videoWidth / videoElement.videoHeight
+      const elementRatio = rect.width / rect.height
 
-      let renderedWidth = rect.width;
-      let renderedHeight = rect.height;
-      let offsetX = 0;
-      let offsetY = 0;
+      let renderedWidth = rect.width
+      let renderedHeight = rect.height
+      let offsetX = 0
+      let offsetY = 0
 
       if (videoRatio > elementRatio) {
-        renderedHeight = rect.width / videoRatio;
-        offsetY = (rect.height - renderedHeight) / 2;
+        renderedHeight = rect.width / videoRatio
+        offsetY = (rect.height - renderedHeight) / 2
       } else {
-        renderedWidth = rect.height * videoRatio;
-        offsetX = (rect.width - renderedWidth) / 2;
+        renderedWidth = rect.height * videoRatio
+        offsetX = (rect.width - renderedWidth) / 2
       }
 
-      const x = (clientX - rect.left - offsetX) / renderedWidth;
-      const y = (clientY - rect.top - offsetY) / renderedHeight;
+      const x = (clientX - rect.left - offsetX) / renderedWidth
+      const y = (clientY - rect.top - offsetY) / renderedHeight
 
-      const finalX = Math.max(0, Math.min(1, x));
-      const finalY = Math.max(0, Math.min(1, y));
+      const finalX = Math.max(0, Math.min(1, x))
+      const finalY = Math.max(0, Math.min(1, y))
 
-      return { x: finalX, y: finalY };
+      return { x: finalX, y: finalY }
     }
 
     return (): void => {
