@@ -26,7 +26,6 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
     mainWindow.maximize()
-    //mainWindow.webContents.openDevTools()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -45,11 +44,8 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.sipeed.usbkvm')
 
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
-    if (['media', 'clipboard-read'].includes(permission)) {
-      callback(true)
-    } else {
-      callback(false)
-    }
+    const allowedPermissions = ['media', 'clipboard-read']
+    callback(allowedPermissions.includes(permission))
   })
 
   app.on('browser-window-created', (_, window) => {
