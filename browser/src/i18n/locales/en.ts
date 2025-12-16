@@ -38,10 +38,19 @@ const en = {
     keyboard: {
       paste: 'Paste',
       virtualKeyboard: 'Keyboard',
-      shortcuts: 'Shortcuts',
-      ctrlAltDel: 'Ctrl + Alt + Delete',
-      ctrlD: 'Ctrl + D',
-      winTab: 'Win + Tab',
+      shortcut: {
+        title: 'Shortcut',
+        custom: 'Custom Shortcut',
+        capture: 'Click here to capture shortcut',
+        label: 'Label',
+        cancel: 'Cancel',
+        save: 'Save',
+        ctrlAltDel: 'Ctrl + Alt + Delete',
+        ctrlD: 'Ctrl + D',
+        winTab: 'Win + Tab',
+        enterFullScreen: 'Enter Full Screen',
+        captureTips: 'Capturing the Meta key separately requires operation in full-screen mode.'
+      },
     },
     mouse: {
       cursor: {

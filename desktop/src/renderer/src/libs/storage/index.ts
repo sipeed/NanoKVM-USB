@@ -1,5 +1,5 @@
 import type { Resolution } from '@renderer/types'
-
+import { ShortcutProps } from '@renderer/libs/device/keyboard'
 import { getWithExpiry, setWithExpiry } from './expiry'
 
 const LANGUAGE_KEY = 'nanokvm-usb-language'
@@ -16,6 +16,7 @@ const SKIP_UPDATE_KEY = 'nano-kvm-check-update'
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
 const BAUD_RATE_KEY = 'nanokvm-usb-baud-rate'
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
+const SHORTCUTS_KEY = 'nanokvm-usb-shortcuts';
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -182,4 +183,14 @@ export function getMouseJigglerMode(): 'enable' | 'disable' {
 
 export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
   localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler)
+}
+
+export function getShortcuts(): ShortcutProps[] {
+  const shortcuts = localStorage.getItem(SHORTCUTS_KEY);
+  if (!shortcuts) return [];
+  return window.JSON.parse(shortcuts);
+}
+
+export function setShortcuts(shortcuts: ShortcutProps[]): void {
+  localStorage.setItem(SHORTCUTS_KEY, window.JSON.stringify(shortcuts));
 }
