@@ -10,6 +10,7 @@ import {
   scrollDirectionAtom,
   scrollIntervalAtom
 } from '@/jotai/mouse.ts';
+import { mouseJiggler } from '@/libs/mouse-jiggler';
 import * as storage from '@/libs/storage';
 
 import { Direction } from './direction.tsx';
@@ -23,7 +24,7 @@ export const Mouse = () => {
   const [mouseMode, setMouseMode] = useAtom(mouseModeAtom);
   const setScrollDirection = useSetAtom(scrollDirectionAtom);
   const setScrollInterval = useSetAtom(scrollIntervalAtom);
-  const [mouseJigglerMode, setMouseJigglerMode] = useAtom(mouseJigglerModeAtom);
+  const setMouseJigglerMode = useSetAtom(mouseJigglerModeAtom);
 
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
@@ -53,9 +54,8 @@ export const Mouse = () => {
     }
 
     const jiggler = storage.getMouseJigglerMode();
-    if (mouseJigglerMode !== jiggler) {
-      setMouseJigglerMode(jiggler);
-    }
+    mouseJiggler.setMode(jiggler);
+    setMouseJigglerMode(jiggler);
   }
 
   const content = (

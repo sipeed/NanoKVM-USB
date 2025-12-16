@@ -69,7 +69,7 @@ const zh = {
       slow: '慢',
       requestPointer: '正在使用鼠标相对模式，请点击桌面获取鼠标指针。',
       jiggler: {
-        title: '闲时晃动',
+        title: '空闲晃动',
         enable: '启用',
         disable: '禁用'
       }

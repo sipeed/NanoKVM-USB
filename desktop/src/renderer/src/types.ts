@@ -9,9 +9,3 @@ export type MediaDevice = {
   audioId?: string
   audioName?: string
 }
-
-export type Mouse = {
-  left: boolean
-  right: boolean
-  mid: boolean
-}

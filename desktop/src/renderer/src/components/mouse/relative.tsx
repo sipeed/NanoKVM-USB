@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next'
 import { IpcEvents } from '@common/ipc-events'
 import { resolutionAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
+import { Key } from '@renderer/libs/device/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
-import type { Mouse as MouseKey } from '@renderer/types'
 
 export const Relative = (): ReactElement => {
   const { t } = useTranslation()
@@ -18,11 +18,7 @@ export const Relative = (): ReactElement => {
   const scrollInterval = useAtomValue(scrollIntervalAtom)
 
   const isLockedRef = useRef(false)
-  const keyRef = useRef<MouseKey>({
-    left: false,
-    right: false,
-    mid: false
-  })
+  const keyRef = useRef<Key>(new Key())
   const lastScrollTimeRef = useRef(0)
 
   useEffect(() => {
@@ -132,12 +128,7 @@ export const Relative = (): ReactElement => {
     }
 
     async function send(x: number, y: number, scroll: number): Promise<void> {
-      const key =
-        (keyRef.current.left ? 1 : 0) |
-        (keyRef.current.right ? 2 : 0) |
-        (keyRef.current.mid ? 4 : 0)
-
-      await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE_RELATIVE, key, x, y, scroll)
+      await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE_RELATIVE, keyRef.current.encode(), x, y, scroll)
     }
 
     return (): void => {

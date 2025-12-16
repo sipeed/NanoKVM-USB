@@ -1,22 +1,16 @@
 import { useEffect, useRef } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 
 import { resolutionAtom } from '@/jotai/device.ts';
-import {
-  mouseJigglerModeAtom,
-  mouseLastMoveTimeAtom,
-  scrollDirectionAtom,
-  scrollIntervalAtom
-} from '@/jotai/mouse.ts';
+import { scrollDirectionAtom, scrollIntervalAtom } from '@/jotai/mouse.ts';
 import { device } from '@/libs/device';
 import { Key } from '@/libs/device/mouse.ts';
+import { mouseJiggler } from '@/libs/mouse-jiggler';
 
 export const Absolute = () => {
   const resolution = useAtomValue(resolutionAtom);
   const scrollDirection = useAtomValue(scrollDirectionAtom);
   const scrollInterval = useAtomValue(scrollIntervalAtom);
-  const mouseJigglerMode = useAtomValue(mouseJigglerModeAtom);
-  const setMouseLastMoveTime = useSetAtom(mouseLastMoveTimeAtom);
 
   const keyRef = useRef<Key>(new Key());
   const lastScrollTimeRef = useRef(0);
@@ -82,10 +76,7 @@ export const Absolute = () => {
       disableEvent(event);
       await send(event);
 
-      // mouse jiggler record last move time
-      if (mouseJigglerMode === 'enable') {
-        setMouseLastMoveTime(Date.now());
-      }
+      mouseJiggler.moveEventCallback();
     }
 
     // mouse scroll
@@ -157,7 +148,7 @@ export const Absolute = () => {
       canvas.removeEventListener('click', disableEvent);
       canvas.removeEventListener('contextmenu', disableEvent);
     };
-  }, [resolution, scrollDirection, scrollInterval, mouseJigglerMode, setMouseLastMoveTime]);
+  }, [resolution, scrollDirection, scrollInterval]);
 
   // disable default events
   function disableEvent(event: any) {
