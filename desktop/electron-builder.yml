@@ -19,10 +19,8 @@ win:
   executableName: NanoKVM-USB
 
 nsis:
-  oneClick: false                            # show installer wizard
-  perMachine: true                           # install for all users
+  oneClick: false
   allowToChangeInstallationDirectory: true
-  allowElevation: true                       # request elevation when needed
   artifactName: ${productName}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
