@@ -80,7 +80,11 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
     setIsFailed(false)
     setMsg('')
 
-    const rate = customBaudRate ?? baudRate
+    let rate = baudRate
+    if (customBaudRate && !baudRateOptions.some(option => option.value === customBaudRate)) {
+      rate = customBaudRate
+    }
+
     const success = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_SERIAL_PORT, port, rate)
 
     if (success) {
