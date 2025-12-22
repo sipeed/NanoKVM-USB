@@ -7,7 +7,7 @@ import { Scale } from './scale.tsx';
 
 export const Video = () => {
   const content = (
-    <div className="flex flex-col space-y-1">
+    <div className="flex flex-col space-y-0.5">
       <Resolution />
       <Scale />
       <Device />

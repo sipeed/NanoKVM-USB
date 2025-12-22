@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Popover } from 'antd';
+import { Divider, Popover } from 'antd';
 import { useAtom, useSetAtom } from 'jotai';
 import { MouseIcon } from 'lucide-react';
 
@@ -59,13 +59,15 @@ export const Mouse = () => {
   }
 
   const content = (
-    <>
+    <div className="flex flex-col space-y-0.5">
       <Style />
       <Mode />
       <Direction />
       <Speed />
+
+      <Divider style={{ margin: '5px 0 5px 0' }} />
       <Jiggler />
-    </>
+    </div>
   );
 
   return (

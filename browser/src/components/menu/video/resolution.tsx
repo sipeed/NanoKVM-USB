@@ -102,7 +102,7 @@ export const Resolution = () => {
         <div
           key={res.width}
           className={clsx(
-            'flex cursor-pointer select-none items-center space-x-1 rounded px-3 py-1.5 hover:bg-neutral-700/60',
+            'flex cursor-pointer select-none items-center space-x-1 rounded px-4 py-1.5 hover:bg-neutral-700/60',
             resolution.width === res.width && resolution.height === res.height
               ? 'text-blue-500'
               : 'text-white'
@@ -119,13 +119,13 @@ export const Resolution = () => {
 
       {/* custom resolution */}
       <div
-        className="flex cursor-pointer select-none items-center justify-between space-x-3 rounded px-3 py-1.5 text-sm hover:bg-neutral-700/60"
+        className="flex cursor-pointer select-none items-center justify-between space-x-3 rounded px-4 py-1.5 text-sm hover:bg-neutral-700/60"
         onClick={showModal}
       >
         <span>{t('video.customResolution')}</span>
         {customResolutions.length > 0 && (
           <span className="hover:text-red-500" onClick={removeCustomResolution}>
-            <Trash2Icon size={16} />
+            <Trash2Icon size={14} />
           </span>
         )}
       </div>
@@ -134,7 +134,7 @@ export const Resolution = () => {
         <div
           key={res.width}
           className={clsx(
-            'flex cursor-pointer select-none items-center space-x-1 rounded px-3 py-1.5 hover:bg-neutral-700/60',
+            'flex cursor-pointer select-none items-center space-x-1 rounded px-4 py-1.5 hover:bg-neutral-700/60',
             resolution.width === res.width && resolution.height === res.height
               ? 'text-blue-500'
               : 'text-white'
@@ -152,7 +152,7 @@ export const Resolution = () => {
   return (
     <>
       <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
-        <div className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700">
+        <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
           <RatioIcon size={18} />
           <span className="select-none text-sm">{t('video.resolution')}</span>
         </div>

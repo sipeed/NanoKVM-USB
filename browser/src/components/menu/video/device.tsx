@@ -78,7 +78,7 @@ export const Device = () => {
         <div
           key={device.videoId}
           className={clsx(
-            'cursor-pointer rounded px-2 py-1.5 hover:bg-neutral-700/60',
+            'max-w-[320px] cursor-pointer truncate rounded px-2 py-1.5 hover:bg-neutral-700/60',
             device.videoId === videoDeviceId ? 'text-blue-500' : 'text-white'
           )}
           onClick={() => selectDevice(device)}
@@ -91,7 +91,7 @@ export const Device = () => {
 
   return (
     <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
-      <div className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700">
+      <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
         <VideoIcon size={18} />
         <span className="select-none text-sm">{t('video.device')}</span>
       </div>
