@@ -1,11 +1,5 @@
 import { setBit } from './utils.ts';
 
-interface ShortcutProps {
-  label: string;
-  modifiers: Partial<Modifiers>;
-  keyCode: string;
-}
-
 const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 
 class Modifiers {
@@ -31,31 +25,34 @@ class Modifiers {
     return b;
   }
 
-  public static getModifiers(event: KeyboardEvent, pressedModifiers: Set<string>) {
-    const modifiers = new Modifiers();
-
-    if (event.ctrlKey) {
-      modifiers.leftCtrl = pressedModifiers.has('ControlLeft');
-      modifiers.rightCtrl = pressedModifiers.has('ControlRight');
+  public setModifier(code: string) {
+    switch (code) {
+      case 'ControlLeft':
+        this.leftCtrl = true;
+        return;
+      case 'ControlRight':
+        this.rightCtrl = true;
+        return;
+      case 'ShiftLeft':
+        this.leftShift = true;
+        return;
+      case 'ShiftRight':
+        this.rightShift = true;
+        return;
+      case 'AltLeft':
+        this.leftAlt = true;
+        return;
+      case 'AltRight':
+        this.rightAlt = true;
+        return;
+      case 'MetaLeft':
+        this.leftWindows = true;
+        return;
+      case 'MetaRight':
+        this.rightWindows = true;
+        return;
     }
-    if (event.shiftKey) {
-      modifiers.leftShift = pressedModifiers.has('ShiftLeft');
-      modifiers.rightShift = pressedModifiers.has('ShiftRight');
-    }
-    if (event.altKey) {
-      modifiers.leftAlt = pressedModifiers.has('AltLeft');
-      modifiers.rightAlt = pressedModifiers.has('AltRight');
-    }
-    if (event.metaKey) {
-      modifiers.leftWindows = pressedModifiers.has('MetaLeft');
-      modifiers.rightWindows = pressedModifiers.has('MetaRight');
-    }
-    if (event.getModifierState('AltGraph')) {
-      modifiers.leftCtrl = true;
-      modifiers.rightAlt = true;
-    }
-    return modifiers;
   }
 }
 
-export { type ShortcutProps, Modifiers, modifierKeys };
+export { Modifiers, modifierKeys };

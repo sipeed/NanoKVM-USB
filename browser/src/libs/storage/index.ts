@@ -1,18 +1,17 @@
 import type { Resolution } from '@/types';
-import { ShortcutProps } from '@/libs/device/keyboard.ts';
 
 const LANGUAGE_KEY = 'nanokvm-usb-language';
 const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id';
 const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-video-resolution';
 const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-custom-resolution';
-const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale'
+const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale';
 const IS_MENU_OPEN_KEY = 'nanokvm-is-menu-open';
 const MOUSE_STYLE_KEY = 'nanokvm-usb-mouse-style';
 const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode';
 const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
-const SHORTCUTS_KEY = 'nanokvm-usb-shortcuts';
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
+const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcut';
 
 export function getLanguage() {
   return localStorage.getItem(LANGUAGE_KEY);
@@ -61,15 +60,15 @@ export function removeCustomResolutions() {
 }
 
 export function getVideoScale(): number | null {
-  const scale = localStorage.getItem(VIDEO_SCALE_KEY)
+  const scale = localStorage.getItem(VIDEO_SCALE_KEY);
   if (scale && Number(scale)) {
-    return Number(scale)
+    return Number(scale);
   }
-  return null
+  return null;
 }
 
 export function setVideoScale(scale: number): void {
-  localStorage.setItem(VIDEO_SCALE_KEY, String(scale))
+  localStorage.setItem(VIDEO_SCALE_KEY, String(scale));
 }
 
 export function getIsMenuOpen(): boolean {
@@ -124,14 +123,12 @@ export function setMouseScrollInterval(interval: number): void {
   localStorage.setItem(MOUSE_SCROLL_INTERVAL_KEY, String(interval));
 }
 
-export function getShortcuts(): ShortcutProps[] {
-  const shortcuts = localStorage.getItem(SHORTCUTS_KEY);
-  if (!shortcuts) return [];
-  return window.JSON.parse(shortcuts);
+export function getShortcuts(): string | null {
+  return localStorage.getItem(KEYBOARD_SHORTCUT_KEY);
 }
 
-export function setShortcuts(shortcuts: ShortcutProps[]): void {
-  localStorage.setItem(SHORTCUTS_KEY, window.JSON.stringify(shortcuts));
+export function setShortcuts(shortcuts: string): void {
+  localStorage.setItem(KEYBOARD_SHORTCUT_KEY, shortcuts);
 }
 
 export function getMouseJigglerMode(): 'enable' | 'disable' {

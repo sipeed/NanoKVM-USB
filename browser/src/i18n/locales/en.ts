@@ -39,18 +39,15 @@ const en = {
       paste: 'Paste',
       virtualKeyboard: 'Keyboard',
       shortcut: {
-        title: 'Shortcut',
-        custom: 'Custom Shortcut',
+        title: 'Shortcuts',
+        custom: 'Custom',
         capture: 'Click here to capture shortcut',
-        label: 'Label',
-        cancel: 'Cancel',
+        clear: 'Clear',
         save: 'Save',
-        ctrlAltDel: 'Ctrl + Alt + Delete',
-        ctrlD: 'Ctrl + D',
-        winTab: 'Win + Tab',
-        enterFullScreen: 'Enter Full Screen',
-        captureTips: 'Capturing the Meta key separately requires operation in full-screen mode.'
-      },
+        captureTips:
+          'Capturing system-level keys (such as the Windows key) requires full-screen permission.',
+        enterFullScreen: 'Toggle full-screen mode.'
+      }
     },
     mouse: {
       cursor: {

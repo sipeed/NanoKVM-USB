@@ -64,7 +64,7 @@ export const VirtualKeyboard = ({ isBigScreen }: KeyboardProps) => {
     }
 
     const modifiers = getModifiers();
-    const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00];
+    const keys = [code, 0x00, 0x00, 0x00, 0x00, 0x00];
     await device.sendKeyboardData(modifiers, keys);
   }
 
@@ -80,35 +80,8 @@ export const VirtualKeyboard = ({ isBigScreen }: KeyboardProps) => {
     const modifiers = new Modifiers();
 
     activeModifierKeys.forEach((modifierKey) => {
-      const specialKey = specialKeyMap.get(modifierKey)!;
-      switch (specialKey) {
-        case 'ControlLeft':
-          modifiers.leftCtrl = true;
-          break;
-        case 'ControlRight':
-          modifiers.rightCtrl = true;
-          break;
-        case 'ShiftLeft':
-          modifiers.leftShift = true;
-          break;
-        case 'ShiftRight':
-          modifiers.rightShift = true;
-          break;
-        case 'AltLeft':
-          modifiers.leftAlt = true;
-          break;
-        case 'AltRight':
-          modifiers.rightAlt = true;
-          break;
-        case 'MetaLeft':
-          modifiers.leftWindows = true;
-          break;
-        case 'MetaRight':
-          modifiers.rightWindows = true;
-          break;
-        default:
-          break;
-      }
+      const code = specialKeyMap.get(modifierKey)!;
+      modifiers.setModifier(code);
     });
 
     return modifiers;

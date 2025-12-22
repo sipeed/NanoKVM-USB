@@ -39,7 +39,7 @@ export const Paste = () => {
   }
 
   async function send(modifiers: Modifiers, code: number) {
-    const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00];
+    const keys = [code, 0x00, 0x00, 0x00, 0x00, 0x00];
     await device.sendKeyboardData(modifiers, keys);
 
     await device.sendKeyboardData(new Modifiers(), [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
@@ -47,7 +47,7 @@ export const Paste = () => {
 
   return (
     <div
-      className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
+      className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
       onClick={paste}
     >
       <ClipboardIcon size={18} />

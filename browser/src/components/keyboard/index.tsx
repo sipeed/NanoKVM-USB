@@ -4,7 +4,7 @@ import { device } from '@/libs/device';
 import { Modifiers } from '@/libs/device/keyboard.ts';
 import { KeyboardCodes } from '@/libs/keyboard';
 
-const MAX_SIMULTANEOUS_KEYS = 4;
+const MAX_SIMULTANEOUS_KEYS = 6;
 const ModifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 
 export const Keyboard = () => {
@@ -44,7 +44,7 @@ export const Keyboard = () => {
       }
     }
 
-    await sendKeyData(event);
+    await sendKeyData();
   }
 
   // release button
@@ -61,7 +61,7 @@ export const Keyboard = () => {
       }
     }
 
-    await sendKeyData(event);
+    await sendKeyData();
   }
 
   // release all keys when page loses focus
@@ -86,11 +86,13 @@ export const Keyboard = () => {
   }
 
   // send keyboard data
-  async function sendKeyData(event: KeyboardEvent) {
-    const modifiers = Modifiers.getModifiers(event, pressedModifiersRef.current);
+  async function sendKeyData() {
+    const modifiers = new Modifiers();
+    pressedModifiersRef.current.forEach((code) => {
+      modifiers.setModifier(code);
+    });
+
     const keys = [
-      0x00,
-      0x00,
       ...Array.from(pressedKeysRef.current),
       ...new Array(MAX_SIMULTANEOUS_KEYS - pressedKeysRef.current.size).fill(0x00)
     ];
