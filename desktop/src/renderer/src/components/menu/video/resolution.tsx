@@ -102,7 +102,7 @@ export const Resolution = (): ReactElement => {
         <div
           key={res.width}
           className={clsx(
-            'flex cursor-pointer items-center space-x-1.5 rounded px-3 py-1.5 select-none hover:bg-neutral-700/60',
+            'flex cursor-pointer items-center space-x-1 rounded px-4 py-1.5 select-none hover:bg-neutral-700/50',
             resolution.width === res.width && resolution.height === res.height
               ? 'text-blue-500'
               : 'text-white'
@@ -118,13 +118,13 @@ export const Resolution = (): ReactElement => {
       <Divider style={{ margin: '5px 0 5px 0' }} />
 
       <div
-        className="flex cursor-pointer items-center justify-between space-x-3 rounded px-3 py-1.5 text-sm select-none hover:bg-neutral-700/60"
+        className="flex cursor-pointer items-center justify-between space-x-3 rounded px-4 py-1.5 text-sm select-none hover:bg-neutral-700/50"
         onClick={showModal}
       >
         <span>{t('video.customResolution')}</span>
         {customResolutions.length > 0 && (
           <span className="hover:text-red-500" onClick={removeCustomResolution}>
-            <Trash2Icon size={16} />
+            <Trash2Icon size={14} />
           </span>
         )}
       </div>
@@ -133,7 +133,7 @@ export const Resolution = (): ReactElement => {
         <div
           key={res.width}
           className={clsx(
-            'flex cursor-pointer items-center space-x-1 rounded px-3 py-1.5 select-none hover:bg-neutral-700/60',
+            'flex cursor-pointer items-center space-x-1 rounded px-4 py-1.5 select-none hover:bg-neutral-700/50',
             resolution.width === res.width && resolution.height === res.height
               ? 'text-blue-500'
               : 'text-white'
@@ -151,9 +151,9 @@ export const Resolution = (): ReactElement => {
   return (
     <>
       <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
-        <div className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700">
+        <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
           <RatioIcon size={18} />
-          <span className="text-sm select-none">{t('video.resolution')}</span>
+          <span className="select-none text-sm">{t('video.resolution')}</span>
         </div>
       </Popover>
 

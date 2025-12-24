@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useState } from 'react'
-import { Popover } from 'antd'
+import { Divider, Popover } from 'antd'
 import { useAtom, useSetAtom } from 'jotai'
 import { MouseIcon } from 'lucide-react'
 
@@ -54,11 +54,12 @@ export const Mouse = (): ReactElement => {
   }, [])
 
   const content = (
-    <div className="flex flex-col space-y-1">
+    <div className="flex flex-col space-y-0.5">
       <Style />
       <Mode />
       <Direction />
       <Speed />
+      <Divider style={{ margin: '5px 0 5px 0' }} />
       <Jiggler />
     </div>
   )
@@ -72,7 +73,7 @@ export const Mouse = (): ReactElement => {
       open={isPopoverOpen}
       onOpenChange={setIsPopoverOpen}
     >
-      <div className="flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70">
+      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70">
         <MouseIcon size={18} />
       </div>
     </Popover>

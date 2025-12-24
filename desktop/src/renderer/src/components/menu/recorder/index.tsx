@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { Video } from 'lucide-react';
 
 import { camera } from '@renderer/libs/camera'
@@ -105,7 +106,10 @@ export const Recorder = () => {
 
   return (
     <div
-      className="flex h-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70"
+      className={clsx(
+        'flex h-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70',
+        isRecording ? 'min-w-[28px] space-x-1 px-1' : 'w-[28px]'
+      )}
       onClick={isRecording ? handleStopRecording : handleStartRecording}
     >
       <Video className={isRecording ? 'animate-pulse text-red-400' : ''} size={18} />

@@ -31,7 +31,7 @@ export const Direction = (): ReactElement => {
         <div
           key={direction.value}
           className={clsx(
-            'my-1 flex cursor-pointer items-center space-x-1 rounded py-1 pr-5 pl-2 hover:bg-neutral-700/60',
+            'my-1 flex cursor-pointer items-center space-x-1 rounded py-1 pl-2 pr-5 hover:bg-neutral-700/50',
             direction.value === scrollDirection.toString() ? 'text-blue-500' : 'text-neutral-300'
           )}
           onClick={() => update(direction.value)}
@@ -44,10 +44,8 @@ export const Direction = (): ReactElement => {
 
   return (
     <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
-      <div className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/60">
-        <div className="flex h-[14px] w-[20px] items-end">
-          <ArrowDownUpIcon size={16} />
-        </div>
+      <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
+        <ArrowDownUpIcon size={18} />
         <span>{t('mouse.direction')}</span>
       </div>
     </Popover>
