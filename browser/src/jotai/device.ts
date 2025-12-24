@@ -10,7 +10,8 @@ export const resolutionAtom = atom<Resolution>({
   height: 1080
 });
 
-export const videoScaleAtom = atom<number>(1.0)
+export const videoScaleAtom = atom<number>(1.0);
+export const videoRotateAtom = atom<number>(0);
 
 export const videoDeviceIdAtom = atom('');
 export const videoStateAtom = atom<VideoState>('disconnected');

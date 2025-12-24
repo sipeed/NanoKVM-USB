@@ -2,7 +2,7 @@ import { ReactElement, useEffect, useRef } from 'react'
 import { useAtomValue } from 'jotai'
 
 import { IpcEvents } from '@common/ipc-events'
-import { resolutionAtom } from '@renderer/jotai/device'
+import { resolutionAtom, videoRotateAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
 import { Key } from '@renderer/libs/device/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
@@ -11,12 +11,13 @@ export const Absolute = (): ReactElement => {
   const resolution = useAtomValue(resolutionAtom)
   const scrollDirection = useAtomValue(scrollDirectionAtom)
   const scrollInterval = useAtomValue(scrollIntervalAtom)
+  const videoRotate = useAtomValue(videoRotateAtom)
 
   const keyRef = useRef<Key>(new Key())
   const lastScrollTimeRef = useRef(0)
 
   useEffect(() => {
-    const canvas = document.getElementById('video')
+    const canvas = document.getElementById(videoRotate === 0 ? 'video': 'video-canvas')
     if (!canvas) return
 
     canvas.addEventListener('mousedown', handleMouseDown)
@@ -150,7 +151,7 @@ export const Absolute = (): ReactElement => {
       canvas.removeEventListener('click', disableEvent)
       canvas.removeEventListener('contextmenu', disableEvent)
     }
-  }, [resolution, scrollDirection, scrollInterval])
+  }, [resolution, scrollDirection, scrollInterval, videoRotate])
 
   function disableEvent(event: MouseEvent): void {
     event.preventDefault()
