@@ -9,10 +9,10 @@ import * as storage from '@renderer/libs/storage'
 import type { MediaDevice } from '@renderer/types'
 
 type VideoProps = {
-  setMsg: (msg: string) => void
+  setErrMsg: (msg: string) => void
 }
 
-export const Video = ({ setMsg }: VideoProps): ReactElement => {
+export const Video = ({ setErrMsg }: VideoProps): ReactElement => {
   const { t } = useTranslation()
 
   const resolution = useAtomValue(resolutionAtom)
@@ -61,7 +61,7 @@ export const Video = ({ setMsg }: VideoProps): ReactElement => {
       }
     } catch (err) {
       console.log(err)
-      setMsg(t('camera.failed'))
+      setErrMsg(t('camera.failed'))
     }
   }
 
@@ -73,7 +73,7 @@ export const Video = ({ setMsg }: VideoProps): ReactElement => {
 
     if (videoState === 'connecting') return
     setVideoState('connecting')
-    setMsg('')
+    setErrMsg('')
 
     const device = devices.find((d) => d.videoId === videoId)
     if (!device) {
@@ -97,7 +97,7 @@ export const Video = ({ setMsg }: VideoProps): ReactElement => {
       storage.setVideoDevice(videoId)
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('camera.failed')
-      setMsg(msg)
+      setErrMsg(msg)
     }
   }
 
