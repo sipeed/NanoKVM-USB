@@ -10,11 +10,11 @@ export const Keyboard = (): ReactElement => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
   const content = (
-    <>
+    <div className="flex flex-col space-y-0.5">
       <Paste />
       <VirtualKeyboard />
       <KeyboardShortcutsMenu />
-    </>
+    </div>
   )
 
   return (

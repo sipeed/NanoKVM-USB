@@ -129,9 +129,9 @@ export const SerialPort = (): ReactElement => {
 
   return (
     <Popover content={content} placement="bottomLeft" trigger="click" arrow={false}>
-      <div 
+      <div
         className={clsx(
-          "flex h-[28px] cursor-pointer items-center justify-center rounded px-2 hover:bg-neutral-700/70",
+          "flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded hover:bg-neutral-700/70",
           serialPort ? 'text-blue-400' : 'text-white'
         )}
         title={serialPort ? `${serialPort} @ ${baudRate}` : t('menu.serialPort.clickToSelect')}

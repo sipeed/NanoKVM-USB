@@ -57,10 +57,8 @@ export const Speed = (): ReactElement => {
 
   return (
     <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
-      <div className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
-        <div className="flex h-[14px] w-[20px] items-end">
-          <GaugeIcon size={16} />
-        </div>
+      <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
+        <GaugeIcon size={18} />
         <span>{t('mouse.speed')}</span>
       </div>
     </Popover>

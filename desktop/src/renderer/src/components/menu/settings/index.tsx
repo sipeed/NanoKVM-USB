@@ -54,7 +54,7 @@ export const Settings = (): ReactElement => {
   return (
     <>
       <div
-        className="flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70"
+        className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70"
         onClick={() => setIsModalOpen(true)}
       >
         <SettingsIcon size={18} />

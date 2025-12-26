@@ -52,7 +52,7 @@ export const Paste = (): ReactElement => {
 
   return (
     <div
-      className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
+      className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
       onClick={paste}
     >
       <ClipboardIcon size={18} />
