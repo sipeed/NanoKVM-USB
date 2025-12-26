@@ -116,10 +116,10 @@ export const SerialPort = ({ setErrMsg }: SerialPortProps): ReactElement => {
   }
 
   return (
-    <Space direction="vertical" size="small" style={{ width: '100%', alignItems: 'center' }}>
+    <Space direction="vertical" size="small" className="p-2">
       <Select
         value={serialPort || undefined}
-        style={{ width: 280 }}
+        className="w-[250px]"
         options={options}
         loading={serialPortState === 'connecting'}
         status={isFailed ? 'error' : undefined}
@@ -129,7 +129,7 @@ export const SerialPort = ({ setErrMsg }: SerialPortProps): ReactElement => {
       />
       <Select
         value={baudRate}
-        style={{ width: 280 }}
+        className="w-[250px]"
         options={baudRateOptions}
         placeholder={t('modal.selectBaudRate')}
         onChange={handleBaudRateChange}

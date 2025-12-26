@@ -93,7 +93,7 @@ export const Video = ({ setErrMsg }: VideoProps) => {
   return (
     <Select
       value={videoDeviceId || undefined}
-      style={{ width: 250 }}
+      className="w-[250px]"
       options={devices}
       fieldNames={{
         value: 'videoId',
