@@ -39,7 +39,7 @@ jobs:
     name: Build Browser Bundle
     needs: detect-changes
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.browser == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.browser == 'true'
     defaults:
       run:
         working-directory: browser
@@ -69,7 +69,7 @@ jobs:
     name: Build Desktop Apps
     needs: detect-changes
     runs-on: ${{ matrix.os }}
-    if: needs.detect-changes.outputs.desktop == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.desktop == 'true'
     strategy:
       fail-fast: false
       matrix:

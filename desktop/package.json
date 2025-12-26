@@ -17,7 +17,10 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "build:win-full": "npm run build && electron-builder --win --x64 --arm64",
+    "build:mac-full": "electron-vite build && electron-builder --mac --x64 --arm64",
+    "build:linux-full": "electron-vite build && electron-builder --linux --x64 --arm64"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
