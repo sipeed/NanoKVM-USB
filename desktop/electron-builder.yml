@@ -21,7 +21,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-${version}-setup.${ext}
+  artifactName: ${productName}-${version}-${os}-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: true
@@ -39,7 +39,7 @@ mac:
   notarize: false
 
 dmg:
-  artifactName: ${productName}-${version}.${ext}
+  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
   sign: true
 
 linux:
@@ -49,9 +49,7 @@ linux:
     - deb
   maintainer: sipeed.com
   category: Utility
-
-appImage:
-  artifactName: ${productName}-${version}.${ext}
+  artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 
 npmRebuild: false
 
