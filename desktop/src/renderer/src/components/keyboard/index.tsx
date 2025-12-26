@@ -29,12 +29,13 @@ export const Keyboard = (): ReactElement => {
       pressedModifiersRef.current.add(event.code)
     } else {
       const keyCode = KeyboardCodes.get(event.code)
-      if (
-        keyCode !== undefined &&
-        !pressedKeysRef.current.has(keyCode) &&
-        pressedKeysRef.current.size < MAX_SIMULTANEOUS_KEYS
-      ) {
-        pressedKeysRef.current.add(keyCode)
+      if (keyCode !== undefined) {
+        if (
+          !pressedKeysRef.current.has(keyCode) &&
+          pressedKeysRef.current.size < MAX_SIMULTANEOUS_KEYS
+        ) {
+          pressedKeysRef.current.add(keyCode)
+        }
       }
     }
 
