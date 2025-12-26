@@ -45,8 +45,8 @@ dmg:
 linux:
   target:
     - AppImage
-    - snap
     - deb
+    - rpm
   maintainer: sipeed.com
   category: Utility
   artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
