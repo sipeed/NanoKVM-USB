@@ -37,7 +37,6 @@ const App = (): ReactElement => {
   const setResolution = useSetAtom(resolutionAtom)
 
   const [state, setState] = useState<State>('loading')
-  const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
     const resolution = getVideoResolution()
@@ -52,10 +51,6 @@ const App = (): ReactElement => {
       window.electron.ipcRenderer.invoke(IpcEvents.CLOSE_SERIAL_PORT)
     }
   }, [])
-
-  useEffect(() => {
-    setIsConnected(videoState === 'connected' && serialPortState === 'connected')
-  }, [videoState, serialPortState])
 
   async function requestMediaPermissions(resolution?: Resolution): Promise<void> {
     try {
@@ -108,14 +103,14 @@ const App = (): ReactElement => {
 
   return (
     <>
-      {isConnected ? (
+      <DeviceModal />
+
+      {videoState === 'connected' && serialPortState === 'connected' && (
         <>
           <Menu />
           <Mouse />
           {isKeyboardEnable && <Keyboard />}
         </>
-      ) : (
-        <DeviceModal />
       )}
 
       <video

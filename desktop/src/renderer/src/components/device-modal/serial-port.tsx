@@ -13,10 +13,10 @@ type Option = {
 }
 
 type SerialPortProps = {
-  setMsg: (msg: string) => void
+  setErrMsg: (msg: string) => void
 }
 
-export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
+export const SerialPort = ({ setErrMsg }: SerialPortProps): ReactElement => {
   const { t } = useTranslation()
 
   const [serialPort, setSerialPort] = useAtom(serialPortAtom)
@@ -52,7 +52,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
         setSerialPort('')
         setSerialPortState('disconnected')
         storage.setSerialPort('')
-        setMsg(err)
+        setErrMsg(err)
       }
     })
 
@@ -78,7 +78,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
     if (serialPortState === 'connecting') return
     setSerialPortState('connecting')
     setIsFailed(false)
-    setMsg('')
+    setErrMsg('')
 
     let rate = baudRate
     if (customBaudRate && !baudRateOptions.some(option => option.value === customBaudRate)) {
@@ -116,10 +116,10 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
   }
 
   return (
-    <Space direction="vertical" size="small" style={{ width: '100%', alignItems: 'center' }}>
+    <Space direction="vertical" size="small" className="p-2">
       <Select
         value={serialPort || undefined}
-        style={{ width: 280 }}
+        className="w-[250px]"
         options={options}
         loading={serialPortState === 'connecting'}
         status={isFailed ? 'error' : undefined}
@@ -129,7 +129,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
       />
       <Select
         value={baudRate}
-        style={{ width: 280 }}
+        className="w-[250px]"
         options={baudRateOptions}
         placeholder={t('modal.selectBaudRate')}
         onChange={handleBaudRateChange}
