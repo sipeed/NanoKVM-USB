@@ -5,6 +5,7 @@ import { KeyboardIcon } from 'lucide-react';
 import { Paste } from './paste';
 import { VirtualKeyboard } from './virtual-keyboard';
 import { KeyboardShortcutsMenu } from './shortcuts-menu';
+import { NumLock } from './numlock';
 
 export const Keyboard = (): ReactElement => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -12,6 +13,7 @@ export const Keyboard = (): ReactElement => {
   const content = (
     <>
       <Paste />
+      <NumLock />
       <VirtualKeyboard />
       <KeyboardShortcutsMenu />
     </>
