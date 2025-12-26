@@ -42,7 +42,6 @@ const App = (): ReactElement => {
   const canvasContextRef = useRef<CanvasRenderingContext2D | null>(null)
 
   const [state, setState] = useState<State>('loading')
-  const [isConnected, setIsConnected] = useState(false)
 
   const videoStyle = clsx(
     'block select-none origin-center max-w-full max-h-full object-scale-down',
@@ -135,10 +134,6 @@ const App = (): ReactElement => {
     }
   }, [])
 
-  useEffect(() => {
-    setIsConnected(videoState === 'connected' && serialPortState === 'connected')
-  }, [videoState, serialPortState])
-
   async function requestMediaPermissions(resolution?: Resolution): Promise<void> {
     try {
       if (window.electron.process.platform === 'darwin') {
@@ -190,14 +185,14 @@ const App = (): ReactElement => {
 
   return (
     <>
-      {isConnected ? (
+      <DeviceModal />
+
+      {videoState === 'connected' && serialPortState === 'connected' && (
         <>
           <Menu />
           <Mouse />
           {isKeyboardEnable && <Keyboard />}
         </>
-      ) : (
-        <DeviceModal />
       )}
 
       <video
