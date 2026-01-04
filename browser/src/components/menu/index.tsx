@@ -10,10 +10,10 @@ import * as storage from '@/libs/storage';
 import { Fullscreen } from './fullscreen';
 import { Keyboard } from './keyboard';
 import { Mouse } from './mouse';
+import { Recorder } from './recorder';
 import { SerialPort } from './serial-port';
 import { Settings } from './settings';
 import { Video } from './video';
-import { Recorder } from './recorder';
 
 export const Menu = () => {
   const serialState = useAtomValue(serialStateAtom);
@@ -63,7 +63,7 @@ export const Menu = () => {
           <Settings />
           <Fullscreen />
           <div
-            className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70"
+            className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white"
             onClick={toggleMenu}
           >
             <XIcon size={18} />

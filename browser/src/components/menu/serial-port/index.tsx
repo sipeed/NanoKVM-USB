@@ -20,7 +20,7 @@ export const SerialPort = () => {
 
   return (
     <div className="flex items-center justify-center text-neutral-300" onClick={selectSerial}>
-      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70">
+      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white">
         {isLoading ? <Loader2Icon className="animate-spin" size={18} /> : <CpuIcon size={18} />}
       </div>
     </div>

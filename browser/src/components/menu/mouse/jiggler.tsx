@@ -47,7 +47,7 @@ export const Jiggler = () => {
   return (
     <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
       <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
-        <MousePointerClickIcon size={18} />
+        <MousePointerClickIcon size={16} />
         <span>{t('mouse.jiggler.title')}</span>
       </div>
     </Popover>

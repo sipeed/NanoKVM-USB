@@ -19,7 +19,7 @@ export const Settings = () => {
         className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
         onClick={() => openPage('https://wiki.sipeed.com/nanokvmusb')}
       >
-        <BookIcon size={18} />
+        <BookIcon size={16} />
         <span>{t('settings.document')}</span>
       </div>
 
@@ -27,7 +27,7 @@ export const Settings = () => {
         className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
         onClick={() => openPage('https://github.com/sipeed/NanoKVM-USB/releases')}
       >
-        <DownloadIcon size={18} />
+        <DownloadIcon size={16} />
         <span>{t('settings.download')}</span>
       </div>
     </div>
@@ -35,7 +35,7 @@ export const Settings = () => {
 
   return (
     <Popover content={content} placement="bottomLeft" trigger="click" arrow={false}>
-      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/50">
+      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/50 hover:text-white">
         <SettingsIcon size={18} />
       </div>
     </Popover>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Divider, InputNumber, Modal, Popover } from 'antd';
 import clsx from 'clsx';
 import { useAtom, useSetAtom } from 'jotai';
-import { RatioIcon, Trash2Icon } from 'lucide-react';
+import { MonitorIcon, Trash2Icon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { resolutionAtom } from '@/jotai/device.ts';
@@ -153,7 +153,7 @@ export const Resolution = () => {
     <>
       <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
         <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
-          <RatioIcon size={18} />
+          <MonitorIcon size={16} />
           <span className="select-none text-sm">{t('video.resolution')}</span>
         </div>
       </Popover>

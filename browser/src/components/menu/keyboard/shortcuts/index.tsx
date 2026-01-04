@@ -86,9 +86,7 @@ export const Shortcuts = () => {
       arrow={false}
     >
       <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
-        <div className="flex size-[18px] items-center justify-center">
-          <CommandIcon size={16} />
-        </div>
+        <CommandIcon size={16} />
         <span>{t('keyboard.shortcut.title')}</span>
       </div>
     </Popover>

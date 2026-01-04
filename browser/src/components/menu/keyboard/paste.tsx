@@ -50,7 +50,7 @@ export const Paste = () => {
       className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
       onClick={paste}
     >
-      <ClipboardIcon size={18} />
+      <ClipboardIcon size={16} />
       <span>{t('keyboard.paste')}</span>
     </div>
   );

@@ -18,7 +18,7 @@ export const Video = () => {
 
   return (
     <Popover content={content} placement="bottomLeft" trigger="click" arrow={false}>
-      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-white hover:bg-neutral-700/70">
+      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white">
         <MonitorIcon size={18} />
       </div>
     </Popover>
