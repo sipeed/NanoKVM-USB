@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Result, Spin } from 'antd';
 import clsx from 'clsx';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from 'react-responsive';
 
@@ -13,6 +13,7 @@ import { VirtualKeyboard } from '@/components/virtual-keyboard';
 import {
   resolutionAtom,
   serialStateAtom,
+  videoRotationAtom,
   videoScaleAtom,
   videoStateAtom
 } from '@/jotai/device.ts';
@@ -33,23 +34,41 @@ const App = () => {
   const serialState = useAtomValue(serialStateAtom);
   const isKeyboardEnable = useAtomValue(isKeyboardEnableAtom);
   const setResolution = useSetAtom(resolutionAtom);
+  const [videoRotation, setVideoRotation] = useAtom(videoRotationAtom);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isCameraAvailable, setIsCameraAvailable] = useState(false);
+  const [shouldSwapDimensions, setShouldSwapDimensions] = useState(false);
 
   useEffect(() => {
-    const resolution = storage.getVideoResolution();
-    if (resolution) {
-      setResolution(resolution);
-    }
-
-    requestMediaPermissions(resolution);
+    initResolution();
+    initRotation();
 
     return () => {
       camera.close();
       device.serialPort.close();
     };
   }, []);
+
+  useEffect(() => {
+    setShouldSwapDimensions(videoRotation === 90 || videoRotation === 270);
+  }, [videoRotation]);
+
+  function initResolution() {
+    const resolution = storage.getVideoResolution();
+    if (resolution) {
+      setResolution(resolution);
+    }
+
+    requestMediaPermissions(resolution);
+  }
+
+  function initRotation() {
+    const rotation = storage.getVideoRotation();
+    if (rotation) {
+      setVideoRotation(rotation);
+    }
+  }
 
   async function requestMediaPermissions(resolution?: Resolution) {
     try {
@@ -112,12 +131,16 @@ const App = () => {
 
       <video
         id="video"
-        className={clsx('block min-h-[480px] min-w-[640px] select-none', mouseStyle)}
+        className={clsx(
+          'block select-none',
+          shouldSwapDimensions ? 'min-h-[640px] min-w-[360px]' : 'min-h-[360px] min-w-[640px]',
+          mouseStyle
+        )}
         style={{
-          transform: `scale(${videoScale})`,
+          transform: `scale(${videoScale}) rotate(${videoRotation}deg)`,
           transformOrigin: 'center',
-          maxWidth: '100%',
-          maxHeight: '100%',
+          maxWidth: shouldSwapDimensions ? '100vh' : '100%',
+          maxHeight: shouldSwapDimensions ? '100vw' : '100%',
           objectFit: 'scale-down'
         }}
         autoPlay

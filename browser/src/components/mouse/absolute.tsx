@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 
-import { resolutionAtom } from '@/jotai/device.ts';
+import { resolutionAtom, videoRotationAtom } from '@/jotai/device.ts';
 import { scrollDirectionAtom, scrollIntervalAtom } from '@/jotai/mouse.ts';
 import { device } from '@/libs/device';
 import { Key } from '@/libs/device/mouse.ts';
@@ -9,6 +9,7 @@ import { mouseJiggler } from '@/libs/mouse-jiggler';
 
 export const Absolute = () => {
   const resolution = useAtomValue(resolutionAtom);
+  const videoRotation = useAtomValue(videoRotationAtom);
   const scrollDirection = useAtomValue(scrollDirectionAtom);
   const scrollInterval = useAtomValue(scrollIntervalAtom);
 
@@ -109,35 +110,41 @@ export const Absolute = () => {
       const rect = canvas.getBoundingClientRect();
       const videoElement = canvas as HTMLVideoElement;
 
-      if (!videoElement.videoWidth || !videoElement.videoHeight) {
-        const x = (clientX - rect.left) / rect.width;
-        const y = (clientY - rect.top) / rect.height;
-        return { x, y };
-      }
+      const videoWidth = videoElement.videoWidth || 1920;
+      const videoHeight = videoElement.videoHeight || 1080;
 
-      const videoRatio = videoElement.videoWidth / videoElement.videoHeight;
-      const elementRatio = rect.width / rect.height;
+      const screenVideoRatio =
+        videoRotation === 90 || videoRotation === 270
+          ? videoHeight / videoWidth
+          : videoWidth / videoHeight;
 
-      let renderedWidth = rect.width;
-      let renderedHeight = rect.height;
-      let offsetX = 0;
-      let offsetY = 0;
+      const containerWidth = rect.width;
+      const containerHeight = rect.height;
+      const containerRatio = containerWidth / containerHeight;
 
-      if (videoRatio > elementRatio) {
-        renderedHeight = rect.width / videoRatio;
-        offsetY = (rect.height - renderedHeight) / 2;
+      let renderedWidth: number;
+      let renderedHeight: number;
+
+      if (screenVideoRatio > containerRatio) {
+        renderedWidth = containerWidth;
+        renderedHeight = containerWidth / screenVideoRatio;
       } else {
-        renderedWidth = rect.height * videoRatio;
-        offsetX = (rect.width - renderedWidth) / 2;
+        renderedHeight = containerHeight;
+        renderedWidth = containerHeight * screenVideoRatio;
       }
 
-      const x = (clientX - rect.left - offsetX) / renderedWidth;
-      const y = (clientY - rect.top - offsetY) / renderedHeight;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const relX = clientX - centerX;
+      const relY = clientY - centerY;
 
-      const finalX = Math.max(0, Math.min(1, x));
-      const finalY = Math.max(0, Math.min(1, y));
+      let x = relX / renderedWidth + 0.5;
+      let y = relY / renderedHeight + 0.5;
 
-      return { x: finalX, y: finalY };
+      x = Math.max(0, Math.min(1, x));
+      y = Math.max(0, Math.min(1, y));
+
+      return { x, y };
     }
 
     return () => {
@@ -148,7 +155,7 @@ export const Absolute = () => {
       canvas.removeEventListener('click', disableEvent);
       canvas.removeEventListener('contextmenu', disableEvent);
     };
-  }, [resolution, scrollDirection, scrollInterval]);
+  }, [resolution, scrollDirection, scrollInterval, videoRotation]);
 
   // disable default events
   function disableEvent(event: any) {
