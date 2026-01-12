@@ -1,7 +1,13 @@
 import { ReactElement, useEffect, useState } from 'react'
 import { Badge, Modal } from 'antd'
 import clsx from 'clsx'
-import { BadgeInfoIcon, CircleArrowUpIcon, PaletteIcon, SettingsIcon, RotateCcwIcon } from 'lucide-react'
+import {
+  BadgeInfoIcon,
+  CircleArrowUpIcon,
+  PaletteIcon,
+  RotateCcwIcon,
+  SettingsIcon
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
@@ -9,8 +15,8 @@ import * as storage from '@renderer/libs/storage'
 
 import { About } from './about'
 import { Appearance } from './appearance'
-import { Update } from './update'
 import { Reset } from './reset'
+import { Update } from './update'
 
 export const Settings = (): ReactElement => {
   const { t } = useTranslation()
@@ -64,9 +70,9 @@ export const Settings = (): ReactElement => {
         open={isModalOpen}
         width={820}
         footer={null}
-        destroyOnClose={true}
         styles={{ content: { padding: 0 } }}
         onCancel={closeModal}
+        destroyOnHidden
       >
         <div className="flex min-h-[500px] rounded-lg outline-1 outline-neutral-700">
           <div className="flex flex-col space-y-1 rounded-l-lg bg-neutral-800 px-2 py-5 sm:w-1/5 md:w-1/4">

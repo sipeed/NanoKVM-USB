@@ -11,7 +11,7 @@ export const DeviceModal = (): ReactElement => {
   const [errMsg, setErrMsg] = useState('')
 
   return (
-    <Modal open={true} title={t('modal.title')} footer={null} closable={false} destroyOnClose>
+    <Modal open={true} title={t('modal.title')} footer={null} closable={false} destroyOnHidden>
       <div className="flex flex-col items-center justify-center space-y-3 py-10">
         <Video setMsg={setErrMsg} />
         <div />

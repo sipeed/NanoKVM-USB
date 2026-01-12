@@ -162,7 +162,7 @@ export const Resolution = (): ReactElement => {
         title={t('video.custom.title')}
         footer={null}
         closable={false}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="flex flex-col items-center justify-center space-y-5 py-10">
           <div className="flex items-center space-x-5">
