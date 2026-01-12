@@ -8,6 +8,6 @@ export default defineConfig({
     port: 3001
   },
   build: {
-    chunkSizeWarningLimit: 1024
+    chunkSizeWarningLimit: 2048
   }
 });

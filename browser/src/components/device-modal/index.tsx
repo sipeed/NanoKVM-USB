@@ -29,7 +29,7 @@ export const DeviceModal = () => {
   }, [videoState, serialState]);
 
   return (
-    <Modal open={isOpen} title={t('modal.title')} footer={null} closable={false} destroyOnClose>
+    <Modal open={isOpen} title={t('modal.title')} footer={null} closable={false} destroyOnHidden>
       <div className="flex flex-col items-center justify-center space-y-5 py-10">
         <Video setErrMsg={setErrMsg} />
         <SerialPort setErrMsg={setErrMsg} />
