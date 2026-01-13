@@ -115,7 +115,7 @@ export const Recorder = ({
   }, [isFocused])
 
   const formatKeyDisplay = (key: string, code: string): string => {
-    if (isModifier(key)) {
+    if (isModifier(code)) {
       if (code.startsWith('Control')) {
         return 'Ctrl'
       }
