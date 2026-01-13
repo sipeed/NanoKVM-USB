@@ -4,7 +4,7 @@ import { useAtomValue } from 'jotai'
 import { IpcEvents } from '@common/ipc-events'
 import { resolutionAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
-import { Key } from '@renderer/libs/device/mouse'
+import { Key } from '@renderer/libs/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
 
 export const Absolute = (): ReactElement => {
@@ -99,7 +99,12 @@ export const Absolute = (): ReactElement => {
       const { x, y } = getCorrectedCoords(event.clientX, event.clientY)
       await window.electron.ipcRenderer.invoke(
         IpcEvents.SEND_MOUSE_ABSOLUTE,
-        keyRef.current.encode(), 1, 1, x, y, scroll
+        keyRef.current.encode(),
+        1,
+        1,
+        x,
+        y,
+        scroll
       )
     }
 

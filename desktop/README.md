@@ -2,7 +2,6 @@
 
 This is the NanoKVM-USB desktop version project.
 
-
 ## Development
 
 ```shell

@@ -1,4 +1,4 @@
-@import "./base.css";
+@import './base.css';
 
 @layer tailwind-base, antd;
 
@@ -6,4 +6,4 @@
   @tailwind base;
 }
 
-@import "tailwindcss";
+@import 'tailwindcss';

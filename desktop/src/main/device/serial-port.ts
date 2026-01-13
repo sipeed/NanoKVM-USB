@@ -17,7 +17,7 @@ export class SerialPort {
       if (this.port?.isOpen) {
         console.log('Closing existing serial port before opening new one')
         await this.close()
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
       console.log(`Opening serial port: ${path} at ${baudRate} baud`)

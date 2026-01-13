@@ -50,9 +50,9 @@ async function closeSerialPort(): Promise<boolean> {
   }
 }
 
-async function sendKeyboard(_: IpcMainInvokeEvent, modifier: number, keys: number[]): Promise<void> {
+async function sendKeyboard(_: IpcMainInvokeEvent, report: number[]): Promise<void> {
   try {
-    await device.sendKeyboardData(modifier, keys)
+    await device.sendKeyboardData(report)
   } catch (error) {
     console.error('Error sending keyboard data:', error)
   }

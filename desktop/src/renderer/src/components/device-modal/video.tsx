@@ -92,9 +92,12 @@ export const Video = ({ setMsg }: VideoProps): ReactElement => {
 
       video.srcObject = camera.getStream()
 
-      setVideoState('connected')
       setVideoDeviceId(videoId)
       storage.setVideoDevice(videoId)
+
+      setTimeout(() => {
+        setVideoState('connected')
+      }, 500)
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('camera.failed')
       setMsg(msg)

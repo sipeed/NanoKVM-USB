@@ -1,5 +1,5 @@
 import { IpcEvents } from '@common/ipc-events'
-import { Key } from '@renderer/libs/device/mouse'
+import { Key } from '@renderer/libs/mouse'
 
 const MOUSE_JIGGLER_INTERVAL = 15_000
 const EMPTY_KEY: Key = new Key(false, false, false)
@@ -43,8 +43,20 @@ class MouseJiggler {
   }
 
   async sendJiggle(): Promise<void> {
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE_RELATIVE, EMPTY_KEY.encode(), 10, 10, 0)
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE_RELATIVE, EMPTY_KEY.encode(), -10, -10, 0)
+    await window.electron.ipcRenderer.invoke(
+      IpcEvents.SEND_MOUSE_RELATIVE,
+      EMPTY_KEY.encode(),
+      10,
+      10,
+      0
+    )
+    await window.electron.ipcRenderer.invoke(
+      IpcEvents.SEND_MOUSE_RELATIVE,
+      EMPTY_KEY.encode(),
+      -10,
+      -10,
+      0
+    )
   }
 }
 export const mouseJiggler = new MouseJiggler()

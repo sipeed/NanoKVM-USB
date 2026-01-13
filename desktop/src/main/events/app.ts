@@ -5,6 +5,7 @@ import { IpcEvents } from '../../common/ipc-events'
 
 export function registerApp(): void {
   ipcMain.handle(IpcEvents.GET_APP_VERSION, getAppVersion)
+  ipcMain.handle(IpcEvents.GET_PLATFORM, getPlatform)
   ipcMain.on(IpcEvents.OPEN_EXTERNAL_RUL, openExternalUrl)
   ipcMain.handle(IpcEvents.REQUEST_MEDIA_PERMISSIONS, requestMediaPermissions)
   ipcMain.on(IpcEvents.SET_FULL_SCREEN, setFullScreen)
@@ -12,6 +13,10 @@ export function registerApp(): void {
 
 function getAppVersion(): string {
   return app.getVersion()
+}
+
+function getPlatform(): string {
+  return process.platform
 }
 
 function openExternalUrl(_: IpcMainEvent, url: string, options?: OpenExternalOptions): void {

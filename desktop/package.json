@@ -23,6 +23,7 @@
     "@ant-design/icons": "^5.6.1",
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^4.0.0",
+    "@radix-ui/react-scroll-area": "^1.2.10",
     "@tailwindcss/vite": "^4.0.6",
     "antd": "^5.29.3",
     "clsx": "^2.1.1",
@@ -83,7 +84,8 @@
       "tmp@<=0.2.3": ">=0.2.4",
       "electron@<35.7.5": ">=35.7.5",
       "vite@>=6.0.0 <=6.3.5": ">=6.3.6",
-      "vite@>=6.0.0 <=6.4.0": ">=6.4.1"
+      "vite@>=6.0.0 <=6.4.0": ">=6.4.1",
+      "minimatch@<9.0.0": ">=9.0.5"
     }
   }
 }

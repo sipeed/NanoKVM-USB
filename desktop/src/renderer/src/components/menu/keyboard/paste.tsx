@@ -2,9 +2,9 @@ import { ReactElement, useState } from 'react'
 import { ClipboardIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { CharCodes, ShiftChars } from '@renderer/libs/keyboard'
-import { Modifiers } from '@renderer/libs/device/keyboard';
 import { IpcEvents } from '@common/ipc-events'
+import { CharCodes, ShiftChars } from '@renderer/libs/keyboard/charCodes'
+import { getModifierBit } from '@renderer/libs/keyboard/keymap'
 
 export const Paste = (): ReactElement => {
   const { t } = useTranslation()
@@ -21,15 +21,17 @@ export const Paste = (): ReactElement => {
       for (const char of text) {
         const ascii = char.charCodeAt(0)
 
-        const code = CharCodes.get(ascii)
+        const code = CharCodes[ascii]
         if (!code) continue
 
-        const modifiers = new Modifiers()
-        if ((ascii >= 65 && ascii <= 90) || ShiftChars.has(ascii)) {
-          modifiers.leftShift = true
+        let modifier = 0
+        if ((ascii >= 65 && ascii <= 90) || ShiftChars[ascii]) {
+          modifier |= getModifierBit('ShiftLeft')
         }
 
-        await send(modifiers, code)
+        await send(modifier, code)
+        await new Promise((r) => setTimeout(r, 100))
+        await send(0, 0)
       }
     } catch (e) {
       console.log(e)
@@ -38,24 +40,17 @@ export const Paste = (): ReactElement => {
     }
   }
 
-  async function send(modifiers: Modifiers, code: number): Promise<void> {
-    const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00]
-
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifiers.encode(), keys)
-
-    await window.electron.ipcRenderer.invoke(
-      IpcEvents.SEND_KEYBOARD,
-      new Modifiers().encode(),
-      [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-    )
+  async function send(modifier: number, code: number): Promise<void> {
+    const keys = [modifier, 0, code, 0, 0, 0, 0, 0]
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, keys)
   }
 
   return (
     <div
-      className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
+      className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
       onClick={paste}
     >
-      <ClipboardIcon size={18} />
+      <ClipboardIcon size={16} />
       <span>{t('keyboard.paste')}</span>
     </div>
   )

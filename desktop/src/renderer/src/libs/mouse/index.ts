@@ -1,10 +1,3 @@
-import { setBit } from './utils'
-
-export enum Mode {
-  RELATIVE = 0x01,
-  ABSOLUTE = 0x02
-}
-
 export class Key {
   left: boolean
   right: boolean
@@ -22,5 +15,13 @@ export class Key {
     b = setBit(b, 1, this.right)
     b = setBit(b, 2, this.mid)
     return b
+  }
+}
+
+function setBit(number: number, bitPosition: number, value: boolean): number {
+  if (value) {
+    return number | (1 << bitPosition)
+  } else {
+    return number & ~(1 << bitPosition)
   }
 }

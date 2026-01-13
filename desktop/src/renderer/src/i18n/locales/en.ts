@@ -41,18 +41,12 @@ const en = {
       paste: 'Paste',
       virtualKeyboard: 'Keyboard',
       shortcut: {
-        title: 'Shortcut',
-        custom: 'Custom Shortcut',
+        title: 'Shortcuts',
+        custom: 'Custom',
         capture: 'Click here to capture shortcut',
-        label: 'Label',
-        cancel: 'Cancel',
-        save: 'Save',
-        ctrlAltDel: 'Ctrl + Alt + Delete',
-        ctrlD: 'Ctrl + D',
-        winTab: 'Win + Tab',
-        enterFullScreen: 'Enter Full Screen',
-        captureTips: 'Capturing the Meta key separately requires operation in full-screen mode.'
-      },
+        clear: 'Clear',
+        save: 'Save'
+      }
     },
     mouse: {
       cursor: {
@@ -108,7 +102,8 @@ const en = {
         warningDescription: 'This action cannot be undone. All your custom settings will be lost.',
         button: 'Reset All Settings',
         confirmTitle: 'Confirm Reset',
-        confirmMessage: 'Are you sure you want to reset all settings? This action cannot be undone.',
+        confirmMessage:
+          'Are you sure you want to reset all settings? This action cannot be undone.',
         confirm: 'Reset',
         cancel: 'Cancel'
       }

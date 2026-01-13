@@ -3,8 +3,7 @@ const ko = {
     camera: {
       tip: '권한을 기다리는 중...',
       denied: '권한이 거부되었습니다.',
-      authorize:
-        'Target PC 연결에 카메라 권한이 필요합니다. 설정에서 카메라 권한을 허용해 주세요.',
+      authorize: 'Target PC 연결에 카메라 권한이 필요합니다. 설정에서 카메라 권한을 허용해 주세요.',
       failed: '카메라 연결에 실패했습니다. 다시 시도해 주세요.'
     },
     modal: {
@@ -36,8 +35,8 @@ const ko = {
       shortcut: {
         ctrlAltDel: 'Ctrl + Alt + Delete',
         ctrlD: 'Ctrl + D',
-        winTab: 'Win + Tab',
-      },
+        winTab: 'Win + Tab'
+      }
     },
     mouse: {
       cursor: {

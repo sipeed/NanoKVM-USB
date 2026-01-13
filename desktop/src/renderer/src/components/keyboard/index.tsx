@@ -1,75 +1,97 @@
 import { ReactElement, useEffect, useRef } from 'react'
-import { Modifiers } from '@renderer/libs/device/keyboard'
-import { KeyboardCodes } from '@renderer/libs/keyboard'
+import { useAtomValue } from 'jotai'
+
 import { IpcEvents } from '@common/ipc-events'
+import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
+import { KeyboardReport } from '@renderer/libs/keyboard/keyboard'
 
 export const Keyboard = (): ReactElement => {
-  const MAX_SIMULTANEOUS_KEYS = 4
-  const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta'])
-  const pressedKeysRef = useRef<Set<number>>(new Set())
-  const pressedModifiersRef = useRef<Set<string>>(new Set())
+  const isKeyboardEnabled = useAtomValue(isKeyboardEnableAtom)
 
-  // listen keyboard events
+  const keyboardRef = useRef(new KeyboardReport())
+  const pressedKeys = useRef(new Set<string>())
+
+  // Keyboard handler
+  async function handleKeyEvent(event: { type: 'keydown' | 'keyup'; code: string }): Promise<void> {
+    const kb = keyboardRef.current
+    const report = event.type === 'keydown' ? kb.keyDown(event.code) : kb.keyUp(event.code)
+    await sendReport(report)
+  }
+
+  async function sendReport(report: number[]): Promise<void> {
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, report)
+  }
+
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
+    if (!isKeyboardEnabled) {
+      releaseKeys()
+      return
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Key down event
+    async function handleKeyDown(event: KeyboardEvent): Promise<void> {
+      if (!isKeyboardEnabled) return
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      const code = event.code
+      if (pressedKeys.current.has(code)) {
+        return
+      }
+
+      pressedKeys.current.add(code)
+      await handleKeyEvent({ type: 'keydown', code })
+    }
+
+    // Key up event
+    async function handleKeyUp(event: KeyboardEvent): Promise<void> {
+      if (!isKeyboardEnabled) return
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      const code = event.code
+      pressedKeys.current.delete(code)
+      await handleKeyEvent({ type: 'keyup', code })
+    }
+
+    // Release all keys when window loses focus
+    async function handleBlur(): Promise<void> {
+      await releaseKeys()
+    }
+
+    // Release all keys before window closes
+    async function handleVisibilityChange(): Promise<void> {
+      if (document.hidden) {
+        await releaseKeys()
+      }
+    }
+
+    // Release all keys
+    async function releaseKeys(): Promise<void> {
+      for (const code of pressedKeys.current) {
+        await handleKeyEvent({ type: 'keyup', code })
+      }
+
+      pressedKeys.current.clear()
+
+      const report = keyboardRef.current.reset()
+      await sendReport(report)
+    }
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
-
-  // press button
-  async function handleKeyDown(event: KeyboardEvent) {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (modifierKeys.has(event.key)) {
-      pressedModifiersRef.current.add(event.code)
-    } else {
-      const keyCode = KeyboardCodes.get(event.code)
-      if (
-        keyCode !== undefined &&
-        !pressedKeysRef.current.has(keyCode) &&
-        pressedKeysRef.current.size < MAX_SIMULTANEOUS_KEYS
-      ) {
-        pressedKeysRef.current.add(keyCode)
-      }
-    }
-
-    await sendKeyData(event)
-  }
-
-  // release button
-  async function handleKeyUp(event: KeyboardEvent) {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (modifierKeys.has(event.key)) {
-      pressedModifiersRef.current.delete(event.code)
-    } else {
-      const commonKeyCode = KeyboardCodes.get(event.code)
-      if (commonKeyCode !== undefined && pressedKeysRef.current.has(commonKeyCode)) {
-        pressedKeysRef.current.delete(commonKeyCode)
-      }
-    }
-
-    await sendKeyData(event)
-  }
-
-  async function sendKeyData(event: KeyboardEvent) {
-    const modifiers = Modifiers.getModifiers(event, pressedModifiersRef.current)
-    const keys = [
-      0x00,
-      0x00,
-      ...Array.from(pressedKeysRef.current),
-      ...new Array(MAX_SIMULTANEOUS_KEYS - pressedKeysRef.current.size).fill(0x00)
-    ]
-
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifiers.encode(), keys)
-  }
+  }, [isKeyboardEnabled])
 
   return <></>
 }
-

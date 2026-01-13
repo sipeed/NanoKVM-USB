@@ -1,18 +1,13 @@
 import { ReactElement, useEffect, useRef } from 'react'
-import { message } from 'antd'
 import { useAtomValue } from 'jotai'
-import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
 import { resolutionAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
-import { Key } from '@renderer/libs/device/mouse'
+import { Key } from '@renderer/libs/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
 
 export const Relative = (): ReactElement => {
-  const { t } = useTranslation()
-  const [messageApi, contextHolder] = message.useMessage()
-
   const resolution = useAtomValue(resolutionAtom)
   const scrollDirection = useAtomValue(scrollDirectionAtom)
   const scrollInterval = useAtomValue(scrollIntervalAtom)
@@ -20,18 +15,6 @@ export const Relative = (): ReactElement => {
   const isLockedRef = useRef(false)
   const keyRef = useRef<Key>(new Key())
   const lastScrollTimeRef = useRef(0)
-
-  useEffect(() => {
-    messageApi.open({
-      key: 'relative',
-      type: 'info',
-      content: t('mouse.requestPointer'),
-      duration: 3,
-      style: {
-        marginTop: '40vh'
-      }
-    })
-  }, [])
 
   useEffect(() => {
     const canvas = document.getElementById('video')
@@ -128,7 +111,13 @@ export const Relative = (): ReactElement => {
     }
 
     async function send(x: number, y: number, scroll: number): Promise<void> {
-      await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE_RELATIVE, keyRef.current.encode(), x, y, scroll)
+      await window.electron.ipcRenderer.invoke(
+        IpcEvents.SEND_MOUSE_RELATIVE,
+        keyRef.current.encode(),
+        x,
+        y,
+        scroll
+      )
     }
 
     return (): void => {
@@ -147,5 +136,5 @@ export const Relative = (): ReactElement => {
     event.stopPropagation()
   }
 
-  return <>{contextHolder}</>
+  return <></>
 }

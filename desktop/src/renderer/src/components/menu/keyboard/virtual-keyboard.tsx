@@ -11,10 +11,10 @@ export const VirtualKeyboard = (): ReactElement => {
 
   return (
     <div
-      className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/60"
+      className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
       onClick={() => setIsKeyboardOpen(true)}
     >
-      <KeyboardIcon size={18} />
+      <KeyboardIcon size={16} />
       <span>{t('keyboard.virtualKeyboard')}</span>
     </div>
   )

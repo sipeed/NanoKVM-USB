@@ -8,9 +8,9 @@ import { Drawer } from 'vaul'
 import 'react-simple-keyboard/build/css/index.css'
 import '@renderer/assets/styles/keyboard.css'
 
+import { IpcEvents } from '@common/ipc-events'
 import { isKeyboardOpenAtom } from '@renderer/jotai/keyboard'
-import { Modifiers } from '@renderer/libs/device/keyboard';
-import { KeyboardCodes } from '@renderer/libs/keyboard'
+import { KeyboardReport } from '@renderer/libs/keyboard/keyboard'
 
 import {
   doubleKeys,
@@ -18,11 +18,10 @@ import {
   keyboardControlPadOptions,
   keyboardOptions,
   modifierKeys,
-  specialKeyMap
-} from './keys'
-import { IpcEvents } from '@common/ipc-events'
+  specialKeys
+} from './virtual-keys'
 
-type KeyboardProps = {
+interface KeyboardProps {
   isBigScreen: boolean
 }
 
@@ -31,87 +30,60 @@ export const VirtualKeyboard = ({ isBigScreen }: KeyboardProps): ReactElement =>
 
   const [activeModifierKeys, setActiveModifierKeys] = useState<string[]>([])
 
-  const keyboardRef = useRef<any>(null)
+  const keyboardRef = useRef(new KeyboardReport())
 
+  // Key down event
   async function onKeyPress(key: string): Promise<void> {
-    if (modifierKeys.includes(key)) {
-      if (activeModifierKeys.includes(key)) {
-        await sendKeydown(key)
-        await sendKeyup()
-      } else {
+    if (modifierKeys[key]) {
+      if (!activeModifierKeys.includes(key)) {
+        // Save modifier key
         setActiveModifierKeys([...activeModifierKeys, key])
+      } else {
+        // Press and release modifier keys
+        for (const modifierKey of activeModifierKeys) {
+          await handleKeyEvent({ type: 'keydown', key: modifierKey })
+        }
+        for (const modifierKey of activeModifierKeys) {
+          await handleKeyEvent({ type: 'keyup', key: modifierKey })
+        }
+        setActiveModifierKeys([])
       }
       return
     }
 
-    await sendKeydown(key)
+    for (const modifierKey of activeModifierKeys) {
+      await handleKeyEvent({ type: 'keydown', key: modifierKey })
+    }
+
+    await handleKeyEvent({ type: 'keydown', key })
   }
 
+  // Key up event
   async function onKeyReleased(key: string): Promise<void> {
-    if (modifierKeys.includes(key)) {
+    // Skip modifier key
+    if (modifierKeys[key]) {
       return
     }
 
-    await sendKeyup()
-  }
-
-  async function sendKeydown(key: string): Promise<void> {
-    const specialKey = specialKeyMap.get(key)
-    const code = KeyboardCodes.get(specialKey ? specialKey : key)
-    if (!code) {
-      console.log('unknown code: ', key)
-      return
+    for (const modifierKey of activeModifierKeys) {
+      await handleKeyEvent({ type: 'keyup', key: modifierKey })
     }
-
-    const modifiers = getModifiers()
-    const keys = [0x00, 0x00, code, 0x00, 0x00, 0x00]
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifiers.encode(), keys)
-  }
-
-  async function sendKeyup(): Promise<void> {
-    const modifiers = new Modifiers()
-    const keys = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, modifiers.encode(), keys)
+    await handleKeyEvent({ type: 'keyup', key })
 
     setActiveModifierKeys([])
   }
 
-  function getModifiers(): Modifiers {
-    const modifiers = new Modifiers()
+  async function handleKeyEvent(event: { type: 'keydown' | 'keyup'; key: string }): Promise<void> {
+    const code = specialKeys[event.key] ?? event.key
 
-    activeModifierKeys.forEach((modifierKey) => {
-      const specialKey = specialKeyMap.get(modifierKey)!
-      switch (specialKey) {
-        case 'ControlLeft':
-          modifiers.leftCtrl = true
-          break
-        case 'ControlRight':
-          modifiers.rightCtrl = true
-          break
-        case 'ShiftLeft':
-          modifiers.leftShift = true
-          break
-        case 'ShiftRight':
-          modifiers.rightShift = true
-          break
-        case 'AltLeft':
-          modifiers.leftAlt = true
-          break
-        case 'AltRight':
-          modifiers.rightAlt = true
-          break
-        case 'MetaLeft':
-          modifiers.leftWindows = true
-          break
-        case 'MetaRight':
-          modifiers.rightWindows = true
-          break
-        default:
-          break
-      }
-    })
+    const kb = keyboardRef.current
+    const report = event.type === 'keydown' ? kb.keyDown(code) : kb.keyUp(code)
 
-    return modifiers
+    await sendReport(report)
+  }
+
+  async function sendReport(report: number[]): Promise<void> {
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, report)
   }
 
   function getButtonTheme(): KeyboardButtonTheme[] {
@@ -137,20 +109,17 @@ export const VirtualKeyboard = ({ isBigScreen }: KeyboardProps): ReactElement =>
           {/* header */}
           <div className="flex justify-end px-3 py-1">
             <div
-              className="flex h-[20px] w-[20px] cursor-pointer items-center justify-center rounded text-neutral-600 hover:bg-neutral-300 hover:text-white"
+              className="flex h-5 w-5 cursor-pointer items-center justify-center rounded text-neutral-600 hover:bg-neutral-300 hover:text-white"
               onClick={() => setIsKeyboardOpen(false)}
             >
               <XIcon size={18} />
             </div>
           </div>
 
-          <div className="h-px flex-shrink-0 border-b bg-neutral-300" />
-
           <div data-vaul-no-drag className="keyboardContainer w-full">
             {/* main keyboard */}
             <Keyboard
               buttonTheme={getButtonTheme()}
-              keyboardRef={(r: any) => (keyboardRef.current = r)}
               onKeyPress={onKeyPress}
               onKeyReleased={onKeyReleased}
               layoutName="default"

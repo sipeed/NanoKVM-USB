@@ -35,8 +35,8 @@ const pt_br = {
       shortcut: {
         ctrlAltDel: 'Ctrl + Alt + Delete',
         ctrlD: 'Ctrl + D',
-        winTab: 'Win + Tab',
-      },
+        winTab: 'Win + Tab'
+      }
     },
     mouse: {
       cursor: {

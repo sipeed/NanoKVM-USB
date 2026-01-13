@@ -12,14 +12,15 @@ export const DeviceModal = (): ReactElement => {
 
   return (
     <Modal open={true} title={t('modal.title')} footer={null} closable={false} destroyOnHidden>
-      <div className="flex flex-col items-center justify-center space-y-3 py-10">
+      <div className="flex flex-col items-center justify-center gap-3 py-10">
         <Video setMsg={setErrMsg} />
-        <div />
-
         <SerialPort setMsg={setErrMsg} />
-        <div />
 
-        {errMsg && <span className="text-xs text-red-500">{errMsg}</span>}
+        {errMsg && (
+          <div className="flex w-[280px]">
+            <span className="text-xs text-red-500">{errMsg}</span>
+          </div>
+        )}
       </div>
     </Modal>
   )

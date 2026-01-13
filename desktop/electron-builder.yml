@@ -55,7 +55,7 @@ appImage:
 
 npmRebuild: false
 
-afterSign: "./notarize.js"
+afterSign: './notarize.js'
 
 publish:
   provider: github

@@ -18,7 +18,7 @@ import {
   videoStateAtom
 } from '@renderer/jotai/device'
 import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
-import { mouseStyleAtom } from '@renderer/jotai/mouse'
+import { mouseModeAtom, mouseStyleAtom } from '@renderer/jotai/mouse'
 import { camera } from '@renderer/libs/camera'
 import { getVideoResolution } from '@renderer/libs/storage'
 import type { Resolution } from '@renderer/types'
@@ -32,6 +32,7 @@ const App = (): ReactElement => {
   const videoScale = useAtomValue(videoScaleAtom)
   const videoState = useAtomValue(videoStateAtom)
   const serialPortState = useAtomValue(serialPortStateAtom)
+  const mouseMode = useAtomValue(mouseModeAtom)
   const mouseStyle = useAtomValue(mouseStyleAtom)
   const isKeyboardEnable = useAtomValue(isKeyboardEnableAtom)
   const setResolution = useSetAtom(resolutionAtom)
@@ -59,7 +60,8 @@ const App = (): ReactElement => {
 
   async function requestMediaPermissions(resolution?: Resolution): Promise<void> {
     try {
-      if (window.electron.process.platform === 'darwin') {
+      const platform = await window.electron.ipcRenderer.invoke(IpcEvents.GET_PLATFORM)
+      if (platform === 'darwin') {
         const res = await window.electron.ipcRenderer.invoke(IpcEvents.REQUEST_MEDIA_PERMISSIONS)
 
         if (!res.camera) {
@@ -120,14 +122,12 @@ const App = (): ReactElement => {
 
       <video
         id="video"
-        className={clsx('block min-h-[480px] min-w-[640px] select-none', mouseStyle)}
-        style={{
-          transform: `scale(${videoScale})`,
-          transformOrigin: 'center',
-          maxWidth: '100%',
-          maxHeight: '100%',
-          objectFit: 'scale-down'
-        }}
+        className={clsx(
+          'block max-h-full min-h-[480px] max-w-full min-w-[640px] origin-center object-scale-down select-none',
+          videoState === 'connected' ? 'opacity-100' : 'opacity-0',
+          mouseMode === 'relative' ? 'cursor-none' : mouseStyle
+        )}
+        style={{ transform: `scale(${videoScale})` }}
         autoPlay
         playsInline
       />

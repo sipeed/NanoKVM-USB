@@ -8,10 +8,10 @@ import * as storage from '@renderer/libs/storage'
 import { Fullscreen } from './fullscreen'
 import { Keyboard } from './keyboard'
 import { Mouse } from './mouse'
+import { Recorder } from './recorder'
 import { SerialPort } from './serial-port'
 import { Settings } from './settings'
 import { Video } from './video'
-import { Recorder } from './recorder'
 
 export const Menu = (): ReactElement => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -38,10 +38,8 @@ export const Menu = (): ReactElement => {
           <SerialPort />
           <Divider type="vertical" className="px-[2px]" />
 
-          <Mouse />
           <Keyboard />
-          <Divider type="vertical" className="px-[2px]" />
-
+          <Mouse />
           <Recorder />
 
           <Divider type="vertical" className="px-[2px]" />

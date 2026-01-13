@@ -34,7 +34,7 @@ export const Style = (): ReactElement => {
         <div
           key={style.value}
           className={clsx(
-            'flex cursor-pointer items-center space-x-1 rounded py-1.5 pr-5 pl-3 select-none hover:bg-neutral-700/60',
+            'flex cursor-pointer items-center space-x-1 rounded py-1 pr-5 pl-3 select-none hover:bg-neutral-700/60',
             style.value === mouseStyle ? 'text-blue-500' : 'text-neutral-300'
           )}
           onClick={() => updateStyle(style.value)}
@@ -48,7 +48,7 @@ export const Style = (): ReactElement => {
 
   return (
     <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
-      <div className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700">
+      <div className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
         <MousePointerIcon size={16} />
         <span className="text-sm select-none">{t('mouse.cursor.title')}</span>
       </div>

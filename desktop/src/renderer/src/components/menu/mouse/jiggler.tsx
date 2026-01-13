@@ -2,7 +2,7 @@ import { ReactElement, useEffect } from 'react'
 import { Popover } from 'antd'
 import clsx from 'clsx'
 import { useAtom } from 'jotai'
-import { MousePointerIcon } from 'lucide-react'
+import { MousePointerClickIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { mouseJigglerModeAtom } from '@renderer/jotai/mouse'
@@ -45,10 +45,8 @@ export const Jiggler = (): ReactElement => {
   )
   return (
     <Popover content={content} placement="rightTop" arrow={false} align={{ offset: [13, 0] }}>
-      <div className="flex h-[30px] cursor-pointer items-center space-x-1 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
-        <div className="flex h-[14px] w-[20px] items-end">
-          <MousePointerIcon size={16} />
-        </div>
+      <div className="flex h-[30px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
+        <MousePointerClickIcon size={16} />
         <span>{t('mouse.jiggler.title')}</span>
       </div>
     </Popover>

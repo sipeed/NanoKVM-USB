@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useState } from 'react'
-import { Popover } from 'antd'
+import { Divider, Popover } from 'antd'
 import { useAtom, useSetAtom } from 'jotai'
 import { MouseIcon } from 'lucide-react'
 
@@ -59,6 +59,9 @@ export const Mouse = (): ReactElement => {
       <Mode />
       <Direction />
       <Speed />
+
+      <Divider style={{ margin: '6px 0', opacity: '0.5' }} />
+
       <Jiggler />
     </div>
   )
