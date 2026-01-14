@@ -6,7 +6,6 @@ import Draggable from 'react-draggable'
 
 import * as storage from '@renderer/libs/storage'
 
-import { Fullscreen } from './fullscreen'
 import { Keyboard } from './keyboard'
 import { Mouse } from './mouse'
 import { Recorder } from './recorder'
@@ -115,7 +114,6 @@ export const Menu = (): ReactElement => {
 
             <Divider type="vertical" className="px-0.5" />
 
-            <Fullscreen />
             <Settings />
             <div
               className="flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70"
