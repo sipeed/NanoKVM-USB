@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai'
 import { IpcEvents } from '@common/ipc-events'
 import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
 import { KeyboardReport } from '@renderer/libs/keyboard/keyboard'
+import { isModifier } from "@renderer/libs/keyboard/keymap"
 
 export const Keyboard = (): ReactElement => {
   const isKeyboardEnabled = useAtomValue(isKeyboardEnableAtom)
@@ -57,6 +58,16 @@ export const Keyboard = (): ReactElement => {
       event.stopPropagation()
 
       const code = event.code
+
+      if (code === 'MetaLeft' || code === 'MetaRight') {
+        pressedKeys.current.forEach((pressedCode) => {
+          if (!isModifier(pressedCode)) {
+            handleKeyEvent({ type: 'keyup', code: pressedCode });
+            pressedKeys.current.delete(pressedCode);
+          }
+        });
+      }
+
       pressedKeys.current.delete(code)
       await handleKeyEvent({ type: 'keyup', code })
     }
