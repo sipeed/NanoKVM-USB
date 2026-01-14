@@ -91,11 +91,18 @@ jobs:
             target: windows
             build_script: build:win-full
             artifact_name: desktop-windows
+          - os: macos-latest
+            target: macos
+            build_script: build:mac-full
+            artifact_name: desktop-macos
     defaults:
       run:
         working-directory: desktop
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,6 +120,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential python3 libudev-dev rpm
 
+      - name: Import Code-Signing Certificates
+        if: startsWith(matrix.os, 'macos')
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
       - name: Install dependencies
         run: npm install
 
@@ -128,6 +142,8 @@ jobs:
             desktop/dist/*.AppImage
             desktop/dist/*.deb
             desktop/dist/*.rpm
+            desktop/dist/*.dmg
+            desktop/dist/*-mac.zip
             desktop/dist/latest*.yml
           if-no-files-found: error
 
