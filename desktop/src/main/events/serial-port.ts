@@ -9,8 +9,7 @@ export function registerSerialPort(): void {
   ipcMain.handle(IpcEvents.OPEN_SERIAL_PORT, openSerialPort)
   ipcMain.handle(IpcEvents.CLOSE_SERIAL_PORT, closeSerialPort)
   ipcMain.handle(IpcEvents.SEND_KEYBOARD, sendKeyboard)
-  ipcMain.handle(IpcEvents.SEND_MOUSE_ABSOLUTE, sendMouseAbsolute)
-  ipcMain.handle(IpcEvents.SEND_MOUSE_RELATIVE, sendMouseRelative)
+  ipcMain.handle(IpcEvents.SEND_MOUSE, sendMouse)
 }
 
 async function getSerialPorts(): Promise<string[]> {
@@ -58,32 +57,10 @@ async function sendKeyboard(_: IpcMainInvokeEvent, report: number[]): Promise<vo
   }
 }
 
-async function sendMouseRelative(
-  _: IpcMainInvokeEvent,
-  key: number,
-  x: number,
-  y: number,
-  scroll: number
-): Promise<void> {
+async function sendMouse(_: IpcMainInvokeEvent, report: number[]): Promise<void> {
   try {
-    await device.sendMouseRelativeData(key, x, y, scroll)
+    await device.sendMouseData(report)
   } catch (error) {
-    console.error('Error sending mouse relative data:', error)
-  }
-}
-
-async function sendMouseAbsolute(
-  _: IpcMainInvokeEvent,
-  key: number,
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-  scroll: number
-): Promise<void> {
-  try {
-    await device.sendMouseAbsoluteData(key, width, height, x, y, scroll)
-  } catch (error) {
-    console.error('Error sending mouse absolute data:', error)
+    console.error('Error sending mouse data:', error)
   }
 }

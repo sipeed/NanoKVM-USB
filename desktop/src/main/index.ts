@@ -44,7 +44,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.sipeed.usbkvm')
 
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
-    const allowedPermissions = ['media', 'clipboard-read']
+    const allowedPermissions = ['media', 'clipboard-read', 'pointerLock']
     callback(allowedPermissions.includes(permission))
   })
 

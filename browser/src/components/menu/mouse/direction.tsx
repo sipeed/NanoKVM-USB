@@ -14,8 +14,8 @@ export const Direction = (): ReactElement => {
   const [scrollDirection, setScrollDirection] = useAtom(scrollDirectionAtom);
 
   const directions = [
-    { name: t('mouse.scrollUp'), value: '1' },
-    { name: t('mouse.scrollDown'), value: '-1' }
+    { name: t('mouse.scrollUp'), value: '-1' },
+    { name: t('mouse.scrollDown'), value: '1' }
   ];
 
   function update(direction: string): void {

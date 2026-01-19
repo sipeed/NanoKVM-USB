@@ -1,5 +1,3 @@
-import { getBit } from './utils'
-
 export enum CmdEvent {
   GET_INFO = 0x01,
   SEND_KB_GENERAL_DATA = 0x02,
@@ -131,4 +129,8 @@ export class InfoPacket {
     this.CAPS_LOCK = getBit(data[2], 1) === 1
     this.SCROLL_LOCK = getBit(data[2], 2) === 1
   }
+}
+
+function getBit(number: number, bitPosition: number): number {
+  return (number >> bitPosition) & 1
 }

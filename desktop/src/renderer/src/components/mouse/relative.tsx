@@ -1,140 +1,160 @@
 import { ReactElement, useEffect, useRef } from 'react'
+import { message } from 'antd'
 import { useAtomValue } from 'jotai'
+import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
-import { resolutionAtom } from '@renderer/jotai/device'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
-import { Key } from '@renderer/libs/mouse'
+import { MouseReportRelative } from '@renderer/libs/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
 
+import type { MouseRelativeEvent } from './types'
+
 export const Relative = (): ReactElement => {
-  const resolution = useAtomValue(resolutionAtom)
+  const { t } = useTranslation()
+  const [messageApi, contextHolder] = message.useMessage()
+
   const scrollDirection = useAtomValue(scrollDirectionAtom)
   const scrollInterval = useAtomValue(scrollIntervalAtom)
 
+  const mouseRef = useRef(new MouseReportRelative())
   const isLockedRef = useRef(false)
-  const keyRef = useRef<Key>(new Key())
   const lastScrollTimeRef = useRef(0)
 
   useEffect(() => {
-    const canvas = document.getElementById('video')
-    if (!canvas) return
+    const screen = document.getElementById('video')
+    if (!screen) return
 
+    showMessage()
+
+    screen.addEventListener('click', handleClick)
+    screen.addEventListener('mousedown', handleMouseDown)
+    screen.addEventListener('mouseup', handleMouseUp)
+    screen.addEventListener('mousemove', handleMouseMove)
+    screen.addEventListener('wheel', handleMouseWheel)
+    screen.addEventListener('contextmenu', disableEvent)
     document.addEventListener('pointerlockchange', handlePointerLockChange)
-    canvas.addEventListener('click', handleClick)
-    canvas.addEventListener('mousedown', handleMouseDown)
-    canvas.addEventListener('mouseup', handleMouseUp)
-    canvas.addEventListener('mousemove', handleMouseMove)
-    canvas.addEventListener('wheel', handleWheel)
-    canvas.addEventListener('contextmenu', disableEvent)
 
-    function handlePointerLockChange(): void {
-      isLockedRef.current = document.pointerLockElement === canvas
-    }
-
+    // Click to request pointer lock
     function handleClick(event: MouseEvent): void {
       disableEvent(event)
 
       if (!isLockedRef.current) {
-        canvas!.requestPointerLock()
+        screen?.requestPointerLock()
       }
     }
 
-    async function handleMouseDown(event: MouseEvent): Promise<void> {
-      disableEvent(event)
-
-      switch (event.button) {
-        case 0:
-          keyRef.current.left = true
-          break
-        case 1:
-          keyRef.current.mid = true
-          break
-        case 2:
-          keyRef.current.right = true
-          break
-        default:
-          console.log(`unknown button ${event.button}`)
-          return
-      }
-
-      await send(0, 0, 0)
+    // Mouse down event
+    function handleMouseDown(e: MouseEvent): void {
+      disableEvent(e)
+      handleMouseEvent({ type: 'mousedown', button: e.button })
     }
 
-    async function handleMouseUp(event: MouseEvent): Promise<void> {
-      disableEvent(event)
-
-      switch (event.button) {
-        case 0:
-          keyRef.current.left = false
-          break
-        case 1:
-          keyRef.current.mid = false
-          break
-        case 2:
-          keyRef.current.right = false
-          break
-        default:
-          console.log(`unknown button ${event.button}`)
-          return
-      }
-
-      await send(0, 0, 0)
+    // Mouse up event
+    function handleMouseUp(e: MouseEvent): void {
+      disableEvent(e)
+      handleMouseEvent({ type: 'mouseup', button: e.button })
     }
 
-    async function handleMouseMove(event: MouseEvent): Promise<void> {
-      disableEvent(event)
+    // Mouse move event
+    function handleMouseMove(e: MouseEvent): void {
+      disableEvent(e)
 
-      const x = event.movementX || 0
-      const y = event.movementY || 0
+      const x = e.movementX || 0
+      const y = e.movementY || 0
       if (x === 0 && y === 0) return
 
-      await send(Math.abs(x) < 10 ? x * 2 : x, Math.abs(y) < 10 ? y * 2 : y, 0)
+      const deltaX = Math.abs(x * window.devicePixelRatio) < 10 ? x * 2 : x
+      const deltaY = Math.abs(y * window.devicePixelRatio) < 10 ? y * 2 : y
 
-      mouseJiggler.moveEventCallback()
+      handleMouseEvent({ type: 'move', deltaX, deltaY })
     }
 
-    async function handleWheel(event: WheelEvent): Promise<void> {
-      disableEvent(event)
+    // Mouse wheel event
+    function handleMouseWheel(e: WheelEvent): void {
+      disableEvent(e)
+
+      if (Math.floor(e.deltaY) === 0) {
+        return
+      }
 
       const currentTime = Date.now()
       if (currentTime - lastScrollTimeRef.current < scrollInterval) {
         return
       }
 
-      const delta = Math.floor(event.deltaY)
-      if (delta === 0) return
-
-      await send(0, 0, delta > 0 ? -1 * scrollDirection : scrollDirection)
-
+      const deltaY = (e.deltaY > 0 ? 1 : -1) * scrollDirection
+      handleMouseEvent({ type: 'wheel', deltaY })
       lastScrollTimeRef.current = currentTime
     }
 
-    async function send(x: number, y: number, scroll: number): Promise<void> {
-      await window.electron.ipcRenderer.invoke(
-        IpcEvents.SEND_MOUSE_RELATIVE,
-        keyRef.current.encode(),
-        x,
-        y,
-        scroll
-      )
+    // Pointer lock state change
+    function handlePointerLockChange(): void {
+      isLockedRef.current = document.pointerLockElement === screen
     }
 
     return (): void => {
-      document.removeEventListener('pointerlockchange', handlePointerLockChange)
-      canvas.removeEventListener('click', handleClick)
-      canvas.removeEventListener('mousemove', handleMouseMove)
-      canvas.removeEventListener('mousedown', handleMouseDown)
-      canvas.removeEventListener('mouseup', handleMouseUp)
-      canvas.removeEventListener('wheel', handleWheel)
-      canvas.removeEventListener('contextmenu', disableEvent)
-    }
-  }, [resolution, scrollDirection, scrollInterval])
+      // Exit pointer lock when component unmounts
+      if (document.pointerLockElement === screen) {
+        document.exitPointerLock()
+      }
 
-  function disableEvent(event: MouseEvent): void {
+      screen.removeEventListener('click', handleClick)
+      screen.removeEventListener('mousedown', handleMouseDown)
+      screen.removeEventListener('mouseup', handleMouseUp)
+      screen.removeEventListener('mousemove', handleMouseMove)
+      screen.removeEventListener('wheel', handleMouseWheel)
+      screen.removeEventListener('contextmenu', disableEvent)
+      document.removeEventListener('pointerlockchange', handlePointerLockChange)
+    }
+  }, [scrollDirection, scrollInterval])
+
+  // Mouse handler
+  function handleMouseEvent(event: MouseRelativeEvent): void {
+    let report: number[]
+    const mouse = mouseRef.current
+
+    switch (event.type) {
+      case 'mousedown':
+        mouse.buttonDown(event.button)
+        report = mouse.buildButtonReport()
+        break
+      case 'mouseup':
+        mouse.buttonUp(event.button)
+        report = mouse.buildButtonReport()
+        break
+      case 'wheel':
+        report = mouse.buildReport(0, 0, event.deltaY)
+        break
+      case 'move':
+        report = mouse.buildReport(event.deltaX, event.deltaY)
+        break
+      default:
+        report = mouse.buildReport(0, 0)
+        break
+    }
+
+    window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, [0x01, ...report])
+
+    mouseJiggler.moveEventCallback()
+  }
+
+  function showMessage(): void {
+    messageApi.open({
+      key: 'requestPointer',
+      type: 'info',
+      content: t('mouse.requestPointer'),
+      duration: 3,
+      style: {
+        marginTop: '40vh'
+      }
+    })
+  }
+
+  function disableEvent(event: Event): void {
     event.preventDefault()
     event.stopPropagation()
   }
 
-  return <></>
+  return <>{contextHolder}</>
 }
