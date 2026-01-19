@@ -96,7 +96,7 @@ jobs:
             build_script: build:mac
             build_args: --arm64
             artifact_name: desktop-macos-arm64
-          - os: macos-13
+          - os: macos-latest
             target: macos-x64
             build_script: build:mac
             build_args: --x64
