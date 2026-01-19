@@ -72,7 +72,8 @@ const App = (): ReactElement => {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             width: { ideal: resolution?.width || 1920 },
-            height: { ideal: resolution?.height || 1080 }
+            height: { ideal: resolution?.height || 1080 },
+            frameRate: { ideal: 60 }
           },
           audio: true
         })
