@@ -92,16 +92,9 @@ jobs:
             build_script: build:win-full
             artifact_name: desktop-windows
           - os: macos-latest
-            target: macos-arm64
-            build_script: build:mac
-            build_args: --arm64
-            artifact_name: desktop-macos-arm64
-          - os: macos-latest
-            target: macos-x64
-            build_script: build:mac
-            build_args: --x64
-            artifact_name: desktop-macos-x64
-            exclude_latest_yml: true
+            target: macos
+            build_script: build:mac-full
+            artifact_name: desktop-macos
     defaults:
       run:
         working-directory: desktop
@@ -151,7 +144,7 @@ jobs:
             desktop/dist/*.rpm
             desktop/dist/*.dmg
             desktop/dist/*-mac.zip
-            ${{ matrix.exclude_latest_yml != true && 'desktop/dist/latest*.yml' || '' }}
+            desktop/dist/latest*.yml
           if-no-files-found: error
 
   create-release:
@@ -165,20 +158,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
-          merge-multiple: true
 
       - name: Display structure of downloaded files
-        run: ls -laR release-artifacts
+        run: ls -R release-artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ inputs.tag }}
           name: ${{ inputs.tag }}
           draft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
-          files: release-artifacts/*
-          fail_on_unmatched_files: true
+          files: |
+            release-artifacts/**/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
