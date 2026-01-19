@@ -101,6 +101,7 @@ jobs:
             build_script: build:mac
             build_args: --x64
             artifact_name: desktop-macos-x64
+            exclude_latest_yml: true
     defaults:
       run:
         working-directory: desktop
@@ -150,7 +151,7 @@ jobs:
             desktop/dist/*.rpm
             desktop/dist/*.dmg
             desktop/dist/*-mac.zip
-            desktop/dist/latest*.yml
+            ${{ matrix.exclude_latest_yml != true && 'desktop/dist/latest*.yml' || '' }}
           if-no-files-found: error
 
   create-release:
