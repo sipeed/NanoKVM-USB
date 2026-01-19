@@ -92,9 +92,15 @@ jobs:
             build_script: build:win-full
             artifact_name: desktop-windows
           - os: macos-latest
-            target: macos
-            build_script: build:mac-full
-            artifact_name: desktop-macos
+            target: macos-arm64
+            build_script: build:mac
+            build_args: --arm64
+            artifact_name: desktop-macos-arm64
+          - os: macos-13
+            target: macos-x64
+            build_script: build:mac
+            build_args: --x64
+            artifact_name: desktop-macos-x64
     defaults:
       run:
         working-directory: desktop
