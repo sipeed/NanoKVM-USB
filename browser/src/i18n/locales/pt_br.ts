@@ -40,8 +40,8 @@ const pt_br = {
       shortcut: {
         ctrlAltDel: 'Ctrl + Alt + Delete',
         ctrlD: 'Ctrl + D',
-        winTab: 'Win + Tab',
-      },
+        winTab: 'Win + Tab'
+      }
     },
     mouse: {
       cursor: {
@@ -60,7 +60,8 @@ const pt_br = {
       speed: 'Velocidade do scroll',
       fast: 'Rápido',
       slow: 'Lento',
-      requestPointer: 'Usando modo relativo. Por favor, clique na área de trabalho para restaurar o ponteiro do mouse.'
+      requestPointer:
+        'Usando modo relativo. Por favor, clique na área de trabalho para restaurar o ponteiro do mouse.'
     },
     settings: {
       language: 'Linguagem',

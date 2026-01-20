@@ -10,8 +10,7 @@ import '@/assets/keyboard.css';
 
 import { isKeyboardOpenAtom } from '@/jotai/keyboard.ts';
 import { device } from '@/libs/device';
-import { Modifiers } from '@/libs/device/keyboard.ts';
-import { KeyboardCodes } from '@/libs/keyboard';
+import { KeyboardReport } from '@/libs/keyboard/keyboard.ts';
 
 import {
   doubleKeys,
@@ -19,7 +18,7 @@ import {
   keyboardControlPadOptions,
   keyboardOptions,
   modifierKeys,
-  specialKeyMap
+  specialKeys
 } from './keys.ts';
 
 type KeyboardProps = {
@@ -31,60 +30,56 @@ export const VirtualKeyboard = ({ isBigScreen }: KeyboardProps) => {
 
   const [activeModifierKeys, setActiveModifierKeys] = useState<string[]>([]);
 
-  const keyboardRef = useRef<any>(null);
+  const keyboardRef = useRef(new KeyboardReport());
 
-  async function onKeyPress(key: string) {
-    if (modifierKeys.includes(key)) {
-      if (activeModifierKeys.includes(key)) {
-        await sendKeydown(key);
-        await sendKeyup();
-      } else {
+  // Key down event
+  async function onKeyPress(key: string): Promise<void> {
+    if (modifierKeys[key]) {
+      if (!activeModifierKeys.includes(key)) {
+        // Save modifier key
         setActiveModifierKeys([...activeModifierKeys, key]);
+      } else {
+        // Press and release modifier keys
+        for (const modifierKey of activeModifierKeys) {
+          await handleKeyEvent({ type: 'keydown', key: modifierKey });
+        }
+        for (const modifierKey of activeModifierKeys) {
+          await handleKeyEvent({ type: 'keyup', key: modifierKey });
+        }
+        setActiveModifierKeys([]);
       }
       return;
     }
 
-    await sendKeydown(key);
+    for (const modifierKey of activeModifierKeys) {
+      await handleKeyEvent({ type: 'keydown', key: modifierKey });
+    }
+
+    await handleKeyEvent({ type: 'keydown', key });
   }
 
-  async function onKeyReleased(key: string) {
-    if (modifierKeys.includes(key)) {
+  // Key up event
+  async function onKeyReleased(key: string): Promise<void> {
+    // Skip modifier key
+    if (modifierKeys[key]) {
       return;
     }
 
-    await sendKeyup();
-  }
-
-  async function sendKeydown(key: string) {
-    const specialKey = specialKeyMap.get(key);
-    const code = KeyboardCodes.get(specialKey ? specialKey : key);
-    if (!code) {
-      console.log('unknown code: ', key);
-      return;
+    for (const modifierKey of activeModifierKeys) {
+      await handleKeyEvent({ type: 'keyup', key: modifierKey });
     }
-
-    const modifiers = getModifiers();
-    const keys = [code, 0x00, 0x00, 0x00, 0x00, 0x00];
-    await device.sendKeyboardData(modifiers, keys);
-  }
-
-  async function sendKeyup() {
-    const modifiers = new Modifiers();
-    const keys = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    await device.sendKeyboardData(modifiers, keys);
+    await handleKeyEvent({ type: 'keyup', key });
 
     setActiveModifierKeys([]);
   }
 
-  function getModifiers() {
-    const modifiers = new Modifiers();
+  async function handleKeyEvent(event: { type: 'keydown' | 'keyup'; key: string }): Promise<void> {
+    const code = specialKeys[event.key] ?? event.key;
 
-    activeModifierKeys.forEach((modifierKey) => {
-      const code = specialKeyMap.get(modifierKey)!;
-      modifiers.setModifier(code);
-    });
+    const kb = keyboardRef.current;
+    const report = event.type === 'keydown' ? kb.keyDown(code) : kb.keyUp(code);
 
-    return modifiers;
+    await device.sendKeyboardData(report);
   }
 
   function getButtonTheme(): KeyboardButtonTheme[] {
@@ -123,7 +118,6 @@ export const VirtualKeyboard = ({ isBigScreen }: KeyboardProps) => {
             {/* main keyboard */}
             <Keyboard
               buttonTheme={getButtonTheme()}
-              keyboardRef={(r: any) => (keyboardRef.current = r)}
               onKeyPress={onKeyPress}
               onKeyReleased={onKeyReleased}
               layoutName="default"

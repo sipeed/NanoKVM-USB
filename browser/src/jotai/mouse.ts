@@ -7,7 +7,7 @@ export const mouseStyleAtom = atom('cursor-default');
 export const mouseModeAtom = atom('absolute');
 
 // mouse scroll direction: 1 or -1
-export const scrollDirectionAtom = atom(1);
+export const scrollDirectionAtom = atom(-1);
 
 // mouse scroll interval (unit: ms)
 // mouse scroll interval (unit: ms)

@@ -14,21 +14,21 @@ export const Shortcuts = () => {
   const { t } = useTranslation();
 
   const [isOpen, setIsOpen] = useState(false);
-
+  const [isRecording, setIsRecording] = useState(false);
   const [customShortcuts, setCustomShortcuts] = useState<ShortcutInterface[]>([]);
 
   const defaultShortcuts: ShortcutInterface[] = [
     {
       keys: [
-        { code: 'MetaLeft', label: 'Win', isModifier: true },
-        { code: 'Tab', label: 'Tab', isModifier: false }
+        { code: 'MetaLeft', label: 'Win' },
+        { code: 'Tab', label: 'Tab' }
       ]
     },
     {
       keys: [
-        { code: 'ControlLeft', label: 'Ctrl', isModifier: true },
-        { code: 'AltLeft', label: 'Alt', isModifier: true },
-        { code: 'Delete', label: '⌫', isModifier: false }
+        { code: 'ControlLeft', label: 'Ctrl' },
+        { code: 'AltLeft', label: 'Alt' },
+        { code: 'Delete', label: '⌫' }
       ]
     }
   ];
@@ -39,16 +39,27 @@ export const Shortcuts = () => {
     setCustomShortcuts(JSON.parse(shortcuts));
   }, []);
 
-  function addShortcut(shortcut: ShortcutInterface) {
+  function addShortcut(shortcut: ShortcutInterface): void {
     const shortcuts = [...customShortcuts, shortcut];
     setCustomShortcuts(shortcuts);
     storage.setShortcuts(JSON.stringify(shortcuts));
   }
 
-  function delShortcut(index: number) {
+  function delShortcut(index: number): void {
     const shortcuts = customShortcuts.filter((_, i) => i !== index);
     setCustomShortcuts(shortcuts);
     storage.setShortcuts(JSON.stringify(shortcuts));
+  }
+
+  function handleOpenChange(open: boolean): void {
+    if (open) {
+      setIsOpen(true);
+      return;
+    }
+    if (isRecording) {
+      return;
+    }
+    setIsOpen(false);
   }
 
   const content = (
@@ -71,7 +82,12 @@ export const Shortcuts = () => {
 
       <Divider style={{ margin: '5px 0 5px 0' }} />
 
-      <Recorder shortcuts={customShortcuts} addShortcut={addShortcut} delShortcut={delShortcut} />
+      <Recorder
+        shortcuts={customShortcuts}
+        addShortcut={addShortcut}
+        delShortcut={delShortcut}
+        setIsRecording={setIsRecording}
+      />
     </ScrollArea>
   );
 
@@ -82,7 +98,7 @@ export const Shortcuts = () => {
       placement="rightTop"
       align={{ offset: [14, 0] }}
       open={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={handleOpenChange}
       arrow={false}
     >
       <div className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">

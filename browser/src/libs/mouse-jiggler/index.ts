@@ -1,18 +1,19 @@
 import { device } from '@/libs/device';
-import { Key } from '@/libs/device/mouse.ts';
+import { MouseReportRelative } from '@/libs/mouse';
 
 const MOUSE_JIGGLER_INTERVAL = 15_000;
-const EMPTY_KEY: Key = new Key(false, false, false);
 
 class MouseJiggler {
   private lastMoveTime: number;
   private timer: number | null;
   private mode: 'enable' | 'disable';
+  private mouseReport: MouseReportRelative;
 
   constructor() {
     this.lastMoveTime = Date.now();
     this.timer = null;
     this.mode = 'disable';
+    this.mouseReport = new MouseReportRelative();
   }
 
   // enable or disable mouse jiggler
@@ -43,8 +44,11 @@ class MouseJiggler {
   }
 
   async sendJiggle(): Promise<void> {
-    await device.sendMouseRelativeData(EMPTY_KEY, 10, 10, 0);
-    await device.sendMouseRelativeData(EMPTY_KEY, -10, -10, 0);
+    const report1 = this.mouseReport.buildReport(10, 10, 0);
+    const report2 = this.mouseReport.buildReport(-10, -10, 0);
+
+    await device.sendKeyboardData([0x01, ...report1]);
+    await device.sendKeyboardData([0x01, ...report2]);
   }
 }
 

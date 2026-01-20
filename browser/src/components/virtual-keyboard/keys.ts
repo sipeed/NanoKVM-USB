@@ -127,51 +127,51 @@ export const keyboardArrowsOptions = {
 };
 
 // keys require special mapping
-export const specialKeyMap = new Map([
-  ['{escape}', 'Escape'],
-  ['{backspace}', 'Backspace'],
-  ['{tab}', 'Tab'],
-  ['{capslock}', 'CapsLock'],
-  ['{enter}', 'Enter'],
-  ['{shiftleft}', 'ShiftLeft'],
-  ['{shiftright}', 'ShiftRight'],
-  ['{controlleft}', 'ControlLeft'],
-  ['{controlright}', 'ControlRight'],
-  ['{altleft}', 'AltLeft'],
-  ['{metaleft}', 'MetaLeft'],
-  ['{winleft}', 'WinLeft'],
-  ['{space}', 'Space'],
-  ['{metaright}', 'MetaRight'],
-  ['{winright}', 'WinRight'],
-  ['{altright}', 'AltRight'],
-  ['{prtscr}', 'PrintScreen'],
-  ['{scrolllock}', 'ScrollLock'],
-  ['{pause}', 'Pause'],
-  ['{insert}', 'Insert'],
-  ['{home}', 'Home'],
-  ['{pageup}', 'PageUp'],
-  ['{delete}', 'Delete'],
-  ['{end}', 'End'],
-  ['{pagedown}', 'PageDown'],
-  ['{arrowright}', 'ArrowRight'],
-  ['{arrowleft}', 'ArrowLeft'],
-  ['{arrowdown}', 'ArrowDown'],
-  ['{arrowup}', 'ArrowUp']
-]);
+export const specialKeys: Record<string, string> = {
+  '{escape}': 'Escape',
+  '{backspace}': 'Backspace',
+  '{tab}': 'Tab',
+  '{capslock}': 'CapsLock',
+  '{enter}': 'Enter',
+  '{shiftleft}': 'ShiftLeft',
+  '{shiftright}': 'ShiftRight',
+  '{controlleft}': 'ControlLeft',
+  '{controlright}': 'ControlRight',
+  '{altleft}': 'AltLeft',
+  '{metaleft}': 'MetaLeft',
+  '{winleft}': 'WinLeft',
+  '{space}': 'Space',
+  '{metaright}': 'MetaRight',
+  '{winright}': 'WinRight',
+  '{altright}': 'AltRight',
+  '{prtscr}': 'PrintScreen',
+  '{scrolllock}': 'ScrollLock',
+  '{pause}': 'Pause',
+  '{insert}': 'Insert',
+  '{home}': 'Home',
+  '{pageup}': 'PageUp',
+  '{delete}': 'Delete',
+  '{end}': 'End',
+  '{pagedown}': 'PageDown',
+  '{arrowright}': 'ArrowRight',
+  '{arrowleft}': 'ArrowLeft',
+  '{arrowdown}': 'ArrowDown',
+  '{arrowup}': 'ArrowUp'
+};
 
 // modifier keys
-export const modifierKeys = [
-  '{shiftleft}',
-  '{controlleft}',
-  '{altleft}',
-  '{metaleft}',
-  '{winleft}',
-  '{shiftright}',
-  '{controlright}',
-  '{altright}',
-  '{metaright}',
-  '{winright}'
-];
+export const modifierKeys: Record<string, string> = {
+  '{shiftleft}': 'ShiftLeft',
+  '{controlleft}': 'ControlLeft',
+  '{altleft}': 'AltLeft',
+  '{metaleft}': 'MetaLeft',
+  '{winleft}': 'WinLeft',
+  '{shiftright}': 'ShiftRight',
+  '{controlright}': 'ControlRight',
+  '{altright}': 'AltRight',
+  '{metaright}': 'MetaRight',
+  '{winright}': 'WinRight'
+};
 
 // double line display buttons
 export const doubleKeys = [

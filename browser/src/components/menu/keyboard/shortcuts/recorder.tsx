@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Kbd, KbdGroup } from '@/components/ui/kbd.tsx';
 import { ScrollArea } from '@/components/ui/scroll-area.tsx';
 import { isKeyboardEnableAtom } from '@/jotai/keyboard.ts';
-import { modifierKeys } from '@/libs/device/keyboard.ts';
+import { isModifier } from '@/libs/keyboard/keymap.ts';
 
 import { KeyInfo, Shortcut } from './types.ts';
 
@@ -50,14 +50,20 @@ interface RecorderProps {
   shortcuts: Shortcut[];
   addShortcut: (shortcut: Shortcut) => void;
   delShortcut: (index: number) => void;
+  setIsRecording: (isRecording: boolean) => void;
 }
 
-export const Recorder = ({ shortcuts, addShortcut, delShortcut }: RecorderProps) => {
+export const Recorder = ({
+  shortcuts,
+  addShortcut,
+  delShortcut,
+  setIsRecording
+}: RecorderProps) => {
   const { t } = useTranslation();
   const setIsKeyboardEnable = useSetAtom(isKeyboardEnableAtom);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [shortcutLabel, setShortcutLabel] = useState('');
 
   const inputRef = useRef<InputRef | null>(null);
@@ -65,6 +71,7 @@ export const Recorder = ({ shortcuts, addShortcut, delShortcut }: RecorderProps)
 
   useEffect(() => {
     setIsKeyboardEnable(!isModalOpen);
+    setIsRecording(isModalOpen);
 
     if (!isModalOpen) return;
 
@@ -78,9 +85,9 @@ export const Recorder = ({ shortcuts, addShortcut, delShortcut }: RecorderProps)
   }, [isModalOpen]);
 
   useEffect(() => {
-    if (!isRecording) return;
+    if (!isFocused) return;
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
       event.preventDefault();
       event.stopPropagation();
 
@@ -93,8 +100,7 @@ export const Recorder = ({ shortcuts, addShortcut, delShortcut }: RecorderProps)
 
       const keyInfo: KeyInfo = {
         code: code,
-        label: formatKeyDisplay(key, code),
-        isModifier: modifierKeys.has(key)
+        label: formatKeyDisplay(key, code)
       };
 
       setShortcutLabel((prev) => (prev ? `${prev} + ${keyInfo.label}` : keyInfo.label));
@@ -106,10 +112,10 @@ export const Recorder = ({ shortcuts, addShortcut, delShortcut }: RecorderProps)
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isRecording]);
+  }, [isFocused]);
 
   const formatKeyDisplay = (key: string, code: string): string => {
-    if (modifierKeys.has(key)) {
+    if (isModifier(code)) {
       if (code.startsWith('Control')) {
         return 'Ctrl';
       }
@@ -208,8 +214,8 @@ export const Recorder = ({ shortcuts, addShortcut, delShortcut }: RecorderProps)
             placeholder={t('keyboard.shortcut.capture')}
             prefix={<KeyboardIcon size={16} className="text-neutral-500" />}
             value={shortcutLabel}
-            onFocus={() => setIsRecording(true)}
-            onBlur={() => setIsRecording(false)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
           />
 
           <Button onClick={clearShortcut}>{t('keyboard.shortcut.clear')}</Button>

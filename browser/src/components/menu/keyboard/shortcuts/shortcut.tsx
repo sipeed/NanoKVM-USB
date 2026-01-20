@@ -2,8 +2,7 @@ import { useState } from 'react';
 
 import { Kbd, KbdGroup } from '@/components/ui/kbd.tsx';
 import { device } from '@/libs/device';
-import { Modifiers } from '@/libs/device/keyboard.ts';
-import { KeyboardCodes } from '@/libs/keyboard';
+import { KeyboardReport } from '@/libs/keyboard/keyboard.ts';
 
 import type { Shortcut as ShortcutInterface } from './types.ts';
 
@@ -14,40 +13,29 @@ type ShortcutProps = {
 export const Shortcut = ({ shortcut }: ShortcutProps) => {
   const [isLoading, setIsLoading] = useState(false);
 
-  async function send() {
-    const modifiers = new Modifiers();
-    const codes: number[] = [];
-
-    shortcut.keys.forEach((key) => {
-      if (key.isModifier) {
-        modifiers.setModifier(key.code);
-      } else {
-        const code = KeyboardCodes.get(key.code);
-        if (code) {
-          codes.push(code);
-        }
-      }
-    });
-
-    if (codes.length < 6) {
-      codes.push(...new Array(6 - codes.length).fill(0x00));
-    }
-
-    await device.sendKeyboardData(modifiers, codes);
-    await device.sendKeyboardData(new Modifiers(), [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-  }
-
   async function handleClick(): Promise<void> {
     if (isLoading) return;
     setIsLoading(true);
 
     try {
-      await send();
+      await sendShortcut();
     } catch (err) {
       console.log(err);
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function sendShortcut(): Promise<void> {
+    const keyboard = new KeyboardReport();
+
+    for (const key of shortcut.keys) {
+      const report = keyboard.keyDown(key.code);
+      await device.sendKeyboardData(report);
+    }
+
+    const report = keyboard.reset();
+    await device.sendKeyboardData(report);
   }
 
   return (

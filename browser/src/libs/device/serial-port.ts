@@ -17,7 +17,7 @@ export class SerialPort {
       }
 
       this.instance = port;
-      await this.instance.open({baudRate});
+      await this.instance.open({ baudRate });
 
       this.reader = this.instance.readable!.getReader();
       this.writer = this.instance.writable!.getWriter();
@@ -48,7 +48,7 @@ export class SerialPort {
         return [];
       }
 
-      const {value, done} = await this.reader.read();
+      const { value, done } = await this.reader.read();
       if (done) {
         break;
       }

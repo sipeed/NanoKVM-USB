@@ -1,103 +1,173 @@
 import { useEffect, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 
+import { isKeyboardEnableAtom } from '@/jotai/keyboard';
+import { getOperatingSystem } from '@/libs/browser';
 import { device } from '@/libs/device';
-import { Modifiers } from '@/libs/device/keyboard.ts';
-import { KeyboardCodes } from '@/libs/keyboard';
+import { KeyboardReport } from '@/libs/keyboard/keyboard.ts';
+import { isModifier } from '@/libs/keyboard/keymap.ts';
 
-const MAX_SIMULTANEOUS_KEYS = 6;
-const ModifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta']);
+interface AltGrState {
+  active: boolean;
+  ctrlLeftTimestamp: number;
+}
+
+const ALTGR_THRESHOLD_MS = 10;
 
 export const Keyboard = () => {
-  const pressedKeysRef = useRef<Set<number>>(new Set());
-  const pressedModifiersRef = useRef<Set<string>>(new Set());
+  const isKeyboardEnabled = useAtomValue(isKeyboardEnableAtom);
 
-  // listen keyboard events
+  const keyboardRef = useRef(new KeyboardReport());
+  const pressedKeys = useRef(new Set<string>());
+  const altGrState = useRef<AltGrState | null>(null);
+  const isComposing = useRef(false);
+
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', releaseAllKeys);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', releaseAllKeys);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  // press button
-  async function handleKeyDown(event: KeyboardEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (ModifierKeys.has(event.key)) {
-      pressedModifiersRef.current.add(event.code);
-    } else {
-      const keyCode = KeyboardCodes.get(event.code);
-      if (
-        keyCode !== undefined &&
-        !pressedKeysRef.current.has(keyCode) &&
-        pressedKeysRef.current.size < MAX_SIMULTANEOUS_KEYS
-      ) {
-        pressedKeysRef.current.add(keyCode);
-      }
+    if (getOperatingSystem() === 'Windows' && !altGrState.current) {
+      altGrState.current = { active: false, ctrlLeftTimestamp: 0 };
     }
 
-    await sendKeyData();
-  }
-
-  // release button
-  async function handleKeyUp(event: KeyboardEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (ModifierKeys.has(event.key)) {
-      pressedModifiersRef.current.delete(event.code);
-    } else {
-      const commonKeyCode = KeyboardCodes.get(event.code);
-      if (commonKeyCode !== undefined && pressedKeysRef.current.has(commonKeyCode)) {
-        pressedKeysRef.current.delete(commonKeyCode);
-      }
-    }
-
-    await sendKeyData();
-  }
-
-  // release all keys when page loses focus
-  async function releaseAllKeys() {
-    if (pressedKeysRef.current.size === 0 && pressedModifiersRef.current.size === 0) {
+    if (!isKeyboardEnabled) {
+      releaseKeys();
       return;
     }
 
-    const modifiers = new Modifiers();
-    const keys = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    await device.sendKeyboardData(modifiers, keys);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('compositionstart', handleCompositionStart);
+    document.addEventListener('compositionend', handleCompositionEnd);
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    pressedKeysRef.current.clear();
-    pressedModifiersRef.current.clear();
-  }
+    // Key down event
+    async function handleKeyDown(event: KeyboardEvent): Promise<void> {
+      if (!isKeyboardEnabled) return;
 
-  // release all keys when page is hidden
-  function handleVisibilityChange() {
-    if (document.hidden) {
-      releaseAllKeys();
+      // Skip during IME composition
+      if (isComposing.current || event.isComposing) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const code = event.code;
+      if (pressedKeys.current.has(code)) {
+        return;
+      }
+
+      // When AltGr is pressed, browsers send ControlLeft followed immediately by AltRight
+      if (altGrState.current) {
+        if (code === 'ControlLeft') {
+          altGrState.current.ctrlLeftTimestamp = event.timeStamp;
+        } else if (code === 'AltRight') {
+          const timeDiff = event.timeStamp - altGrState.current.ctrlLeftTimestamp;
+          if (timeDiff < ALTGR_THRESHOLD_MS && pressedKeys.current.has('ControlLeft')) {
+            pressedKeys.current.delete('ControlLeft');
+            handleKeyEvent({ type: 'keyup', code: 'ControlLeft' });
+            altGrState.current.active = true;
+          }
+        }
+      }
+
+      pressedKeys.current.add(code);
+      await handleKeyEvent({ type: 'keydown', code });
     }
-  }
 
-  // send keyboard data
-  async function sendKeyData() {
-    const modifiers = new Modifiers();
-    pressedModifiersRef.current.forEach((code) => {
-      modifiers.setModifier(code);
-    });
+    // Key up event
+    async function handleKeyUp(event: KeyboardEvent): Promise<void> {
+      if (!isKeyboardEnabled) return;
 
-    const keys = [
-      ...Array.from(pressedKeysRef.current),
-      ...new Array(MAX_SIMULTANEOUS_KEYS - pressedKeysRef.current.size).fill(0x00)
-    ];
+      if (isComposing.current || event.isComposing) return;
 
-    await device.sendKeyboardData(modifiers, keys);
+      event.preventDefault();
+      event.stopPropagation();
+
+      const code = event.code;
+
+      // Handle AltGr state for Windows
+      if (altGrState.current?.active) {
+        if (code === 'ControlLeft') return;
+
+        if (code === 'AltRight') {
+          altGrState.current.active = false;
+        }
+      }
+
+      // Compatible with macOS's command key combinations
+      if (code === 'MetaLeft' || code === 'MetaRight') {
+        const keysToRelease: string[] = [];
+        pressedKeys.current.forEach((pressedCode) => {
+          if (!isModifier(pressedCode)) {
+            keysToRelease.push(pressedCode);
+          }
+        });
+
+        for (const key of keysToRelease) {
+          await handleKeyEvent({ type: 'keyup', code: key });
+          pressedKeys.current.delete(key);
+        }
+      }
+
+      pressedKeys.current.delete(code);
+      await handleKeyEvent({ type: 'keyup', code });
+    }
+
+    // Composition start event
+    function handleCompositionStart(): void {
+      isComposing.current = true;
+    }
+
+    // Composition end event
+    function handleCompositionEnd(): void {
+      isComposing.current = false;
+    }
+
+    // Release all keys when window loses focus
+    async function handleBlur(): Promise<void> {
+      await releaseKeys();
+    }
+
+    // Release all keys before window closes
+    async function handleVisibilityChange(): Promise<void> {
+      if (document.hidden) {
+        await releaseKeys();
+      }
+    }
+
+    // Release all keys
+    async function releaseKeys(): Promise<void> {
+      for (const code of pressedKeys.current) {
+        await handleKeyEvent({ type: 'keyup', code });
+      }
+
+      pressedKeys.current.clear();
+
+      // Reset AltGr state
+      if (altGrState.current) {
+        altGrState.current.active = false;
+        altGrState.current.ctrlLeftTimestamp = 0;
+      }
+
+      const report = keyboardRef.current.reset();
+      await device.sendKeyboardData(report);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+      document.removeEventListener('compositionstart', handleCompositionStart);
+      document.removeEventListener('compositionend', handleCompositionEnd);
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+      releaseKeys();
+    };
+  }, [isKeyboardEnabled]);
+
+  // Keyboard handler
+  async function handleKeyEvent(event: { type: 'keydown' | 'keyup'; code: string }): Promise<void> {
+    const kb = keyboardRef.current;
+    const report = event.type === 'keydown' ? kb.keyDown(event.code) : kb.keyUp(event.code);
+    await device.sendKeyboardData(report);
   }
 
   return <></>;
