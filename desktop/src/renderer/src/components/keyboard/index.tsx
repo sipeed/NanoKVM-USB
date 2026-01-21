@@ -46,7 +46,11 @@ export const Keyboard = (): ReactElement => {
       event.preventDefault()
       event.stopPropagation()
 
-      const code = event.code
+      // Fallback for Japanese keyboards with Microsoft IME where event.code is empty for right Shift
+      let code = event.code
+      if (!code && event.key === 'Shift') {
+        code = 'ShiftRight'
+      }
       if (pressedKeys.current.has(code)) {
         return
       }
@@ -78,7 +82,11 @@ export const Keyboard = (): ReactElement => {
       event.preventDefault()
       event.stopPropagation()
 
-      const code = event.code
+      // Fallback for Japanese keyboards with Microsoft IME where event.code is empty for right Shift
+      let code = event.code
+      if (!code && event.key === 'Shift') {
+        code = 'ShiftRight'
+      }
 
       // Handle AltGr state for Windows
       if (altGrState.current?.active) {
