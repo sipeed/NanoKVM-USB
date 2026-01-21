@@ -7,6 +7,7 @@ const languages = [
   { key: 'nl', name: 'Nederlands' },
   { key: 'be', name: 'België' },
   { key: 'ko', name: '한국어' },
+  { key: 'ja', name: '日本語' },
   { key: 'pt_br', name: 'Português (Brasil)' },
   { key: 'pl', name: 'Polski' }
 ]
