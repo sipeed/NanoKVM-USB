@@ -17,9 +17,20 @@ class Camera {
         deviceId: { exact: id },
         width: { ideal: width },
         height: { ideal: height },
-        frameRate: { ideal: 60 }
+        frameRate: { ideal: 60 },
+        latency: { ideal: 0 },
+        resizeMode: 'none'
       },
-      audio: audioId ? { deviceId: { exact: audioId } } : false
+      audio: audioId
+        ? {
+            deviceId: { exact: audioId },
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            sampleRate: 48000,
+            latency: 0
+          }
+        : false
     }
 
     this.id = id

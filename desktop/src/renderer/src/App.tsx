@@ -75,7 +75,12 @@ const App = (): ReactElement => {
             height: { ideal: resolution?.height || 1080 },
             frameRate: { ideal: 60 }
           },
-          audio: true
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            sampleRate: 48000
+          }
         })
         stream.getTracks().forEach((track) => track.stop())
       }
