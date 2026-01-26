@@ -3,10 +3,6 @@ name: Create Tag and Release
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag name'
-        required: true
-        type: string
       prerelease:
         description: 'Mark as pre-release'
         required: false
@@ -25,18 +21,26 @@ jobs:
   create-tag:
     name: Create Git Tag
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(jq -r .version desktop/package.json)
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Create and push tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a ${{ inputs.tag }} -m "Release ${{ inputs.tag }}"
-          git push origin ${{ inputs.tag }}
+          git tag -a ${{ steps.version.outputs.tag }} -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin ${{ steps.version.outputs.tag }}
 
   build-browser:
     name: Build Browser Bundle
@@ -49,7 +53,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ needs.create-tag.outputs.release_tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -64,16 +68,16 @@ jobs:
 
       - name: Create browser archive
         run: |
-          cd dist
-          zip -r ../nanokvm-usb-browser-${{ inputs.tag }}.zip .
-          cd ..
+           cd dist
+           zip -r ../nanokvm-usb-browser-${{ needs.create-tag.outputs.release_tag }}.zip .
+           cd ..
 
       - name: Upload browser artifact
         uses: actions/upload-artifact@v4
         with:
-          name: browser-release
-          path: browser/nanokvm-usb-browser-${{ inputs.tag }}.zip
-          if-no-files-found: error
+           name: browser-release
+           path: browser/nanokvm-usb-browser-${{ needs.create-tag.outputs.release_tag }}.zip
+           if-no-files-found: error
 
   build-desktop:
     name: Build Desktop Apps
@@ -107,7 +111,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ needs.create-tag.outputs.release_tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -165,8 +169,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ inputs.tag }}
-          name: ${{ inputs.tag }}
+          tag_name: ${{ needs.create-tag.outputs.release_tag }}
+          name: ${{ needs.create-tag.outputs.release_tag }}
           draft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
           files: |
