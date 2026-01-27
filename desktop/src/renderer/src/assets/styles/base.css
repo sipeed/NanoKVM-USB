@@ -4,3 +4,12 @@ body {
   margin: 0;
   background: #000;
 }
+
+video {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  filter: contrast(1.1) saturate(1.1) brightness(1.02);
+}

@@ -19,13 +19,15 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      zoomFactor: 1.0
     }
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.maximize()
     mainWindow.show()
+    mainWindow.webContents.setZoomFactor(1.0)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
