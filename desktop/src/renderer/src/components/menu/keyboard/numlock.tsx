@@ -1,4 +1,5 @@
 import { ReactElement } from 'react'
+import { Switch } from 'antd'
 import { useAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 
@@ -16,9 +17,8 @@ export const NumLock = (): ReactElement => {
     return <></>
   }
 
-  async function toggleNumLock(): Promise<void> {
-    const newState = !numLock
-    setNumLock(newState)
+  async function handleNumLockChange(checked: boolean): Promise<void> {
+    setNumLock(checked)
 
     // Send NumLock key press to toggle state
     const modifiers = 0x00
@@ -33,14 +33,9 @@ export const NumLock = (): ReactElement => {
   }
 
   return (
-    <div
-      onClick={toggleNumLock}
-      className="flex h-[36px] cursor-pointer items-center justify-between rounded px-3 text-sm text-white hover:bg-neutral-700/70"
-    >
+    <div className="flex h-[36px] items-center justify-between rounded px-3 text-sm text-white">
       <span>{t('keyboard.numLock')}</span>
-      <span className={`ml-4 text-xs ${numLock ? 'text-green-400' : 'text-gray-500'}`}>
-        {numLock ? 'ON' : 'OFF'}
-      </span>
+      <Switch size="small" checked={numLock} onChange={handleNumLockChange} />
     </div>
   )
 }
