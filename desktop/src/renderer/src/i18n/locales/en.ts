@@ -40,6 +40,7 @@ const en = {
     keyboard: {
       paste: 'Paste',
       virtualKeyboard: 'Keyboard',
+      numLock: 'NumLock',
       shortcut: {
         title: 'Shortcuts',
         custom: 'Custom',

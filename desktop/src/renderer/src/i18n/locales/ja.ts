@@ -39,8 +39,7 @@ const ja = {
     },
     keyboard: {
       paste: '貼り付け',
-      virtualKeyboard: 'キーボード',
-      shortcut: {
+      virtualKeyboard: 'キーボード',      numLock: 'NumLock',      shortcut: {
         title: 'ショートカット',
         custom: 'カスタム',
         capture: 'ここをクリックしてショートカットをキャプチャ',
