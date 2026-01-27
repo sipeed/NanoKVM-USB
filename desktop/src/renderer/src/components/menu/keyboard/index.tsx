@@ -2,6 +2,7 @@ import { ReactElement, useState } from 'react'
 import { Popover } from 'antd'
 import { KeyboardIcon } from 'lucide-react'
 
+import { CommandToCtrl } from './command-to-ctrl'
 import { NumLock } from './numlock'
 import { Paste } from './paste'
 import { Shortcuts } from './shortcuts'
@@ -15,6 +16,7 @@ export const Keyboard = (): ReactElement => {
       <Paste />
       <VirtualKeyboard />
       <NumLock />
+      <CommandToCtrl />
       <Shortcuts />
     </div>
   )

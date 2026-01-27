@@ -41,6 +41,7 @@ const en = {
       paste: 'Paste',
       virtualKeyboard: 'Keyboard',
       numLock: 'NumLock',
+      commandToCtrl: 'Map Cmd to Ctrl',
       shortcut: {
         title: 'Shortcuts',
         custom: 'Custom',

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
 import { numLockAtom } from '@renderer/jotai/keyboard'
+import { setNumLock as saveNumLock } from '@renderer/libs/storage'
 
 export const NumLock = (): ReactElement => {
   const { t } = useTranslation()
@@ -19,6 +20,7 @@ export const NumLock = (): ReactElement => {
 
   async function handleNumLockChange(checked: boolean): Promise<void> {
     setNumLock(checked)
+    saveNumLock(checked)
 
     // Send NumLock key press to toggle state
     const modifiers = 0x00

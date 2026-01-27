@@ -17,6 +17,8 @@ const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
 const BAUD_RATE_KEY = 'nanokvm-usb-baud-rate'
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcuts'
+const NUM_LOCK_KEY = 'nanokvm-usb-num-lock'
+const COMMAND_TO_CTRL_KEY = 'nanokvm-usb-command-to-ctrl'
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -191,4 +193,22 @@ export function getShortcuts(): string | null {
 
 export function setShortcuts(shortcuts: string): void {
   localStorage.setItem(KEYBOARD_SHORTCUT_KEY, shortcuts)
+}
+
+export function getNumLock(): boolean {
+  const value = localStorage.getItem(NUM_LOCK_KEY)
+  return value === null ? true : value === 'true'
+}
+
+export function setNumLock(enabled: boolean): void {
+  localStorage.setItem(NUM_LOCK_KEY, String(enabled))
+}
+
+export function getCommandToCtrl(): boolean {
+  const value = localStorage.getItem(COMMAND_TO_CTRL_KEY)
+  return value === 'true'
+}
+
+export function setCommandToCtrl(enabled: boolean): void {
+  localStorage.setItem(COMMAND_TO_CTRL_KEY, String(enabled))
 }
