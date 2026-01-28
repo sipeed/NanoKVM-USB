@@ -41,7 +41,9 @@ const ja = {
       paste: '貼り付け',
       virtualKeyboard: 'キーボード',
       numLock: 'NumLock',
+      capsLockSync: 'CapsLock同期',
       commandToCtrl: 'Cmd→Ctrl変換',
+      ignoreCapsLock: 'CapsLockキーを無視（IME用）',
       shortcut: {
         title: 'ショートカット',
         custom: 'カスタム',

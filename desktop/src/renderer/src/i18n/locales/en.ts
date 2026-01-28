@@ -41,7 +41,9 @@ const en = {
       paste: 'Paste',
       virtualKeyboard: 'Keyboard',
       numLock: 'NumLock',
+      capsLockSync: 'CapsLock Sync',
       commandToCtrl: 'Map Cmd to Ctrl',
+      ignoreCapsLock: 'Ignore CapsLock (for IME)',
       shortcut: {
         title: 'Shortcuts',
         custom: 'Custom',

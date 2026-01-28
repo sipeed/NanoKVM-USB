@@ -3,6 +3,7 @@ import { Popover } from 'antd'
 import { KeyboardIcon } from 'lucide-react'
 
 import { CommandToCtrl } from './command-to-ctrl'
+import { IgnoreCapsLock } from './ignore-capslock'
 import { NumLock } from './numlock'
 import { Paste } from './paste'
 import { Shortcuts } from './shortcuts'
@@ -17,6 +18,7 @@ export const Keyboard = (): ReactElement => {
       <VirtualKeyboard />
       <NumLock />
       <CommandToCtrl />
+      <IgnoreCapsLock />
       <Shortcuts />
     </div>
   )

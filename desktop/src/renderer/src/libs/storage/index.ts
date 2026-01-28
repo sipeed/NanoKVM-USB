@@ -19,6 +19,7 @@ const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcuts'
 const NUM_LOCK_KEY = 'nanokvm-usb-num-lock'
 const COMMAND_TO_CTRL_KEY = 'nanokvm-usb-command-to-ctrl'
+const CAPS_LOCK_SYNC_KEY = 'nanokvm-usb-caps-lock-sync'
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -211,4 +212,26 @@ export function getCommandToCtrl(): boolean {
 
 export function setCommandToCtrl(enabled: boolean): void {
   localStorage.setItem(COMMAND_TO_CTRL_KEY, String(enabled))
+}
+
+export function getIgnoreCapsLock(): boolean {
+  const value = localStorage.getItem('ignoreCapsLock')
+  return value === null ? true : value === 'true' // Default to true
+}
+
+export function setIgnoreCapsLock(enabled: boolean): void {
+  localStorage.setItem('ignoreCapsLock', String(enabled))
+}
+
+export const saveIgnoreCapsLock = (enabled: boolean) => {
+  setIgnoreCapsLock(enabled)
+}
+
+export function getCapsLockSync(): boolean {
+  const value = localStorage.getItem(CAPS_LOCK_SYNC_KEY)
+  return value === 'true'
+}
+
+export function setCapsLockSync(enabled: boolean): void {
+  localStorage.setItem(CAPS_LOCK_SYNC_KEY, String(enabled))
 }
