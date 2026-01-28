@@ -6,10 +6,15 @@ body {
 }
 
 video {
+  /* High-quality rendering for scaled displays */
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
+  
+  /* Hardware acceleration */
   transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  filter: contrast(1.1) saturate(1.1) brightness(1.02);
+  
+  /* Subtle enhancement for better clarity at 150% */
+  filter: contrast(1.08) saturate(1.08) brightness(1.01);
 }
