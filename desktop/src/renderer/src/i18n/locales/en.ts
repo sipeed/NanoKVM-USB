@@ -40,6 +40,10 @@ const en = {
     keyboard: {
       paste: 'Paste',
       virtualKeyboard: 'Keyboard',
+      numLock: 'NumLock',
+      capsLockSync: 'CapsLock Sync',
+      commandToCtrl: 'Map Cmd to Ctrl',
+      ignoreCapsLock: 'Ignore CapsLock (for IME)',
       shortcut: {
         title: 'Shortcuts',
         custom: 'Custom',
@@ -69,6 +73,11 @@ const en = {
       jiggler: {
         title: 'Mouse Jiggler',
         enable: 'Enable',
+        disable: 'Disable'
+      },
+      autoClicker: {
+        title: 'Auto Clicker',
+        enable: 'Enable (5 min interval)',
         disable: 'Disable'
       }
     },

@@ -32,7 +32,7 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
 
     getSerialPorts(true)
 
-    const rmListener = window.electron.ipcRenderer.on(IpcEvents.OPEN_SERIAL_PORT_RSP, (_, err) => {
+    const rmOpenListener = window.electron.ipcRenderer.on(IpcEvents.OPEN_SERIAL_PORT_RSP, (_, err) => {
       if (err === '') {
         setSerialPortState('connected')
       } else {
@@ -44,8 +44,20 @@ export const SerialPort = ({ setMsg }: SerialPortProps): ReactElement => {
       }
     })
 
+    // Handle system resume from sleep
+    const rmResumeListener = window.electron.ipcRenderer.on(IpcEvents.SYSTEM_RESUME, async () => {
+      console.log('System resumed, attempting to reconnect serial port')
+      const port = storage.getSerialPort()
+      if (port && serialPortState === 'connected') {
+        // Wait a bit for USB devices to be ready
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        await selectSerialPort(port)
+      }
+    })
+
     return (): void => {
-      rmListener()
+      rmOpenListener()
+      rmResumeListener()
     }
   }, [])
 

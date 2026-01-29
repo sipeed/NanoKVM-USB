@@ -19,13 +19,31 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      zoomFactor: 1.0
     }
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.maximize()
     mainWindow.show()
+    mainWindow.webContents.setZoomFactor(1.0)
+  })
+
+  // Open DevTools with keyboard shortcut (Cmd+Option+I on Mac, Ctrl+Shift+I on others)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown') {
+      // Mac: Cmd+Option+I
+      if (process.platform === 'darwin' && input.meta && input.alt && input.key.toLowerCase() === 'i') {
+        mainWindow.webContents.toggleDevTools()
+        event.preventDefault()
+      }
+      // Windows/Linux: Ctrl+Shift+I
+      else if (process.platform !== 'darwin' && input.control && input.shift && input.key.toLowerCase() === 'i') {
+        mainWindow.webContents.toggleDevTools()
+        event.preventDefault()
+      }
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

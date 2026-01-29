@@ -16,7 +16,11 @@ const SKIP_UPDATE_KEY = 'nano-kvm-check-update'
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
 const BAUD_RATE_KEY = 'nanokvm-usb-baud-rate'
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
+const AUTO_CLICKER_MODE_KEY = 'nanokvm-usb-auto-clicker-mode'
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcuts'
+const NUM_LOCK_KEY = 'nanokvm-usb-num-lock'
+const COMMAND_TO_CTRL_KEY = 'nanokvm-usb-command-to-ctrl'
+const CAPS_LOCK_SYNC_KEY = 'nanokvm-usb-caps-lock-sync'
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -185,10 +189,59 @@ export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
   localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler)
 }
 
+export function getAutoClickerMode(): 'enable' | 'disable' {
+  const autoClicker = localStorage.getItem(AUTO_CLICKER_MODE_KEY)
+  return autoClicker && autoClicker === 'enable' ? 'enable' : 'disable'
+}
+
+export function setAutoClickerMode(autoClicker: 'enable' | 'disable'): void {
+  localStorage.setItem(AUTO_CLICKER_MODE_KEY, autoClicker)
+}
+
 export function getShortcuts(): string | null {
   return localStorage.getItem(KEYBOARD_SHORTCUT_KEY)
 }
 
 export function setShortcuts(shortcuts: string): void {
   localStorage.setItem(KEYBOARD_SHORTCUT_KEY, shortcuts)
+}
+
+export function getNumLock(): boolean {
+  const value = localStorage.getItem(NUM_LOCK_KEY)
+  return value === null ? true : value === 'true'
+}
+
+export function setNumLock(enabled: boolean): void {
+  localStorage.setItem(NUM_LOCK_KEY, String(enabled))
+}
+
+export function getCommandToCtrl(): boolean {
+  const value = localStorage.getItem(COMMAND_TO_CTRL_KEY)
+  return value === 'true'
+}
+
+export function setCommandToCtrl(enabled: boolean): void {
+  localStorage.setItem(COMMAND_TO_CTRL_KEY, String(enabled))
+}
+
+export function getIgnoreCapsLock(): boolean {
+  const value = localStorage.getItem('ignoreCapsLock')
+  return value === null ? true : value === 'true' // Default to true
+}
+
+export function setIgnoreCapsLock(enabled: boolean): void {
+  localStorage.setItem('ignoreCapsLock', String(enabled))
+}
+
+export const saveIgnoreCapsLock = (enabled: boolean) => {
+  setIgnoreCapsLock(enabled)
+}
+
+export function getCapsLockSync(): boolean {
+  const value = localStorage.getItem(CAPS_LOCK_SYNC_KEY)
+  return value === 'true'
+}
+
+export function setCapsLockSync(enabled: boolean): void {
+  localStorage.setItem(CAPS_LOCK_SYNC_KEY, String(enabled))
 }

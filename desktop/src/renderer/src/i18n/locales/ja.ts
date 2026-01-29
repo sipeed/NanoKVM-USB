@@ -40,6 +40,10 @@ const ja = {
     keyboard: {
       paste: '貼り付け',
       virtualKeyboard: 'キーボード',
+      numLock: 'NumLock',
+      capsLockSync: 'CapsLock同期',
+      commandToCtrl: 'Cmd→Ctrl変換',
+      ignoreCapsLock: 'CapsLockキーを無視（IME用）',
       shortcut: {
         title: 'ショートカット',
         custom: 'カスタム',
@@ -69,6 +73,11 @@ const ja = {
       jiggler: {
         title: 'マウスジグラー',
         enable: '有効',
+        disable: '無効'
+      },
+      autoClicker: {
+        title: '自動クリック',
+        enable: '有効（5分間隔）',
         disable: '無効'
       }
     },

@@ -2,7 +2,7 @@ import { ReactElement, useEffect, useRef } from 'react'
 import { useAtomValue } from 'jotai'
 
 import { IpcEvents } from '@common/ipc-events'
-import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
+import { commandToCtrlAtom, ignoreCapsLockAtom, isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
 import { KeyboardReport } from '@renderer/libs/keyboard/keyboard'
 import { isModifier } from '@renderer/libs/keyboard/keymap'
 
@@ -15,11 +15,24 @@ const ALTGR_THRESHOLD_MS = 10
 
 export const Keyboard = (): ReactElement => {
   const isKeyboardEnabled = useAtomValue(isKeyboardEnableAtom)
+  const commandToCtrl = useAtomValue(commandToCtrlAtom)
+  const ignoreCapsLock = useAtomValue(ignoreCapsLockAtom)
 
   const keyboardRef = useRef(new KeyboardReport())
   const pressedKeys = useRef(new Set<string>())
   const altGrState = useRef<AltGrState | null>(null)
   const isComposing = useRef(false)
+  const commandToCtrlRef = useRef(commandToCtrl)
+  const ignoreCapsLockRef = useRef(ignoreCapsLock)
+  
+  // Update ref when atom value changes
+  useEffect(() => {
+    commandToCtrlRef.current = commandToCtrl
+  }, [commandToCtrl])
+
+  useEffect(() => {
+    ignoreCapsLockRef.current = ignoreCapsLock
+  }, [ignoreCapsLock])
 
   useEffect(() => {
     initAltGr()
@@ -51,6 +64,13 @@ export const Keyboard = (): ReactElement => {
       if (!code && event.key === 'Shift') {
         code = 'ShiftRight'
       }
+      
+      // Ignore CapsLock if enabled (for Mac IME switching)
+      if (code === 'CapsLock' && ignoreCapsLockRef.current) {
+        console.log('[CapsLock] Ignored for IME')
+        return
+      }
+      
       if (pressedKeys.current.has(code)) {
         return
       }
@@ -69,7 +89,19 @@ export const Keyboard = (): ReactElement => {
         }
       }
 
+      // Track the original code for pressedKeys (before Command->Control mapping)
+      // This ensures Command key release detection still works properly
+      if (pressedKeys.current.has(code)) {
+        return
+      }
+      
       pressedKeys.current.add(code)
+      
+      // Debug log for CapsLock
+      if (code === 'CapsLock') {
+        console.log('[CapsLock] Sending keydown')
+      }
+      
       await handleKeyEvent({ type: 'keydown', code })
     }
 
@@ -113,6 +145,12 @@ export const Keyboard = (): ReactElement => {
       }
 
       pressedKeys.current.delete(code)
+      
+      // Debug log for CapsLock
+      if (code === 'CapsLock') {
+        console.log('[CapsLock] Sending keyup')
+      }
+      
       await handleKeyEvent({ type: 'keyup', code })
     }
 
@@ -179,7 +217,18 @@ export const Keyboard = (): ReactElement => {
   // Keyboard handler
   async function handleKeyEvent(event: { type: 'keydown' | 'keyup'; code: string }): Promise<void> {
     const kb = keyboardRef.current
-    const report = event.type === 'keydown' ? kb.keyDown(event.code) : kb.keyUp(event.code)
+    
+    // Convert macOS Command key to Windows Control key (if enabled)
+    let code = event.code
+    if (commandToCtrlRef.current) {
+      if (code === 'MetaLeft') {
+        code = 'ControlLeft'
+      } else if (code === 'MetaRight') {
+        code = 'ControlRight'
+      }
+    }
+    
+    const report = event.type === 'keydown' ? kb.keyDown(code) : kb.keyUp(code)
     await sendReport(report)
   }
 
