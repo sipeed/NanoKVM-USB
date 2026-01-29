@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, systemPreferences } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, systemPreferences, powerMonitor } from 'electron'
 import type { IpcMainEvent, OpenExternalOptions } from 'electron'
 
 import { IpcEvents } from '../../common/ipc-events'
@@ -9,6 +9,9 @@ export function registerApp(): void {
   ipcMain.on(IpcEvents.OPEN_EXTERNAL_RUL, openExternalUrl)
   ipcMain.handle(IpcEvents.REQUEST_MEDIA_PERMISSIONS, requestMediaPermissions)
   ipcMain.on(IpcEvents.SET_FULL_SCREEN, setFullScreen)
+  
+  // Setup power monitor for sleep/resume events
+  setupPowerMonitor()
 }
 
 function getAppVersion(): string {
@@ -52,4 +55,18 @@ function setFullScreen(e: IpcMainEvent, flag: boolean): void {
   if (!win) return
 
   win.setFullScreen(flag)
+}
+
+function setupPowerMonitor(): void {
+  powerMonitor.on('resume', () => {
+    console.log('System resumed from sleep')
+    // Notify all windows that system has resumed
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send(IpcEvents.SYSTEM_RESUME)
+    })
+  })
+
+  powerMonitor.on('suspend', () => {
+    console.log('System is going to sleep')
+  })
 }

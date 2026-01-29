@@ -74,6 +74,11 @@ const ja = {
         title: 'マウスジグラー',
         enable: '有効',
         disable: '無効'
+      },
+      autoClicker: {
+        title: '自動クリック',
+        enable: '有効（5分間隔）',
+        disable: '無効'
       }
     },
     settings: {

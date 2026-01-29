@@ -11,6 +11,7 @@ export enum IpcEvents {
   CLOSE_SERIAL_PORT = 'close-serial-port',
   SEND_KEYBOARD = 'send-keyboard',
   SEND_MOUSE = 'send-mouse',
+  SYSTEM_RESUME = 'system-resume',
 
   UPDATE_AVAILABLE = 'update-available',
   UPDATE_NOT_AVAILABLE = 'update-not-available',

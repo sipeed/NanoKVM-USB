@@ -74,6 +74,11 @@ const en = {
         title: 'Mouse Jiggler',
         enable: 'Enable',
         disable: 'Disable'
+      },
+      autoClicker: {
+        title: 'Auto Clicker',
+        enable: 'Enable (5 min interval)',
+        disable: 'Disable'
       }
     },
     settings: {

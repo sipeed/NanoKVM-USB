@@ -15,6 +15,7 @@ import * as storage from '@renderer/libs/storage'
 
 import { Direction } from './direction'
 import { Jiggler } from './jiggler'
+import { AutoClicker } from './auto-clicker'
 import { Mode } from './mode'
 import { Speed } from './speed'
 import { Style } from './style'
@@ -63,6 +64,7 @@ export const Mouse = (): ReactElement => {
       <Divider style={{ margin: '6px 0', opacity: '0.5' }} />
 
       <Jiggler />
+      <AutoClicker />
     </div>
   )
 

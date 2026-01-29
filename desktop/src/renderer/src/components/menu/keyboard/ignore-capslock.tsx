@@ -15,8 +15,8 @@ export const IgnoreCapsLock = () => {
   }
 
   return (
-    <div className="flex cursor-pointer items-center justify-between px-3 py-2 hover:bg-neutral-100">
-      <span className="text-sm">{t('keyboard.ignoreCapsLock')}</span>
+    <div className="flex h-[30px] cursor-pointer items-center justify-between space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50">
+      <span>{t('keyboard.ignoreCapsLock')}</span>
       <Switch size="small" checked={ignoreCapsLock} onChange={handleIgnoreCapsLockChange} />
     </div>
   )

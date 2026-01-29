@@ -16,6 +16,7 @@ const SKIP_UPDATE_KEY = 'nano-kvm-check-update'
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
 const BAUD_RATE_KEY = 'nanokvm-usb-baud-rate'
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
+const AUTO_CLICKER_MODE_KEY = 'nanokvm-usb-auto-clicker-mode'
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcuts'
 const NUM_LOCK_KEY = 'nanokvm-usb-num-lock'
 const COMMAND_TO_CTRL_KEY = 'nanokvm-usb-command-to-ctrl'
@@ -186,6 +187,15 @@ export function getMouseJigglerMode(): 'enable' | 'disable' {
 
 export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
   localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler)
+}
+
+export function getAutoClickerMode(): 'enable' | 'disable' {
+  const autoClicker = localStorage.getItem(AUTO_CLICKER_MODE_KEY)
+  return autoClicker && autoClicker === 'enable' ? 'enable' : 'disable'
+}
+
+export function setAutoClickerMode(autoClicker: 'enable' | 'disable'): void {
+  localStorage.setItem(AUTO_CLICKER_MODE_KEY, autoClicker)
 }
 
 export function getShortcuts(): string | null {
