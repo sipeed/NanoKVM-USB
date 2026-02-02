@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useMediaQuery } from 'react-responsive'
 
 import { IpcEvents } from '@common/ipc-events'
-import { DeviceModal } from '@renderer/components/device-modal'
+import { Device } from '@renderer/components/device'
 import { Keyboard } from '@renderer/components/keyboard'
 import { Menu } from '@renderer/components/menu'
 import { Mouse } from '@renderer/components/mouse'
@@ -38,7 +38,6 @@ const App = (): ReactElement => {
   const setResolution = useSetAtom(resolutionAtom)
 
   const [state, setState] = useState<State>('loading')
-  const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
     const resolution = getVideoResolution()
@@ -53,10 +52,6 @@ const App = (): ReactElement => {
       window.electron.ipcRenderer.invoke(IpcEvents.CLOSE_SERIAL_PORT)
     }
   }, [])
-
-  useEffect(() => {
-    setIsConnected(videoState === 'connected' && serialPortState === 'connected')
-  }, [videoState, serialPortState])
 
   async function requestMediaPermissions(resolution?: Resolution): Promise<void> {
     try {
@@ -116,14 +111,14 @@ const App = (): ReactElement => {
 
   return (
     <>
-      {isConnected ? (
+      <Device />
+
+      {videoState === 'connected' && serialPortState === 'connected' && (
         <>
           <Menu />
           <Mouse />
           {isKeyboardEnable && <Keyboard />}
         </>
-      ) : (
-        <DeviceModal />
       )}
 
       <video
