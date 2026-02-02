@@ -82,7 +82,7 @@ const App = () => {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-          sampleRate: 48000,
+          sampleRate: 48000
         }
       });
       stream.getTracks().forEach((track) => track.stop());

@@ -12,7 +12,7 @@ export const SerialPort = () => {
 
     try {
       const port = await navigator.serial.requestPort();
-      await device.serialPort.init(port);
+      await device.serialPort.init({ port });
     } finally {
       setIsLoading(false);
     }
