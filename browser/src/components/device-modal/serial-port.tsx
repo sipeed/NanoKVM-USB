@@ -18,8 +18,9 @@ export const SerialPort = ({ setErrMsg, onDisconnect }: SerialPortProps) => {
 
   useEffect(() => {
     const isWebSerialSupported = 'serial' in navigator;
-    const state = isWebSerialSupported ? 'disconnected' : 'notSupported';
-    setSerialState(state);
+    if (!isWebSerialSupported) {
+      setSerialState('notSupported');
+    }
   }, [setSerialState]);
 
   const selectSerialPort = async () => {
@@ -45,7 +46,7 @@ export const SerialPort = ({ setErrMsg, onDisconnect }: SerialPortProps) => {
 
   return (
     <Button
-      type="primary"
+      type={serialState === 'connected' ? 'primary' : 'default'}
       className="w-[250px]"
       loading={serialState === 'connecting'}
       onClick={selectSerialPort}

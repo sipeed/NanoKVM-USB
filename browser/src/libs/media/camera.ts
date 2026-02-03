@@ -1,3 +1,5 @@
+import { checkPermission } from '@/libs/media/permission.ts';
+
 class Camera {
   id: string = '';
   width: number = 1920;
@@ -12,16 +14,18 @@ class Camera {
 
     this.close();
 
-    const constraints = {
-      video: {
-        deviceId: { exact: id },
-        width: { ideal: width },
-        height: { ideal: height },
-        frameRate: { ideal: 60 },
-        latency: { ideal: 0 },
-        resizeMode: 'none'
-      },
-      audio: audioId
+    const video = {
+      deviceId: { exact: id },
+      width: { ideal: width },
+      height: { ideal: height },
+      frameRate: { ideal: 60 },
+      latency: { ideal: 0 },
+      resizeMode: 'none'
+    };
+
+    const isMicGranted = await checkPermission('microphone');
+    const audio =
+      isMicGranted && audioId
         ? {
             deviceId: { exact: audioId },
             echoCancellation: false,
@@ -30,14 +34,13 @@ class Camera {
             sampleRate: 48000,
             latency: 0
           }
-        : false
-    };
+        : false;
 
     this.id = id;
     this.width = width;
     this.height = height;
     if (audioId) this.audioId = audioId;
-    this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    this.stream = await navigator.mediaDevices.getUserMedia({ video, audio });
   }
 
   public async updateResolution(width: number, height: number) {

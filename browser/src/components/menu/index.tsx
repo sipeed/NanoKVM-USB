@@ -8,6 +8,7 @@ import Draggable from 'react-draggable';
 import { serialStateAtom } from '@/jotai/device.ts';
 import * as storage from '@/libs/storage';
 
+import { Audio } from './audio';
 import { Fullscreen } from './fullscreen';
 import { Keyboard } from './keyboard';
 import { Mouse } from './mouse';
@@ -87,6 +88,7 @@ export const Menu = () => {
             <Divider type="vertical" />
 
             <Video />
+            <Audio />
 
             {serialState === 'connected' && (
               <>

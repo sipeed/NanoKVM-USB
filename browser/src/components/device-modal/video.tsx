@@ -4,7 +4,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 
 import { resolutionAtom, videoDeviceIdAtom, videoStateAtom } from '@/jotai/device.ts';
-import { camera } from '@/libs/camera';
+import { camera } from '@/libs/media/camera';
 import * as storage from '@/libs/storage';
 import type { MediaDevice } from '@/types';
 

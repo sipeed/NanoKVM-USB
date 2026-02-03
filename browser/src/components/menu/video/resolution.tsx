@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import { resolutionAtom } from '@/jotai/device.ts';
 import { isKeyboardEnableAtom } from '@/jotai/keyboard.ts';
-import { camera } from '@/libs/camera';
+import { camera } from '@/libs/media/camera.ts';
 import * as storage from '@/libs/storage';
 import type { Resolution as VideoResolution } from '@/types';
 

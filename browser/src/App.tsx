@@ -19,8 +19,9 @@ import {
 } from '@/jotai/device.ts';
 import { isKeyboardEnableAtom } from '@/jotai/keyboard.ts';
 import { mouseStyleAtom } from '@/jotai/mouse.ts';
-import { camera } from '@/libs/camera';
 import { device } from '@/libs/device';
+import { camera } from '@/libs/media/camera';
+import { checkPermission, requestCameraPermission } from '@/libs/media/permission.ts';
 import * as storage from '@/libs/storage';
 import type { Resolution } from '@/types.ts';
 
@@ -37,7 +38,7 @@ const App = () => {
   const [videoRotation, setVideoRotation] = useAtom(videoRotationAtom);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isCameraAvailable, setIsCameraAvailable] = useState(false);
+  const [isCameraGranted, setIsCameraGranted] = useState(false);
   const [shouldSwapDimensions, setShouldSwapDimensions] = useState(false);
 
   useEffect(() => {
@@ -60,7 +61,7 @@ const App = () => {
       setResolution(resolution);
     }
 
-    requestMediaPermissions(resolution);
+    requestPermission(resolution);
   }
 
   function initRotation() {
@@ -70,41 +71,28 @@ const App = () => {
     }
   }
 
-  async function requestMediaPermissions(resolution?: Resolution) {
+  async function requestPermission(resolution?: Resolution) {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: resolution?.width || 1920 },
-          height: { ideal: resolution?.height || 1080 },
-          frameRate: { ideal: 60 }
-        },
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          sampleRate: 48000
-        }
-      });
-      stream.getTracks().forEach((track) => track.stop());
+      const isGranted = await checkPermission('camera');
+      if (isGranted) {
+        setIsCameraGranted(true);
+        return;
+      }
 
-      setIsCameraAvailable(true);
+      const isSuccess = await requestCameraPermission(resolution);
+      setIsCameraGranted(isSuccess);
     } catch (err: any) {
       console.log('failed to request media permissions: ', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setIsCameraAvailable(false);
-      } else {
-        setIsCameraAvailable(true);
-      }
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   }
 
   if (isLoading) {
     return <Spin size="large" spinning={isLoading} tip={t('camera.tip')} fullscreen />;
   }
 
-  if (!isCameraAvailable) {
+  if (!isCameraGranted) {
     return (
       <Result
         status="info"

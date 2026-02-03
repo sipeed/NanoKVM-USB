@@ -4,7 +4,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 
 import { serialStateAtom, videoDeviceIdAtom, videoStateAtom } from '@/jotai/device.ts';
-import { camera } from '@/libs/camera';
+import { camera } from '@/libs/media/camera.ts';
 
 import { SerialPort } from './serial-port';
 import { Video } from './video';
