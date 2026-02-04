@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 
 import { resolutionAtom } from '@renderer/jotai/device'
 import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
-import { camera } from '@renderer/libs/camera'
+import { camera } from '@renderer/libs/media/camera'
 import * as storage from '@renderer/libs/storage'
 import type { Resolution as VideoResolution } from '@renderer/types'
 

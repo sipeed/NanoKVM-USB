@@ -6,7 +6,7 @@ import { VideoIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { resolutionAtom, videoDeviceIdAtom } from '@renderer/jotai/device'
-import { camera } from '@renderer/libs/camera'
+import { camera } from '@renderer/libs/media/camera'
 import * as storage from '@renderer/libs/storage'
 import type { MediaDevice } from '@renderer/types'
 

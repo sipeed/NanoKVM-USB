@@ -6,6 +6,7 @@ import Draggable from 'react-draggable'
 
 import * as storage from '@renderer/libs/storage'
 
+import { Audio } from './audio'
 import { Keyboard } from './keyboard'
 import { Mouse } from './mouse'
 import { Recorder } from './recorder'
@@ -81,6 +82,7 @@ export const Menu = (): ReactElement => {
             <Divider type="vertical" />
 
             <Video />
+            <Audio />
             <SerialPort />
             <Divider type="vertical" className="px-0.5" />
 

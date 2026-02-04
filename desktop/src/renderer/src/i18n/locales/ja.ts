@@ -65,7 +65,8 @@ const ja = {
       speed: 'ホイール速度',
       fast: '速い',
       slow: '遅い',
-      requestPointer: '相対モードを使用中です。マウスポインターを取得するにはデスクトップをクリックしてください。',
+      requestPointer:
+        '相対モードを使用中です。マウスポインターを取得するにはデスクトップをクリックしてください。',
       jiggler: {
         title: 'マウスジグラー',
         enable: '有効',
@@ -102,8 +103,7 @@ const ja = {
         warningDescription: 'この操作は元に戻せません。すべてのカスタム設定が失われます。',
         button: 'すべての設定をリセット',
         confirmTitle: 'リセットの確認',
-        confirmMessage:
-          'すべての設定をリセットしてもよろしいですか？この操作は元に戻せません。',
+        confirmMessage: 'すべての設定をリセットしてもよろしいですか？この操作は元に戻せません。',
         confirm: 'リセット',
         cancel: 'キャンセル'
       }
