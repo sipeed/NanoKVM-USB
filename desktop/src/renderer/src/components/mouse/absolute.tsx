@@ -6,6 +6,7 @@ import { IpcEvents } from '@common/ipc-events'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
 import { MouseAbsoluteRelative } from '@renderer/libs/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
+import { updateAutoClickerActivity } from '@renderer/libs/auto-clicker'
 
 import { createInitialTouchState, createTouchHandlers } from './touchpad'
 import { MouseAbsoluteEvent } from './types'
@@ -93,6 +94,7 @@ export const Absolute = (): ReactElement => {
       window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, [0x02, ...report])
 
       mouseJiggler.moveEventCallback()
+      updateAutoClickerActivity()
     }
 
     // Mouse down event

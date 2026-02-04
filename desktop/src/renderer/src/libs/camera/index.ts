@@ -21,7 +21,7 @@ class Camera {
         latency: { ideal: 0 },
         resizeMode: 'none'
       },
-      audio: audioId
+      audio: audioId && audioId.trim()
         ? {
             deviceId: { exact: audioId },
             echoCancellation: false,
@@ -36,7 +36,7 @@ class Camera {
     this.id = id
     this.width = width
     this.height = height
-    if (audioId) this.audioId = audioId
+    if (audioId && audioId.trim()) this.audioId = audioId
     this.stream = await navigator.mediaDevices.getUserMedia(constraints)
   }
 

@@ -48,8 +48,8 @@ class MouseJiggler {
 
   async sendJiggle(): Promise<void> {
     // Build reports directly using the report builder
-    const report1 = this.mouseReport.buildReport(10, 10, 0)
-    const report2 = this.mouseReport.buildReport(-10, -10, 0)
+    const report1 = this.mouseReport.buildReport(50, 50, 0)
+    const report2 = this.mouseReport.buildReport(-50, -50, 0)
 
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, [0x01, report1])
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, [0x01, report2])

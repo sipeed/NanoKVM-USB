@@ -5,6 +5,7 @@ import { IpcEvents } from '@common/ipc-events'
 import { commandToCtrlAtom, ignoreCapsLockAtom, isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
 import { KeyboardReport } from '@renderer/libs/keyboard/keyboard'
 import { isModifier } from '@renderer/libs/keyboard/keymap'
+import { updateAutoClickerActivity } from '@renderer/libs/auto-clicker'
 
 interface AltGrState {
   active: boolean
@@ -230,6 +231,9 @@ export const Keyboard = (): ReactElement => {
     
     const report = event.type === 'keydown' ? kb.keyDown(code) : kb.keyUp(code)
     await sendReport(report)
+    
+    // Update auto-clicker activity on keyboard input
+    updateAutoClickerActivity()
   }
 
   async function sendReport(report: number[]): Promise<void> {
