@@ -40,7 +40,12 @@ class Camera {
     this.width = width;
     this.height = height;
     if (audioId) this.audioId = audioId;
-    this.stream = await navigator.mediaDevices.getUserMedia({ video, audio });
+
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ video, audio });
+    } catch {
+      this.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+    }
   }
 
   public async updateResolution(width: number, height: number) {
