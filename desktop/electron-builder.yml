@@ -59,6 +59,3 @@ publish:
   provider: github
   owner: sipeed
   repo: NanoKVM-USB
-
-electronDownload:
-  mirror: https://npmmirror.com/mirrors/electron/
