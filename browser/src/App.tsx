@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Alert, Result, Spin } from 'antd';
 import clsx from 'clsx';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -54,6 +54,30 @@ const App = () => {
   useEffect(() => {
     setShouldSwapDimensions(videoRotation === 90 || videoRotation === 270);
   }, [videoRotation]);
+
+  const videoStyle = useMemo(() => {
+    const baseStyle = {
+      transformOrigin: 'center',
+      maxWidth: shouldSwapDimensions ? '100vh' : '100%',
+      maxHeight: shouldSwapDimensions ? '100vw' : '100%'
+    };
+
+    if (videoScale === 0) {
+      return {
+        ...baseStyle,
+        width: shouldSwapDimensions ? '100vh' : '100%',
+        height: shouldSwapDimensions ? '100vw' : '100%',
+        objectFit: 'contain',
+        transform: `rotate(${videoRotation}deg)`
+      };
+    }
+
+    return {
+      ...baseStyle,
+      objectFit: 'scale-down',
+      transform: `scale(${videoScale}) rotate(${videoRotation}deg)`
+    };
+  }, [videoScale, videoRotation, shouldSwapDimensions]);
 
   function initResolution() {
     const resolution = storage.getVideoResolution();
@@ -130,13 +154,7 @@ const App = () => {
           shouldSwapDimensions ? 'min-h-[640px] min-w-[360px]' : 'min-h-[360px] min-w-[640px]',
           mouseStyle
         )}
-        style={{
-          transform: `scale(${videoScale}) rotate(${videoRotation}deg)`,
-          transformOrigin: 'center',
-          maxWidth: shouldSwapDimensions ? '100vh' : '100%',
-          maxHeight: shouldSwapDimensions ? '100vw' : '100%',
-          objectFit: 'scale-down'
-        }}
+        style={videoStyle as CSSProperties}
         autoPlay
         playsInline
       />
