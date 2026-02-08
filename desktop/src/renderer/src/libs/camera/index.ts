@@ -12,6 +12,8 @@ class Camera {
 
     this.close()
 
+    console.log('[Camera] Opening device - videoId:', id, 'audioId:', audioId)
+
     const constraints = {
       video: {
         deviceId: { exact: id },
@@ -33,11 +35,18 @@ class Camera {
         : false
     }
 
+    console.log('[Camera] Audio constraint:', constraints.audio)
+
     this.id = id
     this.width = width
     this.height = height
     if (audioId && audioId.trim()) this.audioId = audioId
     this.stream = await navigator.mediaDevices.getUserMedia(constraints)
+    
+    // ストリーム取得後、実際に使われているデバイスを確認
+    this.stream.getTracks().forEach((track) => {
+      console.log(`[Camera] ${track.kind} track:`, track.label)
+    })
   }
 
   public async updateResolution(width: number, height: number): Promise<void> {

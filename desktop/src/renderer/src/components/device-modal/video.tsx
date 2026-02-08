@@ -29,7 +29,13 @@ export const Video = ({ setMsg }: VideoProps): ReactElement => {
     try {
       const allDevices = await navigator.mediaDevices.enumerateDevices()
       const videoDevices = allDevices.filter((device) => device.kind === 'videoinput')
-      const audioDevices = allDevices.filter((device) => device.kind === 'audioinput')
+      // 'default'や'communications'などの特殊なデバイスIDを除外
+      const audioDevices = allDevices.filter(
+        (device) => 
+          device.kind === 'audioinput' && 
+          !device.deviceId.startsWith('default') &&
+          !device.deviceId.startsWith('communications')
+      )
 
       const mediaDevices = videoDevices.map((videoDevice) => {
         const device: MediaDevice = {

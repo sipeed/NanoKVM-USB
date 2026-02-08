@@ -29,11 +29,23 @@ export function startAutoClicker() {
       // Send left button press (relative mode: 0x01, buttons: 0x01, dx: 0, dy: 0, wheel: 0)
       const pressReport = [0x01, 0x01, 0x00, 0x00, 0x00]
       window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, pressReport)
+        .then(() => {
+          console.log('[AutoClicker] ✓ Click press sent successfully')
+        })
+        .catch((error) => {
+          console.error('[AutoClicker] ✗ Failed to send click press:', error)
+        })
       
       // Release after 50ms
       setTimeout(() => {
         const releaseReport = [0x01, 0x00, 0x00, 0x00, 0x00]
         window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, releaseReport)
+          .then(() => {
+            console.log('[AutoClicker] ✓ Click release sent successfully')
+          })
+          .catch((error) => {
+            console.error('[AutoClicker] ✗ Failed to send click release:', error)
+          })
       }, 50)
     } else {
       console.log('[AutoClicker] Skipping click (user active)')

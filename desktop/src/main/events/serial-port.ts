@@ -15,9 +15,10 @@ export function registerSerialPort(): void {
 async function getSerialPorts(): Promise<string[]> {
   try {
     const ports = await SerialPort.list()
+    console.log('[SerialPort] Available ports:', ports.map((port) => port.path))
     return ports.map((port) => port.path)
   } catch (error) {
-    console.error('Error listing serial ports:', error)
+    console.error('[SerialPort] Error listing serial ports:', error)
     return []
   }
 }
@@ -28,20 +29,28 @@ async function openSerialPort(
   baudRate: number = 57600
 ): Promise<boolean> {
   try {
+    console.log(`[SerialPort] Opening port: ${path} at ${baudRate} baud`)
     await device.serialPort.init(path, baudRate, (err) => {
       const msg = err ? err.message : ''
+      if (err) {
+        console.error('[SerialPort] ✗ Failed to open:', msg)
+      } else {
+        console.log('[SerialPort] ✓ Port opened successfully')
+      }
       e.sender.send(IpcEvents.OPEN_SERIAL_PORT_RSP, msg)
     })
     return true
   } catch (error) {
-    console.error('Error opening serial port:', error)
+    console.error('[SerialPort] ✗ Error opening serial port:', error)
     return false
   }
 }
 
 async function closeSerialPort(): Promise<boolean> {
   try {
+    console.log('[SerialPort] Closing port')
     await device.serialPort.close()
+    console.log('[SerialPort] ✓ Port closed')
     return true
   } catch (error) {
     console.error('Error closing serial port:', error)
@@ -59,8 +68,11 @@ async function sendKeyboard(_: IpcMainInvokeEvent, report: number[]): Promise<vo
 
 async function sendMouse(_: IpcMainInvokeEvent, report: number[]): Promise<void> {
   try {
+    console.log('[SerialPort] Sending mouse data:', report)
     await device.sendMouseData(report)
+    console.log('[SerialPort] ✓ Mouse data sent successfully')
   } catch (error) {
-    console.error('Error sending mouse data:', error)
+    console.error('[SerialPort] ✗ Error sending mouse data:', error)
+    throw error
   }
 }

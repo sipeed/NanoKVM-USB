@@ -19,8 +19,9 @@ import {
 } from '@renderer/jotai/device'
 import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
 import { mouseModeAtom, mouseStyleAtom } from '@renderer/jotai/mouse'
+import { startAutoClicker, stopAutoClicker } from '@renderer/libs/auto-clicker'
 import { camera } from '@renderer/libs/camera'
-import { getVideoResolution } from '@renderer/libs/storage'
+import { getAutoClickerMode, getVideoResolution } from '@renderer/libs/storage'
 import type { Resolution } from '@renderer/types'
 
 type State = 'loading' | 'success' | 'failed'
@@ -48,9 +49,17 @@ const App = (): ReactElement => {
 
     requestMediaPermissions(resolution)
 
+    // Initialize AutoClicker based on saved setting
+    const autoClickerMode = getAutoClickerMode()
+    console.log('[App] Initializing AutoClicker with mode:', autoClickerMode)
+    if (autoClickerMode === 'enable') {
+      startAutoClicker()
+    }
+
     return (): void => {
       camera.close()
       window.electron.ipcRenderer.invoke(IpcEvents.CLOSE_SERIAL_PORT)
+      stopAutoClicker()
     }
   }, [])
 
