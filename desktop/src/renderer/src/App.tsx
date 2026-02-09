@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useMediaQuery } from 'react-responsive'
 
 import { IpcEvents } from '@common/ipc-events'
-import { DeviceModal } from '@renderer/components/device-modal'
+import { Device } from '@renderer/components/device'
 import { Keyboard } from '@renderer/components/keyboard'
 import { Menu } from '@renderer/components/menu'
 import { Mouse } from '@renderer/components/mouse'
@@ -20,7 +20,8 @@ import {
 import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
 import { mouseModeAtom, mouseStyleAtom } from '@renderer/jotai/mouse'
 import { startAutoClicker, stopAutoClicker } from '@renderer/libs/auto-clicker'
-import { camera } from '@renderer/libs/camera'
+import { camera } from '@renderer/libs/media/camera'
+import { requestCameraPermission } from '@renderer/libs/media/permission'
 import { getAutoClickerMode, getVideoResolution } from '@renderer/libs/storage'
 import type { Resolution } from '@renderer/types'
 
@@ -39,7 +40,6 @@ const App = (): ReactElement => {
   const setResolution = useSetAtom(resolutionAtom)
 
   const [state, setState] = useState<State>('loading')
-  const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
     const resolution = getVideoResolution()
@@ -63,40 +63,11 @@ const App = (): ReactElement => {
     }
   }, [])
 
-  useEffect(() => {
-    setIsConnected(videoState === 'connected' && serialPortState === 'connected')
-  }, [videoState, serialPortState])
-
   async function requestMediaPermissions(resolution?: Resolution): Promise<void> {
     try {
-      const platform = await window.electron.ipcRenderer.invoke(IpcEvents.GET_PLATFORM)
-      if (platform === 'darwin') {
-        const res = await window.electron.ipcRenderer.invoke(IpcEvents.REQUEST_MEDIA_PERMISSIONS)
-
-        if (!res.camera) {
-          setState('failed')
-          return
-        }
-      } else {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: resolution?.width || 1920 },
-            height: { ideal: resolution?.height || 1080 },
-            frameRate: { ideal: 60 }
-          },
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-            sampleRate: 48000
-          }
-        })
-        stream.getTracks().forEach((track) => track.stop())
-      }
-
-      setState('success')
+      const granted = await requestCameraPermission(resolution)
+      setState(granted ? 'success' : 'failed')
     } catch (err) {
-      console.log('failed to request media permissions: ', err)
       if (err instanceof Error && ['NotAllowedError', 'PermissionDeniedError'].includes(err.name)) {
         setState('failed')
       } else {
@@ -125,14 +96,14 @@ const App = (): ReactElement => {
 
   return (
     <>
-      {isConnected ? (
+      <Device />
+
+      {videoState === 'connected' && serialPortState === 'connected' && (
         <>
           <Menu />
           <Mouse />
           {isKeyboardEnable && <Keyboard />}
         </>
-      ) : (
-        <DeviceModal />
       )}
 
       <video

@@ -153,7 +153,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-browser, build-desktop]
+    needs: [create-tag, build-browser, build-desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write

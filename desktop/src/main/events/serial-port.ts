@@ -15,8 +15,17 @@ export function registerSerialPort(): void {
 async function getSerialPorts(): Promise<string[]> {
   try {
     const ports = await SerialPort.list()
-    console.log('[SerialPort] Available ports:', ports.map((port) => port.path))
-    return ports.map((port) => port.path)
+    const paths = ports.map((port) => port.path)
+    console.log('[SerialPort] Available ports:', paths)
+
+    return paths.sort((a, b) => {
+      const aHasUSB = a.toLowerCase().includes('usb')
+      const bHasUSB = b.toLowerCase().includes('usb')
+
+      if (aHasUSB && !bHasUSB) return -1
+      if (!aHasUSB && bHasUSB) return 1
+      return a.localeCompare(b)
+    })
   } catch (error) {
     console.error('[SerialPort] Error listing serial ports:', error)
     return []
@@ -30,18 +39,21 @@ async function openSerialPort(
 ): Promise<boolean> {
   try {
     console.log(`[SerialPort] Opening port: ${path} at ${baudRate} baud`)
-    await device.serialPort.init(path, baudRate, (err) => {
-      const msg = err ? err.message : ''
-      if (err) {
-        console.error('[SerialPort] ✗ Failed to open:', msg)
-      } else {
-        console.log('[SerialPort] ✓ Port opened successfully')
-      }
-      e.sender.send(IpcEvents.OPEN_SERIAL_PORT_RSP, msg)
-    })
+    
+    const onDisconnect = () => {
+      console.log('[SerialPort] Device disconnected')
+      e.sender.send(IpcEvents.SERIAL_PORT_DISCONNECTED)
+    }
+
+    await device.serialPort.init({ path, baudRate, onDisconnect })
+
+    console.log('[SerialPort] ✓ Port opened successfully')
+    e.sender.send(IpcEvents.OPEN_SERIAL_PORT_RSP, '')
     return true
   } catch (error) {
     console.error('[SerialPort] ✗ Error opening serial port:', error)
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    e.sender.send(IpcEvents.OPEN_SERIAL_PORT_RSP, errorMsg)
     return false
   }
 }

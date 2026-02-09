@@ -7,32 +7,30 @@ import { serialStateAtom } from '@/jotai/device.ts';
 import { device } from '@/libs/device';
 
 type SerialPortProps = {
+  onDisconnect: () => void;
   setErrMsg: (msg: string) => void;
 };
 
-export const SerialPort = ({ setErrMsg }: SerialPortProps) => {
+export const SerialPort = ({ setErrMsg, onDisconnect }: SerialPortProps) => {
   const { t } = useTranslation();
 
   const [serialState, setSerialState] = useAtom(serialStateAtom);
 
   useEffect(() => {
-    checkSerialPort();
-  }, []);
-
-  function checkSerialPort() {
     const isWebSerialSupported = 'serial' in navigator;
-    const state = isWebSerialSupported ? 'disconnected' : 'notSupported';
-    setSerialState(state);
-  }
+    if (!isWebSerialSupported) {
+      setSerialState('notSupported');
+    }
+  }, [setSerialState]);
 
-  async function selectSerialPort() {
+  const selectSerialPort = async () => {
     if (serialState === 'connecting') return;
     setSerialState('connecting');
     setErrMsg('');
 
     try {
       const port = await navigator.serial.requestPort();
-      await device.serialPort.init(port);
+      await device.serialPort.init({ port, onDisconnect });
 
       setSerialState('connected');
     } catch (err) {
@@ -40,20 +38,20 @@ export const SerialPort = ({ setErrMsg }: SerialPortProps) => {
       setSerialState('disconnected');
       setErrMsg(t('serial.failed'));
     }
+  };
+
+  if (serialState === 'notSupported') {
+    return null;
   }
 
   return (
-    <>
-      {serialState !== 'notSupported' && (
-        <Button
-          type="primary"
-          className="w-[250px]"
-          loading={serialState === 'connecting'}
-          onClick={selectSerialPort}
-        >
-          {t('modal.selectSerial')}
-        </Button>
-      )}
-    </>
+    <Button
+      type={serialState === 'connected' ? 'primary' : 'default'}
+      className="w-[250px]"
+      loading={serialState === 'connecting'}
+      onClick={selectSerialPort}
+    >
+      {t('modal.selectSerial')}
+    </Button>
   );
 };

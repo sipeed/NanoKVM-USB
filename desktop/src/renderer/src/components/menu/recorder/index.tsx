@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Video } from 'lucide-react'
 
-import { camera } from '@renderer/libs/camera'
+import { camera } from '@renderer/libs/media/camera'
 
 export const Recorder = () => {
   const [isRecording, setIsRecording] = useState(false)

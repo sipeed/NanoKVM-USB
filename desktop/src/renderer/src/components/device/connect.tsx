@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { SerialPort } from './serial-port'
 import { Video } from './video'
 
-export const DeviceModal = (): ReactElement => {
+export const Connect = (): ReactElement => {
   const { t } = useTranslation()
 
   const [errMsg, setErrMsg] = useState('')
