@@ -8,16 +8,17 @@ import { useTranslation } from 'react-i18next'
 import { videoScaleAtom } from '@renderer/jotai/device'
 import * as storage from '@renderer/libs/storage'
 
-const ScaleList = [
-  { label: '200', value: 2 },
-  { label: '150', value: 1.5 },
-  { label: '100', value: 1 },
-  { label: '75', value: 0.75 },
-  { label: '50', value: 0.5 }
-]
-
 export const Scale = (): ReactElement => {
   const { t } = useTranslation()
+
+  const ScaleList = [
+    { label: t('video.auto'), value: 0 },
+    { label: '200', value: 2 },
+    { label: '150', value: 1.5 },
+    { label: '100', value: 1 },
+    { label: '75', value: 0.75 },
+    { label: '50', value: 0.5 }
+  ]
 
   const [videoScale, setVideoScale] = useAtom(videoScaleAtom)
 
@@ -45,7 +46,7 @@ export const Scale = (): ReactElement => {
           onClick={() => updateScale(item.value)}
         >
           <span>{item.label}</span>
-          <PercentIcon size={12} />
+          {item.value > 0 && <PercentIcon size={12} />}
         </div>
       ))}
     </>

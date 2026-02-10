@@ -109,11 +109,14 @@ const App = (): ReactElement => {
       <video
         id="video"
         className={clsx(
-          'block max-h-full min-h-[480px] max-w-full min-w-[640px] origin-center object-scale-down select-none',
+          'block origin-center select-none',
+          videoScale === 0
+            ? 'h-full w-full object-contain'
+            : 'max-h-full min-h-[480px] max-w-full min-w-[640px] object-scale-down',
           videoState === 'connected' ? 'opacity-100' : 'opacity-0',
           mouseMode === 'relative' ? 'cursor-none' : mouseStyle
         )}
-        style={{ transform: `scale(${videoScale})` }}
+        style={videoScale === 0 ? undefined : { transform: `scale(${videoScale})` }}
         autoPlay
         playsInline
       />

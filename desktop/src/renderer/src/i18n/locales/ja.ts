@@ -25,6 +25,7 @@ const ja = {
       }
     },
     video: {
+      auto: 'Auto',
       resolution: '解像度',
       scale: '拡大縮小',
       customResolution: 'カスタム',
