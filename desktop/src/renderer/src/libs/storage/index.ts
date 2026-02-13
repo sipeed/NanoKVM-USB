@@ -6,6 +6,7 @@ const LANGUAGE_KEY = 'nanokvm-usb-language'
 const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id'
 const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-video-resolution'
 const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale'
+const MAX_RESOLUTION_MODE_KEY = 'nanokvm-usb-max-resolution-mode'
 const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-custom-resolution'
 const SERIAL_PORT_KEY = 'nanokvm-serial-port'
 const IS_MENU_OPEN_KEY = 'nanokvm-is-menu-open'
@@ -81,6 +82,15 @@ export function getVideoScale(): number | null {
 
 export function setVideoScale(scale: number): void {
   localStorage.setItem(VIDEO_SCALE_KEY, String(scale))
+}
+
+export function getMaxResolutionMode(): '1440p30' | '1080p60' {
+  const mode = localStorage.getItem(MAX_RESOLUTION_MODE_KEY)
+  return mode === '1080p60' ? '1080p60' : '1440p30'
+}
+
+export function setMaxResolutionMode(mode: '1440p30' | '1080p60'): void {
+  localStorage.setItem(MAX_RESOLUTION_MODE_KEY, mode)
 }
 
 export function getSerialPort(): string | null {

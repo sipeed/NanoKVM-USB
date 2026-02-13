@@ -30,12 +30,23 @@ const ja = {
       scale: '拡大縮小',
       customResolution: 'カスタム',
       device: 'デバイス',
+      maxResolution: {
+        title: '最大解像度',
+        mode1440p30: '2560x1440@30fps',
+        mode1080p60: '1920x1080@60fps'
+      },
       custom: {
         title: 'カスタム解像度',
         width: '幅',
         height: '高さ',
         confirm: 'OK',
         cancel: 'キャンセル'
+      },
+      info: {
+        title: '画面表示情報',
+        capturedResolution: '取得解像度',
+        displayResolution: '表示解像度',
+        displayScale: '表示倍率'
       }
     },
     keyboard: {

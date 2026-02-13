@@ -30,12 +30,23 @@ const en = {
       scale: 'Scale',
       customResolution: 'Custom',
       device: 'Device',
+      maxResolution: {
+        title: 'Max Resolution',
+        mode1440p30: '2560x1440@30fps',
+        mode1080p60: '1920x1080@60fps'
+      },
       custom: {
         title: 'Custom Resolution',
         width: 'Width',
         height: 'Height',
         confirm: 'Ok',
         cancel: 'Cancel'
+      },
+      info: {
+        title: 'Display Info',
+        capturedResolution: 'Captured',
+        displayResolution: 'Display',
+        displayScale: 'Scale'
       }
     },
     audio: {

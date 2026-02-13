@@ -1,4 +1,5 @@
 import { join } from 'path'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, session, shell } from 'electron'
 import log from 'electron-log/main'
@@ -10,10 +11,65 @@ console.error = log.error
 
 let mainWindow: BrowserWindow
 
+interface WindowState {
+  width: number
+  height: number
+  x?: number
+  y?: number
+  isMaximized: boolean
+}
+
+function getWindowStatePath(): string {
+  return join(app.getPath('userData'), 'window-state.json')
+}
+
+function loadWindowState(): WindowState {
+  const defaultState: WindowState = {
+    width: 1200,
+    height: 800,
+    isMaximized: false
+  }
+
+  try {
+    const statePath = getWindowStatePath()
+    if (existsSync(statePath)) {
+      const data = readFileSync(statePath, 'utf8')
+      return { ...defaultState, ...JSON.parse(data) }
+    }
+  } catch (err) {
+    log.error('Failed to load window state:', err)
+  }
+
+  return defaultState
+}
+
+function saveWindowState(): void {
+  try {
+    if (!mainWindow) return
+
+    const bounds = mainWindow.getBounds()
+    const state: WindowState = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: mainWindow.isMaximized()
+    }
+
+    writeFileSync(getWindowStatePath(), JSON.stringify(state, null, 2))
+  } catch (err) {
+    log.error('Failed to save window state:', err)
+  }
+}
+
 function createWindow(): void {
+  const windowState = loadWindowState()
+
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -25,10 +81,29 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.maximize()
+    if (windowState.isMaximized) {
+      mainWindow.maximize()
+    }
     mainWindow.show()
     mainWindow.webContents.setZoomFactor(1.0)
   })
+
+  // Save window state on resize and move
+  mainWindow.on('resize', () => {
+    if (!mainWindow.isMaximized()) {
+      saveWindowState()
+    }
+  })
+
+  mainWindow.on('move', () => {
+    if (!mainWindow.isMaximized()) {
+      saveWindowState()
+    }
+  })
+
+  mainWindow.on('maximize', saveWindowState)
+  mainWindow.on('unmaximize', saveWindowState)
+  mainWindow.on('close', saveWindowState)
 
   // Open DevTools with keyboard shortcut (Cmd+Option+I on Mac, Ctrl+Shift+I on others)
   mainWindow.webContents.on('before-input-event', (event, input) => {
