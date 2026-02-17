@@ -134,7 +134,37 @@ const en = {
           'Are you sure you want to reset all settings? This action cannot be undone.',
         confirm: 'Reset',
         cancel: 'Cancel'
+      },
+      picoclaw: {
+        title: 'AI Assistant (Picoclaw)',
+        description: 'Configure AI agent to control your remote computer with natural language',
+        provider: 'LLM Provider',
+        apiKey: 'API Key',
+        apiKeyRequired: 'Please enter API key',
+        apiKeyHint: 'Use the buttons on the right to paste from clipboard or get a new key',
+        model: 'Model',
+        modelHint: '💨 Choose lightweight models to save your free tier tokens',
+        save: 'Save',
+        test: 'Test Connection',
+        testSuccess: 'Successfully connected to AI agent!',
+        saved: 'Settings saved',
+        pasteTooltip: 'Paste from clipboard',
+        getKeyTooltip: 'Open API key page',
+        openedBrowser: 'Opened API key page in browser',
+        clipboardEmpty: 'Clipboard is empty',
+        invalidApiKey: 'Invalid API key format',
+        pastedFromClipboard: 'Pasted from clipboard',
+        clipboardError: 'Failed to read clipboard',
+        infoTitle: 'About Picoclaw',
+        info1: 'AI agent can control remote PC with natural language commands',
+        info2: 'Example: "Please login" to execute auto-login sequence',
+        info3: 'API keys are stored encrypted'
       }
+    },
+    chat: {
+      title: 'AI Assistant',
+      placeholder: 'Type a message...',
+      empty: 'Start a conversation with AI assistant.\nExample: "Login to Windows"'
     }
   }
 }

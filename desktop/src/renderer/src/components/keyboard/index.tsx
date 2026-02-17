@@ -54,6 +54,12 @@ export const Keyboard = (): ReactElement => {
     async function handleKeyDown(event: KeyboardEvent): Promise<void> {
       if (!isKeyboardEnabled) return
 
+      // Ignore keyboard events when typing in input/textarea fields (e.g., chat)
+      const target = event.target as HTMLElement
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return
+      }
+
       // Skip during IME composition
       if (isComposing.current || event.isComposing) return
 
@@ -109,6 +115,12 @@ export const Keyboard = (): ReactElement => {
     // Key up event
     async function handleKeyUp(event: KeyboardEvent): Promise<void> {
       if (!isKeyboardEnabled) return
+
+      // Ignore keyboard events when typing in input/textarea fields (e.g., chat)
+      const target = event.target as HTMLElement
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return
+      }
 
       if (isComposing.current || event.isComposing) return
 

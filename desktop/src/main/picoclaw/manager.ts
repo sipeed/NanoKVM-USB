@@ -207,9 +207,14 @@ export class PicoclawManager {
   /**
    * Send message to picoclaw agent
    */
-  async sendMessage(message: string, language: string = 'en'): Promise<string> {
+  async sendMessage(message: string, language: string = 'en', sessionId?: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      const agent = spawn(this.picoclawBinary, ['agent', '-m', message, '-l', language], {
+      const args = ['agent', '-m', message, '-l', language]
+      if (sessionId) {
+        args.push('-s', sessionId)
+      }
+      
+      const agent = spawn(this.picoclawBinary, args, {
         stdio: 'pipe',
         env: {
           ...process.env,

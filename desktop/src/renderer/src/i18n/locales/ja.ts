@@ -127,7 +127,37 @@ const ja = {
         confirmMessage: 'すべての設定をリセットしてもよろしいですか？この操作は元に戻せません。',
         confirm: 'リセット',
         cancel: 'キャンセル'
+      },
+      picoclaw: {
+        title: 'AI アシスタント (Picoclaw)',
+        description: 'AI エージェントを設定して、自然言語でリモートコンピューターを制御できます',
+        provider: 'LLM プロバイダー',
+        apiKey: 'API キー',
+        apiKeyRequired: 'API キーを入力してください',
+        apiKeyHint: 'コピーしたAPI キーを右のボタンから貼り付けできます',
+        model: 'モデル',
+        modelHint: '💨 軽量モデルを選択すると無料枠を節約できます',
+        save: '保存',
+        test: '接続テスト',
+        testSuccess: 'AI エージェントとの通信に成功しました！',
+        saved: '設定を保存しました',
+        pasteTooltip: 'クリップボードから貼り付け',
+        getKeyTooltip: 'API キー取得ページを開く',
+        openedBrowser: 'ブラウザでAPI キー取得ページを開きました',
+        clipboardEmpty: 'クリップボードが空です',
+        invalidApiKey: 'API キーの形式が正しくありません',
+        pastedFromClipboard: 'クリップボードから貼り付けました',
+        clipboardError: 'クリップボードの読み取りに失敗しました',
+        infoTitle: 'Picoclaw について',
+        info1: 'AI エージェントは自然言語コマンドでリモート PC を制御できます',
+        info2: '例: "ログインしてください" で自動ログイン実行',
+        info3: 'API キーは暗号化されて保存されます'
       }
+    },
+    chat: {
+      title: 'AI アシスタント',
+      placeholder: 'メッセージを入力...',
+      empty: 'AI アシスタントと会話を始めましょう。\n例: "Windowsにログインして"'
     }
   }
 }

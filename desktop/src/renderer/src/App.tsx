@@ -11,6 +11,7 @@ import { Keyboard } from '@renderer/components/keyboard'
 import { Menu } from '@renderer/components/menu'
 import { Mouse } from '@renderer/components/mouse'
 import { VirtualKeyboard } from '@renderer/components/virtual-keyboard'
+import { Chat } from '@renderer/components/chat'
 import {
   resolutionAtom,
   serialPortStateAtom,
@@ -24,6 +25,7 @@ import { startAutoClicker, stopAutoClicker } from '@renderer/libs/auto-clicker'
 import { camera } from '@renderer/libs/media/camera'
 import { requestCameraPermission } from '@renderer/libs/media/permission'
 import { getAutoClickerMode, getVideoResolution, getMaxResolutionMode } from '@renderer/libs/storage'
+import { initializeApiHandlers } from '@renderer/libs/api-handler'
 import type { Resolution } from '@renderer/types'
 
 type State = 'loading' | 'success' | 'failed'
@@ -113,10 +115,12 @@ const App = (): ReactElement => {
     if (resolution) {
       setResolution(resolution)
     }
-const maxResMode = getMaxResolutionMode()
+    const maxResMode = getMaxResolutionMode()
     setMaxResolutionMode(maxResMode)
 
-    
+    // Initialize API handlers for picoclaw integration
+    const cleanupApiHandlers = initializeApiHandlers()
+
     requestMediaPermissions(resolution)
 
     // Initialize AutoClicker based on saved setting
@@ -127,6 +131,7 @@ const maxResMode = getMaxResolutionMode()
     }
 
     return (): void => {
+      cleanupApiHandlers()
       camera.close()
       window.electron.ipcRenderer.invoke(IpcEvents.CLOSE_SERIAL_PORT)
       stopAutoClicker()
@@ -210,6 +215,8 @@ const maxResMode = getMaxResolutionMode()
       </div>
 
       <VirtualKeyboard isBigScreen={isBigScreen} />
+      
+      {videoState === 'connected' && serialPortState === 'connected' && <Chat />}
     </>
   )
 }

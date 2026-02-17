@@ -3,6 +3,7 @@ import { Badge, Modal } from 'antd'
 import clsx from 'clsx'
 import {
   BadgeInfoIcon,
+  BotIcon,
   CircleArrowUpIcon,
   PaletteIcon,
   RotateCcwIcon,
@@ -15,6 +16,7 @@ import * as storage from '@renderer/libs/storage'
 
 import { About } from './about'
 import { Appearance } from './appearance'
+import { PicoclawSettings } from './picoclaw'
 import { Reset } from './reset'
 import { Update } from './update'
 
@@ -38,6 +40,7 @@ export const Settings = (): ReactElement => {
 
   const tabs = [
     { id: 'appearance', icon: <PaletteIcon size={16} />, component: <Appearance /> },
+    { id: 'picoclaw', icon: <BotIcon size={16} />, component: <PicoclawSettings /> },
     { id: 'update', icon: <CircleArrowUpIcon size={16} />, component: <Update /> },
     { id: 'reset', icon: <RotateCcwIcon size={16} />, component: <Reset /> },
     { id: 'about', icon: <BadgeInfoIcon size={16} />, component: <About /> }

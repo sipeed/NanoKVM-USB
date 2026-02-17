@@ -6,10 +6,14 @@ import log from 'electron-log/main'
 
 import icon from '../../resources/icon.png?asset'
 import * as events from './events'
+import { PicoclawManager } from './picoclaw/manager'
+import { ApiServer } from './api/server'
 
 console.error = log.error
 
 let mainWindow: BrowserWindow
+let picoclawManager: PicoclawManager
+let apiServer: ApiServer
 
 interface WindowState {
   width: number
@@ -148,7 +152,25 @@ app.whenReady().then(() => {
   events.registerApp()
   events.registerSerialPort()
 
+  // Initialize picoclaw manager
+  picoclawManager = new PicoclawManager()
+  events.registerPicoclawHandlers(picoclawManager)
+
+  // Initialize API server
+  apiServer = new ApiServer({ port: 18792, host: '127.0.0.1' })
+  apiServer
+    .start()
+    .then(() => {
+      log.info('[API Server] Started successfully')
+    })
+    .catch((err) => {
+      log.error('[API Server] Failed to start:', err)
+    })
+
   createWindow()
+
+  // Set main window for API server
+  apiServer.setMainWindow(mainWindow)
 
   events.registerUpdater(mainWindow)
 
@@ -158,6 +180,16 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // Stop picoclaw when app closes
+  if (picoclawManager) {
+    picoclawManager.stop().catch((err) => log.error('Failed to stop picoclaw:', err))
+  }
+
+  // Stop API server when app closes
+  if (apiServer) {
+    apiServer.stop().catch((err) => log.error('Failed to stop API server:', err))
+  }
+
   if (process.platform !== 'darwin') {
     app.quit()
   }

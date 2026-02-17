@@ -1,7 +1,7 @@
 export enum IpcEvents {
   GET_APP_VERSION = 'get-app-version',
   GET_PLATFORM = 'get-platform',
-  OPEN_EXTERNAL_RUL = 'open-external-url',
+  OPEN_EXTERNAL_URL = 'open-external-url',
   CHECK_MEDIA_PERMISSION = 'check-media-permission',
   REQUEST_MEDIA_PERMISSION = 'request-media-permission',
   SET_FULL_SCREEN = 'set-full-screen',
@@ -21,5 +21,14 @@ export enum IpcEvents {
   DOWNLOAD_PROGRESS = 'download-progress',
   UPDATE_DOWNLOADED = 'update-downloaded',
   CHECK_FOR_UPDATES = 'check-for-updates',
-  DOWNLOAD_UPDATE = 'download-update'
+  DOWNLOAD_UPDATE = 'download-update',
+
+  // Picoclaw AI Agent
+  PICOCLAW_START = 'picoclaw-start',
+  PICOCLAW_STOP = 'picoclaw-stop',
+  PICOCLAW_STATUS = 'picoclaw-status',
+  PICOCLAW_SEND_MESSAGE = 'picoclaw-send-message',
+  PICOCLAW_MESSAGE_RECEIVED = 'picoclaw-message-received',
+  PICOCLAW_GET_CONFIG = 'picoclaw-get-config',
+  PICOCLAW_UPDATE_CONFIG = 'picoclaw-update-config'
 }

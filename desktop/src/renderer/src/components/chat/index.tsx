@@ -12,6 +12,7 @@ export const Chat = (): ReactElement => {
   const [expanded, setExpanded] = useAtom(chatExpandedAtom)
   const [loading, setLoading] = useAtom(chatLoadingAtom)
   const [input, setInput] = useState('')
+  const [sessionId, setSessionId] = useState(() => `chat-${Date.now()}`)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -41,7 +42,8 @@ export const Chat = (): ReactElement => {
       const result = await window.electron.ipcRenderer.invoke(
         IpcEvents.PICOCLAW_SEND_MESSAGE, 
         messageText,
-        currentLanguage
+        currentLanguage,
+        sessionId
       )
       
       if (result.success && result.response) {
@@ -138,7 +140,10 @@ export const Chat = (): ReactElement => {
             <Minimize2 size={18} />
           </button>
           <button
-            onClick={() => setMessages([])}
+            onClick={() => {
+              setMessages([])
+              setSessionId(`chat-${Date.now()}`)
+            }}
             className="rounded p-1 text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-white"
           >
             <X size={18} />

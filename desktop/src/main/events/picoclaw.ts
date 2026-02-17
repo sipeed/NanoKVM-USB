@@ -37,9 +37,9 @@ export function registerPicoclawHandlers(manager: PicoclawManager): void {
   })
 
   // Send message to picoclaw agent
-  ipcMain.handle(IpcEvents.PICOCLAW_SEND_MESSAGE, async (_event, message: string, language?: string) => {
+  ipcMain.handle(IpcEvents.PICOCLAW_SEND_MESSAGE, async (_event, message: string, language?: string, sessionId?: string) => {
     try {
-      const response = await manager.sendMessage(message, language || 'en')
+      const response = await manager.sendMessage(message, language || 'en', sessionId)
       return { success: true, response }
     } catch (error) {
       console.error('[IPC] Failed to send message to picoclaw:', error)
