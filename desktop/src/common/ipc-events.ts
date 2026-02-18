@@ -30,5 +30,8 @@ export enum IpcEvents {
   PICOCLAW_SEND_MESSAGE = 'picoclaw-send-message',
   PICOCLAW_MESSAGE_RECEIVED = 'picoclaw-message-received',
   PICOCLAW_GET_CONFIG = 'picoclaw-get-config',
-  PICOCLAW_UPDATE_CONFIG = 'picoclaw-update-config'
+  PICOCLAW_UPDATE_CONFIG = 'picoclaw-update-config',
+  PICOCLAW_START_GATEWAY = 'picoclaw-start-gateway',
+  PICOCLAW_STOP_GATEWAY = 'picoclaw-stop-gateway',
+  PICOCLAW_GATEWAY_STATUS = 'picoclaw-gateway-status'
 }

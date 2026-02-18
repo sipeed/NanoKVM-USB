@@ -68,4 +68,37 @@ export function registerPicoclawHandlers(manager: PicoclawManager): void {
       return { success: false, error: String(error) }
     }
   })
+
+  // Start gateway (Telegram bot)
+  ipcMain.handle(IpcEvents.PICOCLAW_START_GATEWAY, async () => {
+    try {
+      await manager.start()
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] Failed to start gateway:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Stop gateway (Telegram bot)
+  ipcMain.handle(IpcEvents.PICOCLAW_STOP_GATEWAY, async () => {
+    try {
+      await manager.stop()
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC] Failed to stop gateway:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Get gateway status
+  ipcMain.handle(IpcEvents.PICOCLAW_GATEWAY_STATUS, () => {
+    try {
+      const status = manager.getStatus()
+      return { success: true, status }
+    } catch (error) {
+      console.error('[IPC] Failed to get gateway status:', error)
+      return { success: false, error: String(error) }
+    }
+  })
 }

@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useState } from 'react'
-import { Button, Input, message, Select, Space, Tooltip } from 'antd'
+import { Button, Input, message, Select, Space, Tooltip, Switch, Divider } from 'antd'
 import { ClipboardIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -16,6 +16,14 @@ interface PicoclawConfig {
     [key: string]: {
       api_key?: string
       api_base?: string
+    }
+  }
+  channels?: {
+    telegram?: {
+      enabled?: boolean
+      token?: string
+      proxy?: string
+      allow_from?: string[]
     }
   }
 }
@@ -94,9 +102,16 @@ export const PicoclawSettings = (): ReactElement => {
   const [provider, setProvider] = useState<string>('openrouter')
   const [apiKey, setApiKey] = useState<string>('')
   const [model, setModel] = useState<string>('')
+  
+  // Telegram settings
+  const [telegramEnabled, setTelegramEnabled] = useState<boolean>(false)
+  const [telegramToken, setTelegramToken] = useState<string>('')
+  const [telegramUserId, setTelegramUserId] = useState<string>('')
+  const [gatewayRunning, setGatewayRunning] = useState<boolean>(false)
 
   useEffect(() => {
     loadConfig()
+    loadGatewayStatus()
   }, [])
 
   async function loadConfig(): Promise<void> {
@@ -114,9 +129,29 @@ export const PicoclawSettings = (): ReactElement => {
         if (result.config.providers?.[currentProvider]?.api_key) {
           setApiKey(result.config.providers[currentProvider].api_key)
         }
+        
+        // Load Telegram settings
+        if (result.config.channels?.telegram) {
+          setTelegramEnabled(result.config.channels.telegram.enabled || false)
+          setTelegramToken(result.config.channels.telegram.token || '')
+          if (result.config.channels.telegram.allow_from?.length > 0) {
+            setTelegramUserId(result.config.channels.telegram.allow_from[0])
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to load picoclaw config:', err)
+    }
+  }
+
+  async function loadGatewayStatus(): Promise<void> {
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GATEWAY_STATUS)
+      if (result.success && result.status) {
+        setGatewayRunning(result.status.running || false)
+      }
+    } catch (err) {
+      console.error('Failed to load gateway status:', err)
     }
   }
 
@@ -142,6 +177,15 @@ export const PicoclawSettings = (): ReactElement => {
           [provider]: {
             api_key: apiKey,
             api_base: config.providers?.[provider]?.api_base || ''
+          }
+        },
+        channels: {
+          ...config.channels,
+          telegram: {
+            enabled: telegramEnabled,
+            token: telegramToken,
+            proxy: '',
+            allow_from: telegramUserId ? [telegramUserId] : []
           }
         }
       }
@@ -190,6 +234,51 @@ export const PicoclawSettings = (): ReactElement => {
       }
     } catch (err) {
       console.error('Failed to test picoclaw:', err)
+      message.error(String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleStartGateway(): Promise<void> {
+    if (!telegramToken || !telegramUserId) {
+      message.error('Telegram TokenとUser IDを入力してください')
+      return
+    }
+
+    setLoading(true)
+    try {
+      // Save config first
+      await handleSave()
+
+      // Start gateway
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_START_GATEWAY)
+      if (result.success) {
+        message.success('Telegram Gateway起動中...')
+        setGatewayRunning(true)
+      } else {
+        message.error(result.error || 'Gateway起動失敗')
+      }
+    } catch (err) {
+      console.error('Failed to start gateway:', err)
+      message.error(String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleStopGateway(): Promise<void> {
+    setLoading(true)
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_STOP_GATEWAY)
+      if (result.success) {
+        message.success('Telegram Gateway停止しました')
+        setGatewayRunning(false)
+      } else {
+        message.error(result.error || 'Gateway停止失敗')
+      }
+    } catch (err) {
+      console.error('Failed to stop gateway:', err)
       message.error(String(err))
     } finally {
       setLoading(false)
@@ -326,6 +415,77 @@ export const PicoclawSettings = (): ReactElement => {
             }
           />
           <p className="mt-1 text-xs text-neutral-500">{t('settings.picoclaw.modelHint')}</p>
+        </div>
+
+        {/* Telegram Bot Settings */}
+        <Divider />
+        <div>
+          <h3 className="mb-4 text-lg font-semibold">Telegram Bot設定</h3>
+          
+          {/* Enable Telegram */}
+          <div className="mb-4 flex items-center justify-between">
+            <label className="text-sm font-medium">Telegram Bot有効化</label>
+            <Switch
+              checked={telegramEnabled}
+              onChange={(checked) => setTelegramEnabled(checked)}
+            />
+          </div>
+
+          {/* Bot Token */}
+          {telegramEnabled && (
+            <>
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-medium">Bot Token</label>
+                <Input
+                  value={telegramToken}
+                  onChange={(e) => setTelegramToken(e.target.value)}
+                  placeholder="8237820882:AAFD6LgFZdLSZ..."
+                  size="large"
+                />
+                <p className="mt-1 text-xs text-neutral-500">
+                  @BotFatherで取得したトークンを入力
+                </p>
+              </div>
+
+              {/* User ID */}
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-medium">許可するUser ID</label>
+                <Input
+                  value={telegramUserId}
+                  onChange={(e) => setTelegramUserId(e.target.value)}
+                  placeholder="8555516193"
+                  size="large"
+                />
+                <p className="mt-1 text-xs text-neutral-500">
+                  @useinfobot で取得したIDを入力（あなた専用）
+                </p>
+              </div>
+
+              {/* Gateway Control */}
+              <div className="rounded-lg bg-neutral-800 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-medium">Gateway状態</span>
+                  <span className={gatewayRunning ? 'text-green-500' : 'text-neutral-500'}>
+                    {gatewayRunning ? '●実行中' : '○停止中'}
+                  </span>
+                </div>
+                <Space>
+                  {!gatewayRunning ? (
+                    <Button type="primary" onClick={handleStartGateway} loading={loading}>
+                      🚀 Gateway起動
+                    </Button>
+                  ) : (
+                    <Button danger onClick={handleStopGateway} loading={loading}>
+                      ⏹ Gateway停止
+                    </Button>
+                  )}
+                </Space>
+                <p className="mt-2 text-xs text-neutral-400">
+                  Gateway起動後、Telegramボットにメッセージを送信できます
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

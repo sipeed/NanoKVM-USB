@@ -3,6 +3,7 @@ import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import http from 'http'
 
 export interface PicoclawConfig {
   agents?: {
@@ -40,6 +41,7 @@ export class PicoclawManager {
   private process: ChildProcess | null = null
   private configPath: string
   private picoclawBinary: string
+  private recentApiCalls: Map<string, number> = new Map() // endpoint+body → timestamp for dedup
 
   constructor() {
     // picoclaw config path: ~/.picoclaw/config.json
@@ -123,11 +125,15 @@ export class PicoclawManager {
     })
 
     this.process.stdout?.on('data', (data) => {
-      console.log('[Picoclaw Output]', data.toString())
+      const text = data.toString()
+      console.log('[Picoclaw Output]', text)
+      this.interceptToolCallText(text)
     })
 
     this.process.stderr?.on('data', (data) => {
-      console.error('[Picoclaw Error]', data.toString())
+      const text = data.toString()
+      console.error('[Picoclaw Error]', text)
+      this.interceptToolCallText(text)
     })
 
     this.process.on('close', (code) => {
@@ -235,7 +241,13 @@ export class PicoclawManager {
 
       agent.on('close', (code) => {
         if (code === 0) {
-          resolve(output)
+          // Always run interceptor - dedup in callApi prevents double execution
+          this.interceptToolCallText(output)
+
+          // Strip action tags from the response shown to user
+          const cleanResponse = this.stripActionTags(output)
+
+          resolve(cleanResponse || output)
         } else {
           reject(new Error(`Agent command failed: ${errorOutput}`))
         }
@@ -245,5 +257,326 @@ export class PicoclawManager {
         reject(err)
       })
     })
+  }
+
+  /**
+   * Strip <<nanokvm:...>> action tags and JSON tool calls from text,
+   * returning only the human-readable message.
+   */
+  private stripActionTags(text: string): string {
+    let cleaned = text
+      // Remove <<nanokvm:...>> tags
+      .replace(/<<nanokvm:\w+:[^>]+>>/g, '')
+      // Remove any JSON object containing nanokvm_ (any key order)
+      .replace(/\{[^{}]*nanokvm_\w+[^{}]*\{[^}]*\}[^{}]*\}/g, '')
+      // Remove Python-like function calls
+      .replace(/nanokvm_\w+\([^)]*\)/g, '')
+      // Remove LLM preamble text
+      .replace(/The function call th[ae]t? best answers the prompt is:?/gi, '')
+      .replace(/I've completed processing\s*,?\s*but have no response to give\.?/gi, '')
+      .replace(/Here is the function call:?/gi, '')
+      .replace(/I will call:?/gi, '')
+      .trim()
+
+    // If nothing left after stripping, return a default message
+    if (!cleaned) {
+      cleaned = 'コマンドを実行しました'
+    }
+
+    return cleaned
+  }
+
+  /**
+   * Intercept tool call text that LLM outputs instead of actual tool calls.
+   * All formats are normalized to {toolName, params} then executed through a single path.
+   */
+  private interceptToolCallText(text: string): void {
+    let matched = false
+
+    // Format 1: <<nanokvm:action:params>> tags
+    const tagPattern = /<<nanokvm:(\w+):([^>]+)>>/g
+    let tagMatch: RegExpExecArray | null
+    while ((tagMatch = tagPattern.exec(text)) !== null) {
+      const toolName = tagMatch[1]
+      const paramStr = tagMatch[2]
+      console.log(`[Picoclaw Interceptor] Detected action tag: <<nanokvm:${toolName}:${paramStr}>>`)
+      const params = this.parseActionTagParams(toolName, paramStr)
+      this.executeToolCall(toolName, params)
+      matched = true
+    }
+
+    // Format 2: JSON object containing nanokvm_ (any key order)
+    if (!matched) {
+      const jsonObjects = this.extractJsonObjects(text)
+      for (const obj of jsonObjects) {
+        const nameField = String(obj.name || obj.tool || '')
+        const nanoMatch = nameField.match(/^nanokvm_(\w+)$/)
+        if (!nanoMatch) continue
+
+        const toolName = nanoMatch[1]
+        const params = (obj.parameters || obj.args || obj.arguments || {}) as Record<string, unknown>
+        console.log(`[Picoclaw Interceptor] Detected JSON tool call: nanokvm_${toolName}`, params)
+        this.executeToolCall(toolName, params)
+        matched = true
+      }
+    }
+
+    // Format 3: Python-like function call: nanokvm_login(password='123')
+    if (!matched) {
+      const funcPattern = /nanokvm_(\w+)\(([^)]+)\)/g
+      let funcMatch: RegExpExecArray | null
+      while ((funcMatch = funcPattern.exec(text)) !== null) {
+        const toolName = funcMatch[1]
+        const argsStr = funcMatch[2]
+        console.log(`[Picoclaw Interceptor] Detected function call: nanokvm_${toolName}(${argsStr})`)
+        try {
+          const params = this.parseFunctionArgs(argsStr)
+          this.executeToolCall(toolName, params)
+          matched = true
+        } catch (err) {
+          console.error(`[Picoclaw Interceptor] Failed to parse function args: ${argsStr}`, err)
+        }
+      }
+    }
+
+    if (!matched) {
+      console.log('[Picoclaw Interceptor] No tool call patterns found in output')
+    }
+  }
+
+  /**
+   * Parse Python-like function arguments: password='123qweasd', keys=['Win','L']
+   */
+  private parseFunctionArgs(argsStr: string): Record<string, unknown> {
+    const result: Record<string, unknown> = {}
+    // Match key=value pairs: password='123', keys=['Win','L'], username="admin"
+    const pairPattern = /(\w+)\s*=\s*('[^']*'|"[^"]*"|\[[^\]]*\]|[^,]+)/g
+    let pair: RegExpExecArray | null
+    while ((pair = pairPattern.exec(argsStr)) !== null) {
+      const key = pair[1]
+      let value: string = pair[2].trim()
+      // Strip surrounding quotes
+      if ((value.startsWith("'") && value.endsWith("'")) ||
+          (value.startsWith('"') && value.endsWith('"'))) {
+        value = value.slice(1, -1)
+      }
+      // Try to parse arrays
+      if (value.startsWith('[')) {
+        try {
+          result[key] = JSON.parse(value.replace(/'/g, '"'))
+        } catch {
+          result[key] = value
+        }
+      } else {
+        result[key] = value
+      }
+    }
+    return result
+  }
+
+  /**
+   * Parse action tag params into a normalized params object.
+   * e.g. "Win,L" for shortcut → {keys: ["Win","L"]}
+   * e.g. "123qweasd" for login → {password: "123qweasd"}
+   */
+  private parseActionTagParams(toolName: string, paramStr: string): Record<string, unknown> {
+    switch (toolName) {
+      case 'shortcut': {
+        const keys = paramStr.split(',').map((k) => k.trim()).filter(Boolean)
+        return { keys }
+      }
+      case 'login': {
+        const parts = paramStr.split(':')
+        const result: Record<string, string> = { password: parts[0] }
+        if (parts.length > 1 && parts[1]) result.username = parts[1]
+        return result
+      }
+      case 'type':
+        return { text: paramStr }
+      case 'click':
+        return { button: paramStr || 'left' }
+      default:
+        return { raw: paramStr }
+    }
+  }
+
+  /**
+   * Extract JSON objects from text by finding balanced braces.
+   * Returns parsed objects; silently skips invalid JSON.
+   */
+  private extractJsonObjects(text: string): Record<string, unknown>[] {
+    const results: Record<string, unknown>[] = []
+    let i = 0
+    while (i < text.length) {
+      if (text[i] === '{') {
+        let depth = 0
+        let j = i
+        while (j < text.length) {
+          if (text[j] === '{') depth++
+          else if (text[j] === '}') depth--
+          if (depth === 0) break
+          j++
+        }
+        if (depth === 0) {
+          const candidate = text.slice(i, j + 1)
+          try {
+            const parsed = JSON.parse(candidate)
+            if (typeof parsed === 'object' && parsed !== null) {
+              results.push(parsed as Record<string, unknown>)
+            }
+          } catch {
+            // Try fixing single quotes → double quotes
+            try {
+              const fixed = candidate.replace(/'/g, '"')
+              const parsed = JSON.parse(fixed)
+              if (typeof parsed === 'object' && parsed !== null) {
+                results.push(parsed as Record<string, unknown>)
+              }
+            } catch {
+              // Not valid JSON, skip
+            }
+          }
+          i = j + 1
+        } else {
+          i++
+        }
+      } else {
+        i++
+      }
+    }
+    return results
+  }
+
+  /**
+   * Single execution path for all detected tool calls.
+   * All formats (action tags, JSON, function calls) converge here.
+   */
+  private executeToolCall(toolName: string, params: Record<string, unknown>): void {
+    const API_BASE = 'http://127.0.0.1:18792'
+
+    switch (toolName) {
+      case 'shortcut': {
+        const keys = this.normalizeKeysParam(params.keys)
+        if (keys.length > 0) {
+          this.callApi(`${API_BASE}/api/keyboard/shortcut`, { keys })
+        }
+        break
+      }
+      case 'login': {
+        const password = String(params.password || '')
+        const username = params.username && String(params.username) !== '' ? String(params.username) : undefined
+        if (password) {
+          const body: Record<string, string> = { password }
+          if (username) body.username = username
+          this.callApi(`${API_BASE}/api/keyboard/login`, body)
+        }
+        break
+      }
+      case 'type': {
+        const text = String(params.text || '')
+        if (text) {
+          this.callApi(`${API_BASE}/api/keyboard/type`, { text })
+        }
+        break
+      }
+      case 'click': {
+        const button = String(params.button || 'left')
+        this.callApi(`${API_BASE}/api/mouse/click`, { button })
+        break
+      }
+      default:
+        console.log(`[Picoclaw] Unknown tool: nanokvm_${toolName}`)
+    }
+  }
+
+  /**
+   * Normalize keys parameter from various LLM formats
+   */
+  private normalizeKeysParam(keys: unknown): string[] {
+    if (Array.isArray(keys)) {
+      // Flatten "Win+L" elements to ["Win", "L"]
+      const result: string[] = []
+      for (const k of keys) {
+        if (typeof k === 'string') {
+          result.push(...k.split('+').map((s) => s.trim()).filter(Boolean))
+        }
+      }
+      return result
+    }
+
+    if (typeof keys === 'string') {
+      let str = keys.trim()
+      // Handle stringified arrays like "['Win+L']" or "['Win', 'L']"
+      if (str.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(str.replace(/'/g, '"'))
+          if (Array.isArray(parsed)) {
+            return this.normalizeKeysParam(parsed)
+          }
+        } catch {
+          // Strip brackets and quotes, then split
+          str = str.replace(/[\[\]'"]/g, '')
+        }
+      }
+      return str.split('+').map((s) => s.trim()).filter(Boolean)
+    }
+
+    return []
+  }
+
+  /**
+   * Make an HTTP POST request to the local API server.
+   * Includes deduplication: if the same endpoint+body was called within
+   * the last 15 seconds, skip the duplicate call.
+   */
+  private callApi(url: string, body: Record<string, unknown>): void {
+    const urlObj = new URL(url)
+    const postData = JSON.stringify(body)
+    const dedupKey = `${urlObj.pathname}:${postData}`
+    const now = Date.now()
+
+    // Dedup: skip if same call was made within 15 seconds
+    const lastCall = this.recentApiCalls.get(dedupKey)
+    if (lastCall && now - lastCall < 15000) {
+      console.log(`[Picoclaw Interceptor] Skipping duplicate API call: ${urlObj.pathname} (called ${now - lastCall}ms ago)`)
+      return
+    }
+    this.recentApiCalls.set(dedupKey, now)
+
+    // Clean old entries (older than 30s)
+    for (const [key, ts] of this.recentApiCalls) {
+      if (now - ts > 30000) this.recentApiCalls.delete(key)
+    }
+
+    console.log(`[Picoclaw Interceptor] Calling API: POST ${urlObj.pathname} ${postData}`)
+
+    const req = http.request(
+      {
+        hostname: urlObj.hostname,
+        port: urlObj.port,
+        path: urlObj.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      },
+      (res) => {
+        let data = ''
+        res.on('data', (chunk) => {
+          data += chunk
+        })
+        res.on('end', () => {
+          console.log(`[Picoclaw Interceptor] API response: ${res.statusCode} ${data}`)
+        })
+      }
+    )
+
+    req.on('error', (err) => {
+      console.error(`[Picoclaw Interceptor] API call failed:`, err.message)
+    })
+
+    req.write(postData)
+    req.end()
   }
 }

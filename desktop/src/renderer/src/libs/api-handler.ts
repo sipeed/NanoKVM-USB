@@ -7,14 +7,17 @@ const keyboardReport = new KeyboardReport()
 /**
  * Type text through NanoKVM keyboard interface
  * Called by API server when picoclaw sends a keyboard command
+ * @param slowMode - If true, use 300ms delay between characters for PIN field stability
  */
-export async function typeText(text: string): Promise<void> {
+export async function typeText(text: string, slowMode: boolean = false): Promise<void> {
+  const charDelay = slowMode ? 300 : 150
+  
   for (const char of text) {
     // Press key
     await typeChar(char)
     
     // Wait between characters
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, charDelay))
   }
   
   // Ensure all keys are released at the end
@@ -35,11 +38,14 @@ async function typeChar(char: string): Promise<void> {
   const code = getCodeForChar(char)
   if (!code) {
     console.warn(`[API Handler] Unsupported character: ${char}`)
-    // Release Shift if it was pressed
+    // Release Shift if it was pressed and reset
     if (needsShift) {
       const releaseShift = keyboardReport.keyUp('ShiftLeft')
       await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, releaseShift)
     }
+    // Ensure clean state
+    const resetReport = keyboardReport.reset()
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, resetReport)
     return
   }
 
@@ -47,23 +53,28 @@ async function typeChar(char: string): Promise<void> {
   const pressReport = keyboardReport.keyDown(code)
   await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, pressReport)
   
-  await new Promise((r) => setTimeout(r, 50))
+  await new Promise((r) => setTimeout(r, 30))
   
   // Release key
   const releaseReport = keyboardReport.keyUp(code)
   await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, releaseReport)
   
+  await new Promise((r) => setTimeout(r, 30))
+  
   // Release Shift if it was pressed
   if (needsShift) {
-    await new Promise((r) => setTimeout(r, 20))
     const releaseShift = keyboardReport.keyUp('ShiftLeft')
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, releaseShift)
+    await new Promise((r) => setTimeout(r, 30))
   }
+  
+  // Critical: Ensure all keys are released before next character
+  const finalReset = keyboardReport.reset()
+  await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, finalReset)
+  await new Promise((r) => setTimeout(r, 30))
 }
 
 function getCodeForChar(char: string): string | null {
-  const ascii = char.charCodeAt(0)
-  
   // Map common characters to keyboard codes
   if (char >= 'a' && char <= 'z') return 'Key' + char.toUpperCase()
   if (char >= 'A' && char <= 'Z') return 'Key' + char
@@ -91,13 +102,96 @@ function getCodeForChar(char: string): string | null {
 }
 
 /**
+ * Normalize common key name aliases to DOM KeyboardEvent.code format.
+ * LLMs frequently use short names like "Win", "Ctrl", "Alt" instead of
+ * "MetaLeft", "ControlLeft", "AltLeft", etc.
+ */
+const KEY_ALIASES: Record<string, string> = {
+  // Modifier aliases (case-insensitive lookup done below)
+  win: 'MetaLeft',
+  windows: 'MetaLeft',
+  meta: 'MetaLeft',
+  super: 'MetaLeft',
+  cmd: 'MetaLeft',
+  command: 'MetaLeft',
+  ctrl: 'ControlLeft',
+  control: 'ControlLeft',
+  alt: 'AltLeft',
+  option: 'AltLeft',
+  shift: 'ShiftLeft',
+  // Right-side modifiers
+  rctrl: 'ControlRight',
+  ralt: 'AltRight',
+  rshift: 'ShiftRight',
+  rwin: 'MetaRight',
+  // Special keys
+  del: 'Delete',
+  esc: 'Escape',
+  return: 'Enter',
+  bs: 'Backspace',
+  pgup: 'PageUp',
+  pgdn: 'PageDown',
+  pgdown: 'PageDown',
+  up: 'ArrowUp',
+  down: 'ArrowDown',
+  left: 'ArrowLeft',
+  right: 'ArrowRight',
+  printscreen: 'PrintScreen',
+  prtsc: 'PrintScreen',
+  scrolllock: 'ScrollLock',
+  numlock: 'NumLock',
+  capslock: 'CapsLock',
+  contextmenu: 'ContextMenu',
+  menu: 'ContextMenu'
+}
+
+function normalizeKeyName(key: string): string {
+  // Already a valid DOM code? Return as-is
+  // Check common patterns: "KeyX", "DigitN", "FN", "ArrowX", etc.
+  if (/^(Key[A-Z]|Digit\d|F\d{1,2}|Arrow\w+|Control\w+|Shift\w+|Alt\w+|Meta\w+|Numpad\w+)$/.test(key)) {
+    return key
+  }
+
+  // Check exact match in known keys (Enter, Tab, Space, Delete, etc.)
+  const knownExact = [
+    'Enter', 'Tab', 'Space', 'Backspace', 'Delete', 'Escape', 'Insert',
+    'Home', 'End', 'PageUp', 'PageDown', 'CapsLock', 'NumLock', 'ScrollLock',
+    'PrintScreen', 'Pause', 'ContextMenu',
+    'Minus', 'Equal', 'BracketLeft', 'BracketRight', 'Backslash',
+    'Semicolon', 'Quote', 'Backquote', 'Comma', 'Period', 'Slash'
+  ]
+  for (const k of knownExact) {
+    if (key === k) return k
+  }
+
+  // Lookup alias (case-insensitive)
+  const alias = KEY_ALIASES[key.toLowerCase()]
+  if (alias) return alias
+
+  // Single letter → KeyX
+  if (/^[a-zA-Z]$/.test(key)) return 'Key' + key.toUpperCase()
+
+  // Single digit → DigitN
+  if (/^\d$/.test(key)) return 'Digit' + key
+
+  // F-key (e.g. "F1" - "F24")
+  if (/^[Ff]\d{1,2}$/.test(key)) return key.toUpperCase()
+
+  console.warn(`[API Handler] Unknown key name "${key}", passing through as-is`)
+  return key
+}
+
+/**
  * Send keyboard shortcut (e.g., Win+L, Ctrl+Alt+Del)
+ * Accepts both DOM codes (MetaLeft, KeyL) and common aliases (Win, L, Ctrl, Alt, Del)
  */
 export async function sendShortcut(keys: string[]): Promise<void> {
   const keyboardReport = new KeyboardReport()
+  const normalizedKeys = keys.map(normalizeKeyName)
+  console.log(`[API Handler] Shortcut: ${keys.join('+')} → ${normalizedKeys.join('+')}`)
   
   // Press all keys
-  for (const key of keys) {
+  for (const key of normalizedKeys) {
     const pressReport = keyboardReport.keyDown(key)
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, pressReport)
     await new Promise((r) => setTimeout(r, 20))
@@ -107,8 +201,8 @@ export async function sendShortcut(keys: string[]): Promise<void> {
   await new Promise((r) => setTimeout(r, 100))
   
   // Release all keys in reverse order
-  for (let i = keys.length - 1; i >= 0; i--) {
-    const releaseReport = keyboardReport.keyUp(keys[i])
+  for (let i = normalizedKeys.length - 1; i >= 0; i--) {
+    const releaseReport = keyboardReport.keyUp(normalizedKeys[i])
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, releaseReport)
     await new Promise((r) => setTimeout(r, 20))
   }
@@ -158,65 +252,92 @@ export async function moveMouse(x: number, y: number): Promise<void> {
 }
 
 /**
- * Login to Windows with PIN or username+password
- * @param password - PIN code or password
- * @param username - Username (optional, for full login)
+ * Press and release a single key using a fresh KeyboardReport
  */
-export async function loginToWindows(password: string, username?: string): Promise<void> {
-  const keyboardReport = new KeyboardReport()
-  
-  if (username) {
-    // Full login: username → Tab → password → Enter
-    console.log('[API Handler] Performing full login with username')
-    
-    // Type username
-    await typeText(username)
-    await new Promise((r) => setTimeout(r, 200))
-    
-    // Press Tab to move to password field
-    const tabPress = keyboardReport.keyDown('Tab')
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, tabPress)
-    await new Promise((r) => setTimeout(r, 50))
-    const tabRelease = keyboardReport.keyUp('Tab')
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, tabRelease)
-    await new Promise((r) => setTimeout(r, 200))
-    
-    // Type password
-    await typeText(password)
-    await new Promise((r) => setTimeout(r, 200))
-    
-    // Press Enter
-    const enterPress = keyboardReport.keyDown('Enter')
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, enterPress)
-    await new Promise((r) => setTimeout(r, 50))
-    const enterRelease = keyboardReport.keyUp('Enter')
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, enterRelease)
-  } else {
-    // PIN-only login: password → Enter
-    console.log('[API Handler] Performing PIN login')
-    
-    // Type PIN
-    await typeText(password)
-    await new Promise((r) => setTimeout(r, 200))
-    
-    // Press Enter
-    const enterPress = keyboardReport.keyDown('Enter')
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, enterPress)
-    await new Promise((r) => setTimeout(r, 50))
-    const enterRelease = keyboardReport.keyUp('Enter')
-    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, enterRelease)
-  }
-  
-  // Final cleanup
-  const finalRelease = keyboardReport.reset()
-  await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, finalRelease)
-  
-  console.log('[API Handler] Login sequence completed')
+async function pressKey(code: string, holdMs: number = 50): Promise<void> {
+  const kr = new KeyboardReport()
+  const press = kr.keyDown(code)
+  await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, press)
+  await new Promise((r) => setTimeout(r, holdMs))
+  const release = kr.keyUp(code)
+  await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, release)
+  await new Promise((r) => setTimeout(r, 30))
+  // Ensure clean state
+  await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, kr.reset())
 }
 
-async function sendKeyboard(modifier: number, code: number): Promise<void> {
-  const keys = [modifier, 0, code, 0, 0, 0, 0, 0]
-  await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, keys)
+/**
+ * Login to Windows with PIN or username+password
+ *
+ * Windows lock screen behavior:
+ *   - Win+L → shows clock/image lock screen
+ *   - Any key press → shows PIN/password entry
+ *   - PIN field is AUTO-FOCUSED (no click needed!)
+ *
+ * Simplified sequence:
+ *   1. Space     → wake sign-in screen (shows PIN field)
+ *   2. Wait 3s   → let Windows render the PIN input
+ *   3. Backspace ×20 → clear any leftover characters (Ctrl+A doesn't work in PIN fields)
+ *   4. Type PIN one character at a time
+ *   5. Enter     → submit
+ *
+ * @param password - PIN code or password
+ * @param username - Username (optional, for full login with username + password)
+ */
+export async function loginToWindows(password: string, username?: string): Promise<void> {
+  // --- Step 1: Wake sign-in screen ---
+  console.log('[API Handler] Step 1: Pressing Space to wake sign-in screen...')
+  await pressKey('Space')
+  await new Promise((r) => setTimeout(r, 500))
+  
+  // Press Space again as backup wake
+  console.log('[API Handler] Step 1b: Pressing Space again as backup...')
+  await pressKey('Space')
+
+  // Wait for PIN / password input to appear and auto-focus
+  console.log('[API Handler] Step 2: Waiting 3s for sign-in screen...')
+  await new Promise((r) => setTimeout(r, 3000))
+
+  // --- Step 2: Clear any existing content with Backspace ---
+  // Windows PIN field doesn't support Ctrl+A, so use Backspace
+  console.log('[API Handler] Step 3: Clearing field with Backspace...')
+  for (let i = 0; i < 20; i++) {
+    await pressKey('Backspace', 30)
+    await new Promise((r) => setTimeout(r, 30))
+  }
+  await new Promise((r) => setTimeout(r, 300))
+
+  if (username) {
+    // Full login: username → Tab → password → Enter
+    console.log('[API Handler] Step 4: Typing username...')
+    await typeText(username)
+    await new Promise((r) => setTimeout(r, 300))
+
+    console.log('[API Handler] Step 5: Pressing Tab...')
+    await pressKey('Tab')
+    await new Promise((r) => setTimeout(r, 300))
+
+    console.log('[API Handler] Step 6: Typing password...')
+    await typeText(password)
+    await new Promise((r) => setTimeout(r, 300))
+
+    console.log('[API Handler] Step 7: Pressing Enter...')
+    await pressKey('Enter')
+  } else {
+    // PIN-only login
+    console.log(`[API Handler] Step 4: Typing PIN (${password.length} chars)...`)
+    await typeText(password, false) // 150ms per character
+    await new Promise((r) => setTimeout(r, 300))
+
+    console.log('[API Handler] Step 5: Pressing Enter...')
+    await pressKey('Enter')
+  }
+
+  // Final safety: ensure all keys released
+  const finalKr = new KeyboardReport()
+  await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, finalKr.reset())
+
+  console.log('[API Handler] Login sequence completed')
 }
 
 async function sendMouse(buttons: number, deltaX: number, deltaY: number): Promise<void> {
