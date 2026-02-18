@@ -172,6 +172,9 @@ app.whenReady().then(() => {
   // Set main window for API server
   apiServer.setMainWindow(mainWindow)
 
+  // Auto-start Telegram gateway if previously enabled
+  picoclawManager.autoStartGatewayIfEnabled()
+
   events.registerUpdater(mainWindow)
 
   app.on('activate', function () {

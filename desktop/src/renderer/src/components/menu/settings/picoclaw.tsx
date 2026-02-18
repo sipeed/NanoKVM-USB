@@ -108,10 +108,12 @@ export const PicoclawSettings = (): ReactElement => {
   const [telegramToken, setTelegramToken] = useState<string>('')
   const [telegramUserId, setTelegramUserId] = useState<string>('')
   const [gatewayRunning, setGatewayRunning] = useState<boolean>(false)
+  const [picoclawVersion, setPicoclawVersion] = useState<string>('')
 
   useEffect(() => {
     loadConfig()
     loadGatewayStatus()
+    loadVersion()
   }, [])
 
   async function loadConfig(): Promise<void> {
@@ -141,6 +143,17 @@ export const PicoclawSettings = (): ReactElement => {
       }
     } catch (err) {
       console.error('Failed to load picoclaw config:', err)
+    }
+  }
+
+  async function loadVersion(): Promise<void> {
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GET_VERSION)
+      if (result.success && result.version) {
+        setPicoclawVersion(result.version)
+      }
+    } catch (err) {
+      console.error('Failed to load picoclaw version:', err)
     }
   }
 
@@ -334,7 +347,14 @@ export const PicoclawSettings = (): ReactElement => {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h2 className="text-xl font-semibold">{t('settings.picoclaw.title')}</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold">{t('settings.picoclaw.title')}</h2>
+          {picoclawVersion && (
+            <span className="rounded bg-neutral-700 px-2 py-0.5 text-xs text-neutral-400">
+              picoclaw {picoclawVersion}
+            </span>
+          )}
+        </div>
         <p className="mt-2 text-sm text-neutral-400">{t('settings.picoclaw.description')}</p>
       </div>
 

@@ -101,4 +101,15 @@ export function registerPicoclawHandlers(manager: PicoclawManager): void {
       return { success: false, error: String(error) }
     }
   })
+
+  // Get picoclaw version
+  ipcMain.handle(IpcEvents.PICOCLAW_GET_VERSION, async () => {
+    try {
+      const version = await manager.getVersion()
+      return { success: true, version }
+    } catch (error) {
+      console.error('[IPC] Failed to get picoclaw version:', error)
+      return { success: false, error: String(error) }
+    }
+  })
 }

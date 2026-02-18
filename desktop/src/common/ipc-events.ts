@@ -33,5 +33,6 @@ export enum IpcEvents {
   PICOCLAW_UPDATE_CONFIG = 'picoclaw-update-config',
   PICOCLAW_START_GATEWAY = 'picoclaw-start-gateway',
   PICOCLAW_STOP_GATEWAY = 'picoclaw-stop-gateway',
-  PICOCLAW_GATEWAY_STATUS = 'picoclaw-gateway-status'
+  PICOCLAW_GATEWAY_STATUS = 'picoclaw-gateway-status',
+  PICOCLAW_GET_VERSION = 'picoclaw-get-version'
 }

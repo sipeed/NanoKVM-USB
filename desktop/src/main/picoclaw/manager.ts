@@ -167,6 +167,53 @@ export class PicoclawManager {
   }
 
   /**
+   * Auto-start gateway if Telegram is enabled and configured
+   */
+  async autoStartGatewayIfEnabled(): Promise<void> {
+    try {
+      const config = this.getConfig()
+      const telegram = config.channels?.telegram as {
+        enabled?: boolean
+        token?: string
+        allow_from?: string[]
+      } | undefined
+
+      if (
+        telegram?.enabled &&
+        telegram?.token &&
+        telegram?.allow_from?.length
+      ) {
+        console.log('[Picoclaw] Telegram is enabled in config, auto-starting gateway...')
+        await this.start()
+        console.log('[Picoclaw] Gateway auto-started successfully')
+      }
+    } catch (err) {
+      console.error('[Picoclaw] Failed to auto-start gateway:', err)
+    }
+  }
+
+  /**
+   * Get picoclaw version string
+   */
+  async getVersion(): Promise<string> {
+    return new Promise((resolve) => {
+      try {
+        const proc = spawn(this.picoclawBinary, ['version'], { stdio: 'pipe' })
+        let output = ''
+        proc.stdout?.on('data', (data) => { output += data.toString() })
+        proc.on('close', () => {
+          // Parse "picoclaw v0.1.2-26-gc123ba8 (git: c123ba8f)" → "v0.1.2-26-gc123ba8"
+          const match = output.match(/picoclaw\s+(v[^\s]+)/)
+          resolve(match ? match[1] : 'unknown')
+        })
+        proc.on('error', () => resolve('unknown'))
+      } catch {
+        resolve('unknown')
+      }
+    })
+  }
+
+  /**
    * Get picoclaw status
    */
   getStatus(): PicoclawStatus {
