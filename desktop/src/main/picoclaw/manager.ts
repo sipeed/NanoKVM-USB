@@ -509,19 +509,26 @@ export class PicoclawManager {
    * Single execution path for all detected tool calls.
    * All formats (action tags, JSON, function calls) converge here.
    */
-  private executeToolCall(toolName: string, params: Record<string, unknown>): void {
+  private async executeToolCall(toolName: string, params: Record<string, unknown>): Promise<void> {
     const API_BASE = 'http://127.0.0.1:18792'
 
     switch (toolName) {
       case 'shortcut': {
         const keys = this.normalizeKeysParam(params.keys)
         if (keys.length > 0) {
-          this.callApi(`${API_BASE}/api/keyboard/shortcut`, { keys })
-
-          // Detect Win+L lock command and schedule lock verification
+          // Detect Win+L lock command
           const normalizedKeys = keys.map((k) => k.toLowerCase())
           const hasWin = normalizedKeys.some((k) => ['win', 'windows', 'meta', 'cmd'].includes(k))
           const hasL = normalizedKeys.includes('l')
+
+          if (hasWin && hasL) {
+            // Pre-check: already locked?
+            const preCheck = await this.preCheckScreenState('lock')
+            if (preCheck === 'skip') return
+          }
+
+          this.callApi(`${API_BASE}/api/keyboard/shortcut`, { keys })
+
           if (hasWin && hasL) {
             this.scheduleScreenVerification('lock')
           }
@@ -532,6 +539,10 @@ export class PicoclawManager {
         const password = String(params.password || '')
         const username = params.username && String(params.username) !== '' ? String(params.username) : undefined
         if (password) {
+          // Pre-check: already logged in?
+          const preCheck = await this.preCheckScreenState('login')
+          if (preCheck === 'skip') return
+
           const body: Record<string, string> = { password }
           if (username) body.username = username
           this.callApi(`${API_BASE}/api/keyboard/login`, body)
@@ -591,6 +602,79 @@ export class PicoclawManager {
     }
 
     return []
+  }
+
+  /**
+   * Pre-check the current screen state before executing a lock or login command.
+   * If the screen is already in the target state, sends a feedback message and
+   * returns 'skip' to prevent unnecessary HID input.
+   *
+   * @param action - 'lock' (about to lock) or 'login' (about to login)
+   * @returns 'skip' if already in target state, 'proceed' otherwise
+   */
+  private async preCheckScreenState(action: 'lock' | 'login'): Promise<'skip' | 'proceed'> {
+    if (!isVisionConfigured()) {
+      // Vision not configured — can't pre-check, just proceed with the action
+      return 'proceed'
+    }
+
+    try {
+      console.log(`[Picoclaw] Pre-checking screen state before ${action}...`)
+      const captureResult = await this.callApiAsync(
+        'http://127.0.0.1:18792/api/screen/capture',
+        'GET'
+      )
+
+      if (!captureResult || !captureResult.image) {
+        console.warn('[Picoclaw] Pre-check screen capture failed, proceeding with action')
+        return 'proceed'
+      }
+
+      const prompt =
+        'この画像はWindows PCの画面キャプチャです。以下の2つのうちどの状態か判定してください:\n\n' +
+        '1. LOCK_SCREEN: ロック画面またはサインイン画面が表示されている（時計、日付、ユーザーアイコン、PIN入力欄等が見える）\n' +
+        '2. DESKTOP: デスクトップ画面が表示されている（タスクバー、アイコン、ウィンドウ等が見える）\n\n' +
+        '回答は以下のJSON形式のみで返してください（他のテキストは不要）:\n' +
+        '{"status": "LOCK_SCREEN" or "DESKTOP", "detail": "判定理由を1文で"}'
+
+      const analysis = await analyzeScreenWithVision(captureResult.image as string, prompt)
+      console.log('[Picoclaw] Pre-check analysis:', analysis)
+
+      // Parse status
+      let status = 'UNKNOWN'
+      try {
+        const jsonMatch = analysis.match(/\{[^}]+\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          status = parsed.status || 'UNKNOWN'
+        }
+      } catch {
+        if (analysis.includes('LOCK_SCREEN') || analysis.includes('ロック')) {
+          status = 'LOCK_SCREEN'
+        } else if (analysis.includes('DESKTOP') || analysis.includes('デスクトップ')) {
+          status = 'DESKTOP'
+        }
+      }
+
+      // Check if already in target state
+      if (action === 'lock' && status === 'LOCK_SCREEN') {
+        console.log('[Picoclaw] Already locked, skipping Win+L')
+        this.sendVerificationFeedback('🔒 すでにロック画面です。ロック操作は不要です。')
+        return 'skip'
+      }
+
+      if (action === 'login' && status === 'DESKTOP') {
+        console.log('[Picoclaw] Already logged in, skipping login sequence')
+        this.sendVerificationFeedback('✅ すでにログインされています。ログイン操作は不要です。')
+        return 'skip'
+      }
+
+      return 'proceed'
+    } catch (err) {
+      console.error(`[Picoclaw] Pre-check failed:`, err)
+      // On error, proceed with the action (fail-open)
+      return 'proceed'
+    }
   }
 
   /**

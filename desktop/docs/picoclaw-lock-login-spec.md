@@ -214,35 +214,56 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 ### フロー
 
 ```
-ロックコマンド (Win+L) / ログインコマンド実行
+ロックコマンド (Win+L) / ログインコマンド実行要求
   ↓
+━━━ 事前チェック（preCheckScreenState） ━━━
+Vision LLM が設定されているか？
+  ├─ NO → チェックをスキップし、そのままコマンドを実行
+  └─ YES → 現在の画面をキャプチャして状態を判定
+              ↓
+         現在の画面状態は？
+           │
+           ├ 「ロックして」＋ すでにロック画面
+           │   → 🔒 「すでにロック画面です。ロック操作は不要です。」
+           │   → Win+L を送信しない（スキップ）
+           │
+           ├ 「ログインして」＋ すでにデスクトップ
+           │   → ✅ 「すでにログインされています。ログイン操作は不要です。」
+           │   → PIN 入力シーケンスを送信しない（スキップ）
+           │
+           └ それ以外 → コマンドを実行
+  ↓
+━━━ コマンド実行 ━━━
 HID キー入力シーケンス
   ↓
-遅延後に自動起動 ← scheduleScreenVerification('lock' | 'login')
+━━━ 事後検証（scheduleScreenVerification） ━━━
+遅延後に自動起動
   ├─ lock: 3秒後（Ollama: 5秒後）
   └─ login: 12秒後（Ollama: 15秒後）
   ↓
-Vision LLM が設定されているか？
-  ├─ YES → スクリーンキャプチャ取得
-  │         ↓
-  │    <video> → <canvas>.drawImage() → base64 JPEG
-  │         ↓
-  │    Vision LLM API 呼び出し（画面状態を判定）
-  │         ↓
-  │    判定結果をチャット / Telegram にフィードバック
-  │
-  │  【ロック検証の場合】
-  │      ├─ 🔒 LOCK_SCREEN: 「ロック成功」
-  │      └─ ⚠️ DESKTOP: 「まだデスクトップが表示されています」
-  │
-  │  【ログイン検証の場合】
-  │      ├─ ✅ LOGIN_SUCCESS: 「ログイン成功」
-  │      ├─ ❌ LOGIN_FAILED: 「PINが正しくないようです」
-  │      └─ ⚠️ LOCK_SCREEN: 「まだサインイン画面です」
-  │
-  └─ NO → 設定案内メッセージを表示
-           「設定 → picoclaw → 👁️ 画面検証 Vision LLM で設定してください」
+スクリーンキャプチャ取得
+  ↓
+<video> → <canvas>.drawImage() → base64 JPEG
+  ↓
+Vision LLM API 呼び出し（画面状態を判定）
+  ↓
+判定結果をチャット / Telegram にフィードバック
+
+  【ロック検証の場合】
+      ├─ 🔒 LOCK_SCREEN: 「ロック成功」
+      └─ ⚠️ DESKTOP: 「まだデスクトップが表示されています」
+
+  【ログイン検証の場合】
+      ├─ ✅ LOGIN_SUCCESS: 「ログイン成功」
+      ├─ ❌ LOGIN_FAILED: 「PINが正しくないようです」
+      └─ ⚠️ LOCK_SCREEN: 「まだサインイン画面です」
 ```
+
+### Vision LLM 未設定時の振る舞い
+
+Vision LLM が設定されていない場合:
+- **事前チェック**: スキップされ、コマンドは常に実行される
+- **事後検証**: 設定案内メッセージが表示される（「設定 → picoclaw → 👁️ 画面検証 Vision LLM で設定してください」）
 
 ### Vision LLM 対応モデル一覧
 
@@ -298,9 +319,9 @@ Vision LLM の設定は `~/.picoclaw/config.json` に保存:
 | GET | `/api/screen/capture` | なし | 現在の画面をキャプチャ（base64 JPEG） |
 | POST | `/api/screen/verify-login` | なし | ログイン結果を Vision LLM で検証 |
 
-### Vision LLM 未設定時の振る舞い
+### Vision LLM 未設定時の振る舞い（事後検証メッセージ）
 
-Vision LLM が設定されていない場合、ロック・ログイン実行後に以下のメッセージが自動表示されます:
+Vision LLM が設定されていない場合、ロック・ログイン実行後に以下のメッセージが自動表示されます（事前チェックはスキップ）:
 
 ```
 🔍 画面検証にはVision LLMの設定が必要です。
