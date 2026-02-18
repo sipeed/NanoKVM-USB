@@ -1,5 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http'
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
+import { IpcEvents } from '@common/ipc-events'
+import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision } from '../picoclaw/vision'
 
 export interface ApiServerConfig {
   port: number
@@ -87,6 +89,10 @@ export class ApiServer {
       await this.handleMouseClick(req, res)
     } else if (req.method === 'POST' && url.pathname === '/api/mouse/move') {
       await this.handleMouseMove(req, res)
+    } else if (req.method === 'GET' && url.pathname === '/api/screen/capture') {
+      await this.handleScreenCapture(req, res)
+    } else if (req.method === 'POST' && url.pathname === '/api/screen/verify-login') {
+      await this.handleVerifyLogin(req, res)
     } else if (req.method === 'GET' && url.pathname === '/api/status') {
       await this.handleStatus(req, res)
     } else {
@@ -299,7 +305,7 @@ export class ApiServer {
     }
   }
 
-  private async handleStatus(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async handleStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(
       JSON.stringify({
@@ -308,6 +314,140 @@ export class ApiServer {
         mainWindowReady: this.mainWindow !== null
       })
     )
+  }
+
+  /**
+   * Capture screen from the HDMI video feed via renderer process.
+   * Returns base64 JPEG data URL.
+   */
+  private async handleScreenCapture(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!this.mainWindow) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Main window not available' }))
+      return
+    }
+
+    try {
+      const dataUrl = await this.requestScreenCapture()
+      if (dataUrl) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: true, image: dataUrl }))
+      } else {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Failed to capture screen' }))
+      }
+    } catch (err) {
+      console.error('[API Server] Screen capture error:', err)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: String(err) }))
+    }
+  }
+
+  /**
+   * Verify login result by capturing screen and analyzing with Vision LLM.
+   * Uses the separately configured Vision LLM (not the chat LLM).
+   */
+  private async handleVerifyLogin(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!this.mainWindow) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Main window not available' }))
+      return
+    }
+
+    try {
+      // Check Vision LLM configuration
+      if (!isVisionConfigured()) {
+        const setupMessage = getVisionSetupMessage()
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          success: false,
+          visionConfigured: false,
+          recommendation: setupMessage
+        }))
+        return
+      }
+
+      // Capture screen
+      const dataUrl = await this.requestScreenCapture()
+      if (!dataUrl) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Failed to capture screen' }))
+        return
+      }
+
+      // Analyze with Vision LLM
+      const prompt = 
+        'この画像はWindows PCの画面キャプチャです。以下の3つのうちどの状態か判定してください:\n\n' +
+        '1. LOGIN_SUCCESS: デスクトップ画面が表示されている（タスクバー、アイコン等が見える）\n' +
+        '2. LOGIN_FAILED: PIN/パスワードエラーメッセージが表示されている（「PIN が正しくありません」「パスワードが正しくありません」等）\n' +
+        '3. LOCK_SCREEN: ロック画面またはサインイン画面が表示されている（時計、ユーザーアイコン、入力欄等）\n\n' +
+        '回答は以下のJSON形式のみで返してください（他のテキストは不要）:\n' +
+        '{"status": "LOGIN_SUCCESS" or "LOGIN_FAILED" or "LOCK_SCREEN", "detail": "判定理由を1文で"}'
+
+      const analysis = await analyzeScreenWithVision(dataUrl, prompt)
+      console.log('[API Server] Vision analysis result:', analysis)
+
+      // Parse the Vision response
+      let status = 'UNKNOWN'
+      let detail = analysis
+
+      try {
+        // Try to extract JSON from the response
+        const jsonMatch = analysis.match(/\{[^}]+\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          status = parsed.status || 'UNKNOWN'
+          detail = parsed.detail || analysis
+        }
+      } catch {
+        // If JSON parsing fails, try keyword matching
+        if (analysis.includes('LOGIN_SUCCESS') || analysis.includes('デスクトップ')) {
+          status = 'LOGIN_SUCCESS'
+        } else if (analysis.includes('LOGIN_FAILED') || analysis.includes('正しくありません') || analysis.includes('incorrect')) {
+          status = 'LOGIN_FAILED'
+        } else if (analysis.includes('LOCK_SCREEN') || analysis.includes('ロック')) {
+          status = 'LOCK_SCREEN'
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        success: true,
+        visionConfigured: true,
+        status,
+        detail
+      }))
+    } catch (err) {
+      console.error('[API Server] Verify login error:', err)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: String(err) }))
+    }
+  }
+
+  /**
+   * Request screen capture from renderer process via IPC.
+   * Returns a Promise that resolves with the base64 data URL.
+   */
+  private requestScreenCapture(): Promise<string | null> {
+    return new Promise((resolve) => {
+      if (!this.mainWindow) {
+        resolve(null)
+        return
+      }
+
+      const timeout = setTimeout(() => {
+        ipcMain.removeAllListeners(IpcEvents.SCREEN_CAPTURE_RESULT)
+        console.warn('[API Server] Screen capture timed out')
+        resolve(null)
+      }, 5000)
+
+      ipcMain.once(IpcEvents.SCREEN_CAPTURE_RESULT, (_event, dataUrl: string | null) => {
+        clearTimeout(timeout)
+        resolve(dataUrl)
+      })
+
+      this.mainWindow.webContents.send(IpcEvents.SCREEN_CAPTURE)
+    })
   }
 
   getUrl(): string {

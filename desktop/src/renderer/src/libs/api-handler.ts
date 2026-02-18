@@ -346,6 +346,33 @@ async function sendMouse(buttons: number, deltaX: number, deltaY: number): Promi
 }
 
 /**
+ * Capture the current screen from the HDMI video feed.
+ * Returns a base64 JPEG data URL.
+ */
+export async function captureScreen(): Promise<string | null> {
+  const video = document.getElementById('video') as HTMLVideoElement
+  if (!video || !video.videoWidth || !video.videoHeight) {
+    console.warn('[API Handler] Video element not ready for capture')
+    return null
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = video.videoWidth
+  canvas.height = video.videoHeight
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    console.warn('[API Handler] Failed to create canvas context')
+    return null
+  }
+
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+  console.log(`[API Handler] Screen captured: ${canvas.width}x${canvas.height}, size: ${Math.round(dataUrl.length / 1024)}KB`)
+  return dataUrl
+}
+
+/**
  * Initialize API event handlers
  * Call this in App.tsx useEffect
  */
@@ -390,12 +417,23 @@ export function initializeApiHandlers(): () => void {
     })
   }
 
+  const handleScreenCapture = (_event): void => {
+    console.log('[API Handler] Screen capture requested')
+    captureScreen().then((dataUrl) => {
+      window.electron.ipcRenderer.send(IpcEvents.SCREEN_CAPTURE_RESULT, dataUrl)
+    }).catch((err) => {
+      console.error('[API Handler] Failed to capture screen:', err)
+      window.electron.ipcRenderer.send(IpcEvents.SCREEN_CAPTURE_RESULT, null)
+    })
+  }
+
   // Register IPC listeners
   window.electron.ipcRenderer.on('api:keyboard:type', handleKeyboardType)
   window.electron.ipcRenderer.on('api:keyboard:shortcut', handleKeyboardShortcut)
   window.electron.ipcRenderer.on('api:keyboard:login', handleKeyboardLogin)
   window.electron.ipcRenderer.on('api:mouse:click', handleMouseClick)
   window.electron.ipcRenderer.on('api:mouse:move', handleMouseMove)
+  window.electron.ipcRenderer.on(IpcEvents.SCREEN_CAPTURE, handleScreenCapture)
 
   // Return cleanup function
   return () => {
@@ -404,5 +442,6 @@ export function initializeApiHandlers(): () => void {
     window.electron.ipcRenderer.removeListener('api:keyboard:login', handleKeyboardLogin)
     window.electron.ipcRenderer.removeListener('api:mouse:click', handleMouseClick)
     window.electron.ipcRenderer.removeListener('api:mouse:move', handleMouseMove)
+    window.electron.ipcRenderer.removeListener(IpcEvents.SCREEN_CAPTURE, handleScreenCapture)
   }
 }

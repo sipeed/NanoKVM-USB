@@ -34,5 +34,10 @@ export enum IpcEvents {
   PICOCLAW_START_GATEWAY = 'picoclaw-start-gateway',
   PICOCLAW_STOP_GATEWAY = 'picoclaw-stop-gateway',
   PICOCLAW_GATEWAY_STATUS = 'picoclaw-gateway-status',
-  PICOCLAW_GET_VERSION = 'picoclaw-get-version'
+  PICOCLAW_GET_VERSION = 'picoclaw-get-version',
+
+  // Screen capture & login verification
+  SCREEN_CAPTURE = 'screen-capture',
+  SCREEN_CAPTURE_RESULT = 'screen-capture-result',
+  VERIFY_LOGIN_RESULT = 'verify-login-result'
 }

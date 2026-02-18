@@ -172,6 +172,9 @@ app.whenReady().then(() => {
   // Set main window for API server
   apiServer.setMainWindow(mainWindow)
 
+  // Set main window for picoclaw manager (for verification feedback)
+  picoclawManager.setMainWindow(mainWindow)
+
   // Auto-start Telegram gateway if previously enabled
   picoclawManager.autoStartGatewayIfEnabled()
 

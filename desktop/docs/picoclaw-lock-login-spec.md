@@ -181,3 +181,135 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 - **文字入力**: ASCII 英数字・基本記号のみ対応（日本語入力は非対応）
 - **マウス移動**: 座標指定は未実装（クリックのみ対応）
 - **ログイン待機**: PIN 入力欄の表示に約3秒の固定待機があるため、Windows の応答が遅い環境では失敗する可能性あり
+
+---
+
+## 画面検証機能（ロック・ログイン）
+
+ロック（Win+L）およびログインコマンド実行後、NanoKVM-USB の HDMI キャプチャ映像をスクリーンキャプチャし、**専用の Vision LLM** で画面内容を解析して結果を自動判定します。
+
+### 設計思想: チャット用 LLM と Vision LLM の分離
+
+画面検証に使用する Vision LLM は、チャット用の LLM とは**別に設定**します。
+
+```
+┌─────────────────────────────────────────────┐
+│  設定画面 (picoclaw.tsx)                     │
+│                                              │
+│  ── チャット LLM ──                          │
+│  [Provider] OpenRouter                       │
+│  [API Key]  sk-or-...                        │
+│  [Model]    Llama 3.1 8B 💨                  │
+│                                              │
+│  ── 👁️ 画面検証 Vision LLM ──              │
+│  [Provider] Groq (無料・クラウド・推奨)      │
+│  [API Key]  gsk_...                          │
+│  [Model]    Llama 3.2 11B Vision 👁️         │
+└─────────────────────────────────────────────┘
+```
+
+**理由**: チャットには安価なテキストLLM、画面検証にはVision対応LLMという使い分けが必要。
+例: チャット = Llama 3.1 8B (OpenRouter 無料枠) + Vision = Llama 3.2 11B Vision (Groq 無料)
+
+### フロー
+
+```
+ロックコマンド (Win+L) / ログインコマンド実行
+  ↓
+HID キー入力シーケンス
+  ↓
+遅延後に自動起動 ← scheduleScreenVerification('lock' | 'login')
+  ├─ lock: 3秒後（Ollama: 5秒後）
+  └─ login: 12秒後（Ollama: 15秒後）
+  ↓
+Vision LLM が設定されているか？
+  ├─ YES → スクリーンキャプチャ取得
+  │         ↓
+  │    <video> → <canvas>.drawImage() → base64 JPEG
+  │         ↓
+  │    Vision LLM API 呼び出し（画面状態を判定）
+  │         ↓
+  │    判定結果をチャット / Telegram にフィードバック
+  │
+  │  【ロック検証の場合】
+  │      ├─ 🔒 LOCK_SCREEN: 「ロック成功」
+  │      └─ ⚠️ DESKTOP: 「まだデスクトップが表示されています」
+  │
+  │  【ログイン検証の場合】
+  │      ├─ ✅ LOGIN_SUCCESS: 「ログイン成功」
+  │      ├─ ❌ LOGIN_FAILED: 「PINが正しくないようです」
+  │      └─ ⚠️ LOCK_SCREEN: 「まだサインイン画面です」
+  │
+  └─ NO → 設定案内メッセージを表示
+           「設定 → picoclaw → 👁️ 画面検証 Vision LLM で設定してください」
+```
+
+### Vision LLM 対応モデル一覧
+
+設定画面の「画面検証 Vision LLM」で選択可能なプロバイダとモデル:
+
+| プロバイダ | モデル | 料金 | 速度 | 備考 |
+|-----------|--------|------|------|------|
+| **Groq** | Llama 3.2 11B Vision | **無料** | 高速 | **推奨**: クレカ不要、14,400 req/日 |
+| **Groq** | Llama 3.2 90B Vision | **無料** | 低速 | 高精度 |
+| **Ollama** | Moondream2 (1.7B) | **無料** | ~60秒 | ローカル・CPU向き |
+| **Ollama** | LLaVA (7B) | **無料** | ~3分 | ローカル・高精度 |
+| OpenRouter | Gemini 2.0 Flash | 安価 | 高速 | API キー共有可 |
+| OpenRouter | Claude 3.5 Sonnet | 高額 | 中速 | 高精度 |
+| OpenAI | GPT-4o Mini | 安価 | 高速 | - |
+| OpenAI | GPT-4o | 高額 | 中速 | 高精度 |
+| Anthropic | Claude 3.5 Haiku | 安価 | 高速 | - |
+| Anthropic | Claude 3.5 Sonnet | 高額 | 中速 | 高精度 |
+
+### タイムアウト設定
+
+プロバイダに応じてタイマーを自動調整:
+
+| プロバイダ | キャプチャ遅延 (ロック) | キャプチャ遅延 (ログイン) | API タイムアウト |
+|-----------|----------------------|------------------------|----------------|
+| クラウド (Groq等) | 3秒 | 12秒 | 30秒 |
+| Ollama (ローカル) | 5秒 | 15秒 | 120秒 |
+
+### Config 構造
+
+Vision LLM の設定は `~/.picoclaw/config.json` に保存:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.1-8b-instruct",
+      "vision_provider": "groq",
+      "vision_model": "llama-3.2-11b-vision-preview"
+    }
+  },
+  "providers": {
+    "openrouter": { "api_key": "sk-or-..." },
+    "groq": { "api_key": "gsk_..." }
+  }
+}
+```
+
+### API エンドポイント（追加分）
+
+| メソッド | パス | パラメータ | 説明 |
+|----------|------|-----------|------|
+| GET | `/api/screen/capture` | なし | 現在の画面をキャプチャ（base64 JPEG） |
+| POST | `/api/screen/verify-login` | なし | ログイン結果を Vision LLM で検証 |
+
+### Vision LLM 未設定時の振る舞い
+
+Vision LLM が設定されていない場合、ロック・ログイン実行後に以下のメッセージが自動表示されます:
+
+```
+🔍 画面検証にはVision LLMの設定が必要です。
+
+設定 → picoclaw → 「👁️ 画面検証 Vision LLM」で設定してください。
+
+無料のおすすめ:
+  • Groq + Llama 3.2 11B Vision（クラウド・無料・高速・クレカ不要）
+  • Ollama + Moondream2（ローカル・無料・CPU向き）
+
+設定後、ロック・ログイン操作の結果を自動判定します。
+```

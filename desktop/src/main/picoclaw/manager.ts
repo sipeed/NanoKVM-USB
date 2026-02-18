@@ -1,9 +1,10 @@
 import { spawn, ChildProcess } from 'child_process'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import http from 'http'
+import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision, getVerificationDelay } from './vision'
 
 export interface PicoclawConfig {
   agents?: {
@@ -12,6 +13,8 @@ export interface PicoclawConfig {
       restrict_to_workspace?: boolean
       provider?: string
       model?: string
+      vision_provider?: string
+      vision_model?: string
       max_tokens?: number
       temperature?: number
       max_tool_iterations?: number
@@ -42,6 +45,7 @@ export class PicoclawManager {
   private configPath: string
   private picoclawBinary: string
   private recentApiCalls: Map<string, number> = new Map() // endpoint+body → timestamp for dedup
+  private mainWindow: BrowserWindow | null = null
 
   constructor() {
     // picoclaw config path: ~/.picoclaw/config.json
@@ -59,6 +63,13 @@ export class PicoclawManager {
     }
     
     console.log('[Picoclaw] Binary path:', this.picoclawBinary)
+  }
+
+  /**
+   * Set mainWindow reference for sending verification feedback
+   */
+  setMainWindow(window: BrowserWindow): void {
+    this.mainWindow = window
   }
 
   /**
@@ -506,6 +517,14 @@ export class PicoclawManager {
         const keys = this.normalizeKeysParam(params.keys)
         if (keys.length > 0) {
           this.callApi(`${API_BASE}/api/keyboard/shortcut`, { keys })
+
+          // Detect Win+L lock command and schedule lock verification
+          const normalizedKeys = keys.map((k) => k.toLowerCase())
+          const hasWin = normalizedKeys.some((k) => ['win', 'windows', 'meta', 'cmd'].includes(k))
+          const hasL = normalizedKeys.includes('l')
+          if (hasWin && hasL) {
+            this.scheduleScreenVerification('lock')
+          }
         }
         break
       }
@@ -516,6 +535,9 @@ export class PicoclawManager {
           const body: Record<string, string> = { password }
           if (username) body.username = username
           this.callApi(`${API_BASE}/api/keyboard/login`, body)
+
+          // Schedule login verification after login sequence completes
+          this.scheduleScreenVerification('login')
         }
         break
       }
@@ -569,6 +591,215 @@ export class PicoclawManager {
     }
 
     return []
+  }
+
+  /**
+   * Schedule screen verification after a lock or login command.
+   * Waits for the operation to complete, captures the screen,
+   * and analyzes it with Vision LLM (if configured).
+   *
+   * @param type - 'lock' for Win+L lock verification, 'login' for login verification
+   */
+  private scheduleScreenVerification(type: 'lock' | 'login'): void {
+    // Get appropriate delay based on operation and Vision provider
+    const config = this.getConfig()
+    const visionProvider = config.agents?.defaults?.vision_provider || ''
+    let delay: number
+
+    if (type === 'lock') {
+      // Lock is instant (Win+L), but Windows takes ~2-3s to show lock screen
+      delay = visionProvider === 'ollama' ? 5000 : 3000
+    } else {
+      // Login sequence: Space(500ms)→Space(500ms)→Wait(3000ms)→Backspace×20(1200ms)
+      //   →PIN typing(~1500ms)→Enter→Windows response(~3000ms) = ~10s
+      delay = getVerificationDelay(visionProvider)
+    }
+
+    console.log(`[Picoclaw] ${type} verification scheduled in ${delay / 1000}s`)
+
+    setTimeout(async () => {
+      try {
+        if (!isVisionConfigured()) {
+          // Vision LLM not configured, send setup message
+          console.log('[Picoclaw] Vision LLM not configured, sending setup message')
+          this.sendVerificationFeedback(getVisionSetupMessage())
+          return
+        }
+
+        // Request screen capture via API server
+        console.log(`[Picoclaw] Capturing screen for ${type} verification...`)
+        const captureResult = await this.callApiAsync(
+          'http://127.0.0.1:18792/api/screen/capture',
+          'GET'
+        )
+
+        if (!captureResult || !captureResult.image) {
+          console.warn('[Picoclaw] Screen capture failed, skipping verification')
+          return
+        }
+
+        // Build the appropriate prompt based on operation type
+        let prompt: string
+        if (type === 'lock') {
+          prompt =
+            'この画像はWindows PCの画面キャプチャです。以下の2つのうちどの状態か判定してください:\n\n' +
+            '1. LOCK_SCREEN: ロック画面が表示されている（時計、日付、ユーザーアイコン、背景画像等が見える）\n' +
+            '2. DESKTOP: デスクトップ画面が表示されている（タスクバー、アイコン、ウィンドウ等が見える）\n\n' +
+            '回答は以下のJSON形式のみで返してください（他のテキストは不要）:\n' +
+            '{"status": "LOCK_SCREEN" or "DESKTOP", "detail": "判定理由を1文で"}'
+        } else {
+          prompt =
+            'この画像はWindows PCの画面キャプチャです。以下の3つのうちどの状態か判定してください:\n\n' +
+            '1. LOGIN_SUCCESS: デスクトップ画面が表示されている（タスクバー、アイコン等が見える）\n' +
+            '2. LOGIN_FAILED: PIN/パスワードエラーメッセージが表示されている（「PIN が正しくありません」「パスワードが正しくありません」等）\n' +
+            '3. LOCK_SCREEN: ロック画面またはサインイン画面が表示されている（時計、ユーザーアイコン、入力欄等）\n\n' +
+            '回答は以下のJSON形式のみで返してください（他のテキストは不要）:\n' +
+            '{"status": "LOGIN_SUCCESS" or "LOGIN_FAILED" or "LOCK_SCREEN", "detail": "判定理由を1文で"}'
+        }
+
+        // Analyze with Vision LLM
+        console.log(`[Picoclaw] Analyzing screen with Vision LLM for ${type}...`)
+        const analysis = await analyzeScreenWithVision(captureResult.image as string, prompt)
+        console.log('[Picoclaw] Vision analysis:', analysis)
+
+        // Parse result and generate feedback
+        let status = 'UNKNOWN'
+        let detail = analysis
+
+        try {
+          const jsonMatch = analysis.match(/\{[^}]+\}/)
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0])
+            status = parsed.status || 'UNKNOWN'
+            detail = parsed.detail || analysis
+          }
+        } catch {
+          // Fallback: keyword detection
+          if (type === 'lock') {
+            if (analysis.includes('LOCK_SCREEN') || analysis.includes('ロック')) {
+              status = 'LOCK_SCREEN'
+            } else if (analysis.includes('DESKTOP') || analysis.includes('デスクトップ')) {
+              status = 'DESKTOP'
+            }
+          } else {
+            if (analysis.includes('LOGIN_SUCCESS') || analysis.includes('デスクトップ')) {
+              status = 'LOGIN_SUCCESS'
+            } else if (analysis.includes('LOGIN_FAILED') || analysis.includes('正しくありません')) {
+              status = 'LOGIN_FAILED'
+            } else if (analysis.includes('LOCK_SCREEN') || analysis.includes('ロック')) {
+              status = 'LOCK_SCREEN'
+            }
+          }
+        }
+
+        // Generate user-friendly feedback
+        let feedback: string
+        if (type === 'lock') {
+          switch (status) {
+            case 'LOCK_SCREEN':
+              feedback = '🔒 ロック成功: ロック画面が確認できました。'
+              if (detail && detail !== analysis) feedback += `\n（${detail}）`
+              break
+            case 'DESKTOP':
+              feedback = '⚠️ ロック未完了: まだデスクトップ画面が表示されています。'
+              if (detail && detail !== analysis) feedback += `\n（${detail}）`
+              break
+            default:
+              feedback = `🔍 画面状態: ${detail}`
+          }
+        } else {
+          switch (status) {
+            case 'LOGIN_SUCCESS':
+              feedback = '✅ ログイン成功: デスクトップ画面が確認できました。'
+              if (detail && detail !== analysis) feedback += `\n（${detail}）`
+              break
+            case 'LOGIN_FAILED':
+              feedback = '❌ ログイン失敗: PIN/パスワードが正しくないようです。正しいPINコードで再試行してください。'
+              if (detail && detail !== analysis) feedback += `\n（${detail}）`
+              break
+            case 'LOCK_SCREEN':
+              feedback = '⚠️ ログイン未完了: まだサインイン画面が表示されています。PINの入力が完了していない可能性があります。'
+              if (detail && detail !== analysis) feedback += `\n（${detail}）`
+              break
+            default:
+              feedback = `🔍 画面状態: ${detail}`
+          }
+        }
+
+        this.sendVerificationFeedback(feedback)
+      } catch (err) {
+        console.error(`[Picoclaw] ${type} verification failed:`, err)
+        if (String(err).includes('VISION_NOT_CONFIGURED')) {
+          this.sendVerificationFeedback(getVisionSetupMessage())
+        }
+      }
+    }, delay)
+  }
+
+  /**
+   * Send verification feedback to the user.
+   * This sends the message to both the gateway (Telegram) and the main window (chat UI).
+   */
+  private sendVerificationFeedback(message: string): void {
+    console.log(`[Picoclaw] Verification feedback: ${message.substring(0, 100)}...`)
+
+    // Send to chat UI via IPC
+    if (this.mainWindow) {
+      this.mainWindow.webContents.send('picoclaw:verification-result', message)
+    }
+
+    // If gateway is running, the feedback will also be visible in Telegram
+    // via the gateway's stdout interception (the message is logged)
+    // For direct Telegram feedback, we'd need to add a gateway message API
+  }
+
+  /**
+   * Make a synchronous-style HTTP request and return parsed JSON.
+   */
+  private callApiAsync(url: string, method: 'GET' | 'POST' = 'GET', body?: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    return new Promise((resolve) => {
+      const urlObj = new URL(url)
+      const postData = body ? JSON.stringify(body) : undefined
+
+      const options: http.RequestOptions = {
+        hostname: urlObj.hostname,
+        port: urlObj.port,
+        path: urlObj.pathname,
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+
+      if (postData) {
+        options.headers!['Content-Length'] = String(Buffer.byteLength(postData))
+      }
+
+      const req = http.request(options, (res) => {
+        let data = ''
+        res.on('data', (chunk) => { data += chunk })
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data))
+          } catch {
+            resolve(null)
+          }
+        })
+      })
+
+      req.on('error', (err) => {
+        console.error('[Picoclaw] callApiAsync error:', err.message)
+        resolve(null)
+      })
+
+      req.setTimeout(10000, () => {
+        req.destroy()
+        resolve(null)
+      })
+
+      if (postData) req.write(postData)
+      req.end()
+    })
   }
 
   /**
