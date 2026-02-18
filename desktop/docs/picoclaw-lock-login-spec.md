@@ -24,10 +24,14 @@ picoclaw (AI エージェント / Go バイナリ)
 LLM (llama-3.1-8b-instruct via OpenRouter)
        ↓
 テキスト出力 → インターセプター（manager.ts）
+  LLMの出力テキストをHTTPリクエストへ変換（例: ロックの場合 Win+L）
        ↓
 HTTP API サーバー (127.0.0.1:18792)
+  キー名配列 ["Win","L"] をIPC経由でレンダラーへ中継
        ↓
 IPC → レンダラープロセス（api-handler.ts）
+  キー名をHIDコードに変換し8バイトHIDレポートに組み立て
+  組み立てたレポートをIPC経由でメインプロセスに返す
        ↓
 HID キーボードレポート → シリアルポート → NanoKVM-USB → Windows PC
 ```
