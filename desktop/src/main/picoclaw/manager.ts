@@ -5,6 +5,7 @@ import fs from 'fs'
 import os from 'os'
 import http from 'http'
 import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision, getVerificationDelay } from './vision'
+import { translateApiError } from '@common/error-messages'
 
 export interface PicoclawConfig {
   agents?: {
@@ -131,7 +132,7 @@ export class PicoclawManager {
     this.process.stdout?.on('data', async (data) => {
       const text = data.toString()
       console.log('[Picoclaw Output]', text)
-      this.interceptToolCallText(text)
+      await this.interceptToolCallText(text)
 
       // Detect error messages and send Japanese follow-up to Telegram via stdin
       this.sendGatewayErrorFollowUp(text)
@@ -152,10 +153,10 @@ export class PicoclawManager {
       }
     })
 
-    this.process.stderr?.on('data', (data) => {
+    this.process.stderr?.on('data', async (data) => {
       const text = data.toString()
       console.error('[Picoclaw Error]', text)
-      this.interceptToolCallText(text)
+      await this.interceptToolCallText(text)
     })
 
     this.process.on('close', (code) => {
@@ -180,56 +181,10 @@ export class PicoclawManager {
   private sendGatewayErrorFollowUp(text: string): void {
     if (!this.process?.stdin?.writable) return
 
-    let followUp = ''
-
-    // Rate limit / credit exhaustion / TPM exceeded
-    // OpenRouter 402, Groq 429/413, etc.
-    if (
-      text.includes('402') ||
-      text.includes('413') ||
-      text.includes('Rate limit') ||
-      text.includes('rate limit') ||
-      text.includes('requires more credits') ||
-      text.includes('rate_limit_exceeded') ||
-      text.includes('ratelimitexceeded') ||
-      text.includes('Request too large') ||
-      text.includes('tokens per minute')
-    ) {
-      followUp =
-        '🚫 レート制限エラー\n\n' +
-        '無料枠のトークン制限に達しました。1分ほど待ってから再試行してください。\n\n' +
-        '改善策:\n' +
-        '• 短いメッセージで指示する（例:「ロックして」）\n' +
-        '• 1分以上間隔を空ける\n' +
-        '• NanoKVM-USB アプリの 設定 → picoclaw で別の LLM プロバイダーに切り替える'
-    }
-    // API key / auth errors
-    else if (
-      text.includes('401') && text.includes('API') ||
-      text.includes('Invalid API key') ||
-      text.includes('invalid_api_key') ||
-      text.includes('Authorization')
-    ) {
-      followUp =
-        '🔑 認証エラー\n\n' +
-        'APIキーが無効です。\n' +
-        'NanoKVM-USB アプリの 設定 → picoclaw で API キーを確認してください。'
-    }
-    // Network / connection errors
-    else if (
-      text.includes('failed to send request') ||
-      text.includes('connection refused') ||
-      text.includes('ECONNREFUSED')
-    ) {
-      followUp =
-        '🌐 接続エラー\n\n' +
-        'LLMサービスに接続できませんでした。\n' +
-        'インターネット接続を確認してください。'
-    }
-
-    if (followUp) {
+    const { isError, message } = translateApiError(text)
+    if (isError) {
       console.log('[Picoclaw] Sending Japanese error follow-up to gateway stdin')
-      this.process.stdin.write(followUp + '\n')
+      this.process.stdin.write(message + '\n')
     }
   }
 
@@ -371,8 +326,8 @@ export class PicoclawManager {
 
       agent.on('close', async (code) => {
         if (code === 0) {
-          // Always run interceptor - dedup in callApi prevents double execution
-          this.interceptToolCallText(output)
+          // Always run interceptor - must await so pendingVerification is set
+          await this.interceptToolCallText(output)
 
           // Strip action tags from the response shown to user
           let cleanResponse = this.stripActionTags(output) || output
@@ -393,7 +348,9 @@ export class PicoclawManager {
 
           resolve(cleanResponse)
         } else {
-          reject(new Error(`Agent command failed: ${errorOutput}`))
+          // Translate error to Japanese before rejecting
+          const { message } = translateApiError(errorOutput)
+          reject(new Error(message))
         }
       })
 
@@ -433,9 +390,11 @@ export class PicoclawManager {
   /**
    * Intercept tool call text that LLM outputs instead of actual tool calls.
    * All formats are normalized to {toolName, params} then executed through a single path.
+   * Must be awaited so that pendingVerification is set before callers check it.
    */
-  private interceptToolCallText(text: string): void {
+  private async interceptToolCallText(text: string): Promise<void> {
     let matched = false
+    const promises: Promise<void>[] = []
 
     // Format 1: <<nanokvm:action:params>> tags
     const tagPattern = /<<nanokvm:(\w+):([^>]+)>>/g
@@ -445,7 +404,7 @@ export class PicoclawManager {
       const paramStr = tagMatch[2]
       console.log(`[Picoclaw Interceptor] Detected action tag: <<nanokvm:${toolName}:${paramStr}>>`)
       const params = this.parseActionTagParams(toolName, paramStr)
-      this.executeToolCall(toolName, params)
+      promises.push(this.executeToolCall(toolName, params))
       matched = true
     }
 
@@ -460,7 +419,7 @@ export class PicoclawManager {
         const toolName = nanoMatch[1]
         const params = (obj.parameters || obj.args || obj.arguments || {}) as Record<string, unknown>
         console.log(`[Picoclaw Interceptor] Detected JSON tool call: nanokvm_${toolName}`, params)
-        this.executeToolCall(toolName, params)
+        promises.push(this.executeToolCall(toolName, params))
         matched = true
       }
     }
@@ -475,12 +434,17 @@ export class PicoclawManager {
         console.log(`[Picoclaw Interceptor] Detected function call: nanokvm_${toolName}(${argsStr})`)
         try {
           const params = this.parseFunctionArgs(argsStr)
-          this.executeToolCall(toolName, params)
+          promises.push(this.executeToolCall(toolName, params))
           matched = true
         } catch (err) {
           console.error(`[Picoclaw Interceptor] Failed to parse function args: ${argsStr}`, err)
         }
       }
+    }
+
+    // Wait for all tool calls to complete so pendingVerification is set
+    if (promises.length > 0) {
+      await Promise.all(promises)
     }
 
     if (!matched) {

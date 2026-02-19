@@ -66,36 +66,8 @@ export const Chat = (): ReactElement => {
         }
         setMessages((prev) => [...prev, assistantMessage])
       } else {
-        // Parse error message for better UX
-        let errorContent = result.error || 'Unknown error'
-        
-        // Check for rate limit / TPM errors (OpenRouter 402, Groq 413/429)
-        if (
-          errorContent.includes('Rate limit') || errorContent.includes('rate limit') ||
-          errorContent.includes('ratelimitexceeded') || errorContent.includes('Request too large') ||
-          errorContent.includes('tokens per minute') || errorContent.includes('requires more credits')
-        ) {
-          if (errorContent.includes('Wait')) {
-            const waitMatch = errorContent.match(/Wait\s+(\d+)([msh])/i)
-            if (waitMatch) {
-              const waitTime = waitMatch[1]
-              const unit = waitMatch[2] === 'h' ? '時間' : waitMatch[2] === 'm' ? '分' : '秒'
-              errorContent = `🚫 レート制限に達しました\n\n無料枠を使い切りました。${waitTime}${unit}後に再試行してください。\n\nまたは、設定から別のLLMプロバイダー(OpenRouter, Ollamaなど)に切り替えることができます。`
-            } else {
-              errorContent = `🚫 レート制限に達しました\n\n無料枠のトークン制限に達しました。1分ほど待ってから再試行してください。\n\n改善策:\n• 短いメッセージで指示する（例:「ロックして」）\n• 1分以上間隔を空ける\n• 設定から別のLLMプロバイダーに切り替える`
-            }
-          } else {
-            errorContent = `🚫 レート制限エラー\n\n無料枠のトークン制限に達しました。1分ほど待ってから再試行してください。\n\n改善策:\n• 短いメッセージで指示する（例:「ロックして」）\n• 1分以上間隔を空ける\n• 設定から別のLLMプロバイダーに切り替える`
-          }
-        }
-        // Check for API key errors
-        else if (errorContent.includes('API key') || errorContent.includes('api_key') || errorContent.includes('Authorization')) {
-          errorContent = `🔑 認証エラー\n\nAPIキーが設定されていないか、無効です。\n\n設定からAPIキーを確認してください。`
-        }
-        // Check for network errors
-        else if (errorContent.includes('failed to send request') || errorContent.includes('connection')) {
-          errorContent = `🌐 接続エラー\n\nLLMサービスに接続できませんでした。\n\nインターネット接続を確認してください。`
-        }
+        // Error message is already translated to Japanese by manager.ts
+        const errorContent = result.error || 'Unknown error'
         
         const errorMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
