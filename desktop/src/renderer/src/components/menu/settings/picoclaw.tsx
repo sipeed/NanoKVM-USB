@@ -12,6 +12,7 @@ interface PicoclawConfig {
       model?: string
       vision_provider?: string
       vision_model?: string
+      max_tokens?: number
     }
   }
   providers?: {
@@ -275,6 +276,8 @@ export const PicoclawSettings = (): ReactElement => {
             ...config.agents?.defaults,
             provider,
             model: model || PROVIDERS.find((p) => p.value === provider)?.defaultModel || '',
+            // Groq free tier has very low TPM (6000); reduce max_tokens to avoid hitting limit
+            ...(provider === 'groq' && { max_tokens: 1024 }),
             vision_provider: visionProvider || undefined,
             vision_model: visionModel || undefined
           }

@@ -1,5 +1,5 @@
 import { ReactElement, useState, useRef, useEffect } from 'react'
-import { MessageCircle, Send, X, Minimize2 } from 'lucide-react'
+import { MessageCircle, Send, X, Minimize2, Copy, Check } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 
@@ -13,12 +13,23 @@ export const Chat = (): ReactElement => {
   const [loading, setLoading] = useAtom(chatLoadingAtom)
   const [input, setInput] = useState('')
   const [sessionId, setSessionId] = useState(() => `chat-${Date.now()}`)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  async function handleCopy(msg: ChatMessage): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(msg.content)
+      setCopiedId(msg.id)
+      setTimeout(() => setCopiedId(null), 2000)
+    } catch {
+      console.error('[Chat] Failed to copy message')
+    }
+  }
 
   async function handleSend(): Promise<void> {
     if (!input.trim() || loading) return
@@ -58,8 +69,12 @@ export const Chat = (): ReactElement => {
         // Parse error message for better UX
         let errorContent = result.error || 'Unknown error'
         
-        // Check for rate limit errors
-        if (errorContent.includes('Rate limit') || errorContent.includes('rate limit')) {
+        // Check for rate limit / TPM errors (OpenRouter 402, Groq 413/429)
+        if (
+          errorContent.includes('Rate limit') || errorContent.includes('rate limit') ||
+          errorContent.includes('ratelimitexceeded') || errorContent.includes('Request too large') ||
+          errorContent.includes('tokens per minute') || errorContent.includes('requires more credits')
+        ) {
           if (errorContent.includes('Wait')) {
             const waitMatch = errorContent.match(/Wait\s+(\d+)([msh])/i)
             if (waitMatch) {
@@ -67,10 +82,10 @@ export const Chat = (): ReactElement => {
               const unit = waitMatch[2] === 'h' ? '時間' : waitMatch[2] === 'm' ? '分' : '秒'
               errorContent = `🚫 レート制限に達しました\n\n無料枠を使い切りました。${waitTime}${unit}後に再試行してください。\n\nまたは、設定から別のLLMプロバイダー(OpenRouter, Ollamaなど)に切り替えることができます。`
             } else {
-              errorContent = `🚫 レート制限に達しました\n\n無料枠を使い切りました。しばらく待ってから再試行してください。\n\nまたは、設定から別のLLMプロバイダーに切り替えることができます。`
+              errorContent = `🚫 レート制限に達しました\n\n無料枠のトークン制限に達しました。1分ほど待ってから再試行してください。\n\n改善策:\n• 短いメッセージで指示する（例:「ロックして」）\n• 1分以上間隔を空ける\n• 設定から別のLLMプロバイダーに切り替える`
             }
           } else {
-            errorContent = `🚫 レート制限エラー\n\n無料枠を使い切った可能性があります。\n\n設定から別のLLMプロバイダーに切り替えるか、しばらく待ってから再試行してください。`
+            errorContent = `🚫 レート制限エラー\n\n無料枠のトークン制限に達しました。1分ほど待ってから再試行してください。\n\n改善策:\n• 短いメッセージで指示する（例:「ロックして」）\n• 1分以上間隔を空ける\n• 設定から別のLLMプロバイダーに切り替える`
           }
         }
         // Check for API key errors
@@ -161,10 +176,10 @@ export const Chat = (): ReactElement => {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`group flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] rounded-lg px-3 py-2 ${
+              className={`relative max-w-[80%] rounded-lg px-3 py-2 select-text ${
                 msg.role === 'user'
                   ? 'bg-blue-600 text-white'
                   : msg.isError
@@ -172,6 +187,18 @@ export const Chat = (): ReactElement => {
                     : 'bg-neutral-800 text-neutral-200'
               }`}
             >
+              {/* Copy button - appears on hover */}
+              <button
+                onClick={() => handleCopy(msg)}
+                className={`absolute -top-2 ${msg.role === 'user' ? '-left-8' : '-right-8'} rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 ${
+                  copiedId === msg.id
+                    ? 'text-green-400'
+                    : 'text-neutral-500 hover:text-neutral-300'
+                }`}
+                title="コピー"
+              >
+                {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
+              </button>
               <div className="whitespace-pre-wrap break-words text-sm">{msg.content}</div>
               <div
                 className={`mt-1 text-xs ${

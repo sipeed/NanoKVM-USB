@@ -182,19 +182,26 @@ export class PicoclawManager {
 
     let followUp = ''
 
-    // Rate limit / credit exhaustion (OpenRouter 402, Groq 429, etc.)
+    // Rate limit / credit exhaustion / TPM exceeded
+    // OpenRouter 402, Groq 429/413, etc.
     if (
       text.includes('402') ||
+      text.includes('413') ||
       text.includes('Rate limit') ||
       text.includes('rate limit') ||
       text.includes('requires more credits') ||
-      text.includes('rate_limit_exceeded')
+      text.includes('rate_limit_exceeded') ||
+      text.includes('ratelimitexceeded') ||
+      text.includes('Request too large') ||
+      text.includes('tokens per minute')
     ) {
       followUp =
         '🚫 レート制限エラー\n\n' +
-        '無料枠を使い切った可能性があります。\n' +
-        'NanoKVM-USB アプリの 設定 → picoclaw で別の LLM プロバイダーに切り替えるか、' +
-        'しばらく待ってから再試行してください。'
+        '無料枠のトークン制限に達しました。1分ほど待ってから再試行してください。\n\n' +
+        '改善策:\n' +
+        '• 短いメッセージで指示する（例:「ロックして」）\n' +
+        '• 1分以上間隔を空ける\n' +
+        '• NanoKVM-USB アプリの 設定 → picoclaw で別の LLM プロバイダーに切り替える'
     }
     // API key / auth errors
     else if (
