@@ -800,6 +800,10 @@ export class PicoclawManager {
             case 'LOGIN_FAILED':
               feedback = '❌ ログイン失敗: PIN/パスワードが正しくないようです。正しいPINコードで再試行してください。'
               if (detail && detail !== analysis) feedback += `\n（${detail}）`
+              // Dismiss the Windows error dialog by sending Enter key
+              // ("PINが正しくありません" dialog has OK button focused by default)
+              console.log('[Picoclaw] Dismissing PIN error dialog with Enter key...')
+              this.callApi('http://127.0.0.1:18792/api/keyboard/shortcut', { keys: ['Enter'] })
               break
             case 'LOCK_SCREEN':
               feedback = '⚠️ ログイン未完了: まだサインイン画面が表示されています。PINの入力が完了していない可能性があります。'

@@ -285,6 +285,13 @@ async function pressKey(code: string, holdMs: number = 50): Promise<void> {
  * @param username - Username (optional, for full login with username + password)
  */
 export async function loginToWindows(password: string, username?: string): Promise<void> {
+  // --- Step 0: Dismiss any leftover error dialog ---
+  // If a previous login failed, Windows shows "PIN is incorrect" with OK button.
+  // Press Escape to dismiss it before starting the login sequence.
+  console.log('[API Handler] Step 0: Pressing Escape to dismiss any error dialog...')
+  await pressKey('Escape')
+  await new Promise((r) => setTimeout(r, 300))
+
   // --- Step 1: Wake sign-in screen ---
   console.log('[API Handler] Step 1: Pressing Space to wake sign-in screen...')
   await pressKey('Space')
