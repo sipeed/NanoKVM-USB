@@ -174,6 +174,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | インターセプター | 3形式すべて対応 | 3形式すべて対応 |
 | レスポンス表示 | チャット吹き出し | Telegram メッセージ |
 | 実行結果 | 同一（executeToolCall経由） | 同一（executeToolCall経由） |
+| 検証結果配信 | LLM応答に統合して返却 | 検証後に stdin 経由で追加送信 |
 
 ---
 
@@ -249,7 +250,17 @@ HID キー入力シーケンス
   ↓
 Vision LLM API 呼び出し（画面状態を判定）
   ↓
-判定結果をチャット / Telegram にフィードバック
+判定結果を LLM 応答テキストに統合
+  ※ LLM応答の返却を遅延させ、検証結果を末尾に追記する
+  ※ チャット UI（Agent モード）・Telegram（Gateway モード）の
+    両方に自然に配信される（専用 IPC チャネル不要）
+
+  【Agent モード（チャット UI）】
+      LLM応答 + 検証結果 → resolve() → チャット吹き出しに表示
+  
+  【Gateway モード（Telegram）】
+      LLM応答を先に出力 → 検証完了後に追加メッセージを
+      picoclaw の stdin に書き込み → Telegram に転送
 
   【ロック検証の場合】
       ├─ 🔒 LOCK_SCREEN: 「ロック成功」

@@ -1,6 +1,6 @@
 import { ReactElement, useState, useRef, useEffect } from 'react'
 import { MessageCircle, Send, X, Minimize2 } from 'lucide-react'
-import { useAtom, useAtomValue } from 'jotai'
+import { useAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
@@ -19,24 +19,6 @@ export const Chat = (): ReactElement => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // Listen for login verification results from main process
-  useEffect(() => {
-    const handleVerificationResult = (_event, message: string): void => {
-      const verificationMessage: ChatMessage = {
-        id: `verify-${Date.now()}`,
-        role: 'assistant',
-        content: message,
-        timestamp: Date.now()
-      }
-      setMessages((prev) => [...prev, verificationMessage])
-    }
-
-    window.electron.ipcRenderer.on('picoclaw:verification-result', handleVerificationResult)
-    return () => {
-      window.electron.ipcRenderer.removeListener('picoclaw:verification-result', handleVerificationResult)
-    }
-  }, [setMessages])
 
   async function handleSend(): Promise<void> {
     if (!input.trim() || loading) return
