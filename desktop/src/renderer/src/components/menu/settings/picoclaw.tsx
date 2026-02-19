@@ -299,6 +299,19 @@ export const PicoclawSettings = (): ReactElement => {
       if (result.success) {
         message.success(t('settings.picoclaw.saved'))
         await loadConfig()
+
+        // Auto-restart gateway if it's running so it picks up the new config
+        if (gatewayRunning) {
+          try {
+            await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_STOP_GATEWAY)
+            await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_START_GATEWAY)
+            message.info('Telegram Gatewayを再起動しました（新しい設定を適用）')
+          } catch (restartErr) {
+            console.error('Failed to restart gateway:', restartErr)
+            message.warning('Gateway再起動に失敗しました。手動で再起動してください。')
+            setGatewayRunning(false)
+          }
+        }
       } else {
         message.error(result.error || 'Failed to save config')
       }

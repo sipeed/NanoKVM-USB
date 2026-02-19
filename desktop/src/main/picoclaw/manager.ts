@@ -133,6 +133,9 @@ export class PicoclawManager {
       console.log('[Picoclaw Output]', text)
       this.interceptToolCallText(text)
 
+      // Detect error messages and send Japanese follow-up to Telegram via stdin
+      this.sendGatewayErrorFollowUp(text)
+
       // If a verification was scheduled, wait for it and send result to Telegram via stdin
       if (this.pendingVerification && this.process?.stdin) {
         const verification = this.pendingVerification
@@ -167,6 +170,60 @@ export class PicoclawManager {
 
     // Wait for process to start
     await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+
+  /**
+   * Detect error patterns in gateway stdout and send a Japanese follow-up
+   * message to Telegram via stdin. picoclaw sends the raw English error first;
+   * this adds a user-friendly Japanese explanation as a follow-up message.
+   */
+  private sendGatewayErrorFollowUp(text: string): void {
+    if (!this.process?.stdin?.writable) return
+
+    let followUp = ''
+
+    // Rate limit / credit exhaustion (OpenRouter 402, Groq 429, etc.)
+    if (
+      text.includes('402') ||
+      text.includes('Rate limit') ||
+      text.includes('rate limit') ||
+      text.includes('requires more credits') ||
+      text.includes('rate_limit_exceeded')
+    ) {
+      followUp =
+        '🚫 レート制限エラー\n\n' +
+        '無料枠を使い切った可能性があります。\n' +
+        'NanoKVM-USB アプリの 設定 → picoclaw で別の LLM プロバイダーに切り替えるか、' +
+        'しばらく待ってから再試行してください。'
+    }
+    // API key / auth errors
+    else if (
+      text.includes('401') && text.includes('API') ||
+      text.includes('Invalid API key') ||
+      text.includes('invalid_api_key') ||
+      text.includes('Authorization')
+    ) {
+      followUp =
+        '🔑 認証エラー\n\n' +
+        'APIキーが無効です。\n' +
+        'NanoKVM-USB アプリの 設定 → picoclaw で API キーを確認してください。'
+    }
+    // Network / connection errors
+    else if (
+      text.includes('failed to send request') ||
+      text.includes('connection refused') ||
+      text.includes('ECONNREFUSED')
+    ) {
+      followUp =
+        '🌐 接続エラー\n\n' +
+        'LLMサービスに接続できませんでした。\n' +
+        'インターネット接続を確認してください。'
+    }
+
+    if (followUp) {
+      console.log('[Picoclaw] Sending Japanese error follow-up to gateway stdin')
+      this.process.stdin.write(followUp + '\n')
+    }
   }
 
   /**
