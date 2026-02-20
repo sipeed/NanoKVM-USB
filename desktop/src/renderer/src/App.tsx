@@ -1,4 +1,4 @@
-import { ReactElement, useEffect, useMemo, useState } from 'react'
+import { ReactElement, useEffect, useState } from 'react'
 import { Result, Spin } from 'antd'
 import clsx from 'clsx'
 import { useAtomValue, useSetAtom } from 'jotai'
@@ -15,7 +15,6 @@ import { Chat } from '@renderer/components/chat'
 import {
   resolutionAtom,
   serialPortStateAtom,
-  videoScaleAtom,
   videoStateAtom,
   maxResolutionModeAtom
 } from '@renderer/jotai/device'
@@ -34,13 +33,11 @@ const App = (): ReactElement => {
   const { t } = useTranslation()
   const isBigScreen = useMediaQuery({ minWidth: 850 })
 
-  const videoScale = useAtomValue(videoScaleAtom)
   const videoState = useAtomValue(videoStateAtom)
   const serialPortState = useAtomValue(serialPortStateAtom)
   const mouseMode = useAtomValue(mouseModeAtom)
   const mouseStyle = useAtomValue(mouseStyleAtom)
   const isKeyboardEnable = useAtomValue(isKeyboardEnableAtom)
-  const resolution = useAtomValue(resolutionAtom)
   const setResolution = useSetAtom(resolutionAtom)
   const setMaxResolutionMode = useSetAtom(maxResolutionModeAtom)
 
@@ -64,6 +61,7 @@ const App = (): ReactElement => {
       mediaQuery.addEventListener('change', updateDevicePixelRatio)
       return () => mediaQuery.removeEventListener('change', updateDevicePixelRatio)
     }
+    return undefined
   }, [])
 
   // Dynamically detect video stream resolution (fixes 4K blur)

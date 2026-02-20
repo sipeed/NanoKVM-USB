@@ -42,7 +42,7 @@ export const About = (): ReactElement => {
   }, [])
 
   function open(url: string): void {
-    window.electron.ipcRenderer.send(IpcEvents.OPEN_EXTERNAL_RUL, url)
+    window.electron.ipcRenderer.send(IpcEvents.OPEN_EXTERNAL_URL, url)
   }
 
   return (
