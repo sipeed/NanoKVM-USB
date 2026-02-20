@@ -53,8 +53,8 @@ const VISION_MODELS: Record<string, Set<string>> = {
     'llava:13b',
     'llava-llama3:latest',
     'bakllava:latest',
-    'moondream2:latest',
-    'moondream:latest'
+    'moondream:latest',
+    'moondream2:latest'
   ])
 }
 

@@ -23,11 +23,38 @@ export const Chat = (): ReactElement => {
 
   async function handleCopy(msg: ChatMessage): Promise<void> {
     try {
-      await navigator.clipboard.writeText(msg.content)
+      // Try native clipboard API first
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(msg.content)
+      } else {
+        // Fallback: use temporary textarea
+        const textarea = document.createElement('textarea')
+        textarea.value = msg.content
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
       setCopiedId(msg.id)
       setTimeout(() => setCopiedId(null), 2000)
     } catch {
-      console.error('[Chat] Failed to copy message')
+      // Last resort fallback
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = msg.content
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+        setCopiedId(msg.id)
+        setTimeout(() => setCopiedId(null), 2000)
+      } catch {
+        console.error('[Chat] Failed to copy message')
+      }
     }
   }
 
@@ -112,7 +139,7 @@ export const Chat = (): ReactElement => {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex h-[500px] w-[400px] flex-col rounded-lg bg-neutral-900 shadow-2xl">
+    <div data-chat-area className="fixed bottom-4 right-4 z-50 flex h-[500px] w-[400px] flex-col rounded-lg bg-neutral-900 shadow-2xl">
       {/* Header */}
       <div className="flex items-center justify-between rounded-t-lg bg-neutral-800 px-4 py-3">
         <div className="flex items-center space-x-2">
@@ -159,29 +186,32 @@ export const Chat = (): ReactElement => {
                     : 'bg-neutral-800 text-neutral-200'
               }`}
             >
-              {/* Copy button - appears on hover */}
-              <button
-                onClick={() => handleCopy(msg)}
-                className={`absolute -top-2 ${msg.role === 'user' ? '-left-8' : '-right-8'} rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 ${
-                  copiedId === msg.id
-                    ? 'text-green-400'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                }`}
-                title="コピー"
-              >
-                {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
-              </button>
               <div className="whitespace-pre-wrap break-words text-sm">{msg.content}</div>
-              <div
-                className={`mt-1 text-xs ${
-                  msg.role === 'user' 
-                    ? 'text-blue-200' 
-                    : msg.isError 
-                      ? 'text-red-400' 
-                      : 'text-neutral-500'
-                }`}
-              >
-                {new Date(msg.timestamp).toLocaleTimeString()}
+              <div className="mt-1 flex items-center justify-between">
+                <span
+                  className={`text-xs ${
+                    msg.role === 'user' 
+                      ? 'text-blue-200' 
+                      : msg.isError 
+                        ? 'text-red-400' 
+                        : 'text-neutral-500'
+                  }`}
+                >
+                  {new Date(msg.timestamp).toLocaleTimeString()}
+                </span>
+                <button
+                  onClick={() => handleCopy(msg)}
+                  className={`ml-2 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 ${
+                    copiedId === msg.id
+                      ? 'text-green-400'
+                      : msg.role === 'user'
+                        ? 'text-blue-200 hover:text-white'
+                        : 'text-neutral-500 hover:text-neutral-300'
+                  }`}
+                  title="コピー"
+                >
+                  {copiedId === msg.id ? <Check size={12} /> : <Copy size={12} />}
+                </button>
               </div>
             </div>
           </div>

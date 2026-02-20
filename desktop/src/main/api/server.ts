@@ -93,6 +93,8 @@ export class ApiServer {
       await this.handleScreenCapture(req, res)
     } else if (req.method === 'POST' && url.pathname === '/api/screen/verify-login') {
       await this.handleVerifyLogin(req, res)
+    } else if (req.method === 'POST' && url.pathname === '/api/screen/verify') {
+      await this.handleScreenVerify(req, res)
     } else if (req.method === 'GET' && url.pathname === '/api/status') {
       await this.handleStatus(req, res)
     } else {
@@ -419,6 +421,175 @@ export class ApiServer {
       }))
     } catch (err) {
       console.error('[API Server] Verify login error:', err)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: String(err) }))
+    }
+  }
+
+  /**
+   * Unified screen verification endpoint.
+   * Used by both Go-side NanoKVM tools and desktop-side interceptor.
+   *
+   * POST /api/screen/verify
+   * Body: { action: "lock" | "login" }
+   * Returns: { success, visionConfigured, status, detail, feedback }
+   */
+  private async handleScreenVerify(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!this.mainWindow) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Main window not available' }))
+      return
+    }
+
+    try {
+      const body = await this.readBody(req)
+      const { action } = JSON.parse(body) as { action: 'lock' | 'login' }
+
+      if (action !== 'lock' && action !== 'login') {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'action must be "lock" or "login"' }))
+        return
+      }
+
+      // Check Vision LLM configuration
+      console.log('[API Server] Screen verify: action=' + action + ', checking Vision config...')
+      if (!isVisionConfigured()) {
+        const setupMessage = getVisionSetupMessage()
+        console.log('[API Server] Screen verify: Vision NOT configured')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          success: false,
+          visionConfigured: false,
+          status: 'UNKNOWN',
+          detail: '',
+          feedback: setupMessage
+        }))
+        return
+      }
+      console.log('[API Server] Screen verify: Vision is configured, proceeding...')
+
+      // Capture screen
+      const dataUrl = await this.requestScreenCapture()
+      if (!dataUrl) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Failed to capture screen' }))
+        return
+      }
+
+      // Build prompt based on action type
+      // NOTE: Use simple English prompts - moondream is a small English-only model
+      let prompt: string
+      if (action === 'lock') {
+        prompt =
+          'Is this a Windows lock screen or a desktop?\n' +
+          'Lock screen: shows clock, date, user avatar, background image, no taskbar.\n' +
+          'Desktop: shows taskbar at bottom, application windows, desktop icons.\n\n' +
+          'Answer with ONLY one word: LOCK_SCREEN or DESKTOP'
+      } else {
+        prompt =
+          'What is shown on this Windows screen?\n' +
+          'A) Desktop with taskbar and icons (login succeeded)\n' +
+          'B) Error message about wrong PIN or password\n' +
+          'C) Lock screen or sign-in screen with clock, user avatar, or password field\n\n' +
+          'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN'
+      }
+
+      // Analyze with Vision LLM
+      console.log('[API Server] Screen verify: calling Vision LLM...')
+      const visionStart = Date.now()
+      const analysis = await analyzeScreenWithVision(dataUrl, prompt)
+      console.log('[API Server] Screen verify: Vision LLM took ' + (Date.now() - visionStart) + 'ms')
+      console.log('[API Server] Screen verify analysis:', analysis)
+
+      // Parse result
+      let status = 'UNKNOWN'
+      let detail = analysis
+
+      // Simple keyword detection from moondream's short response
+      // Action-specific parsing to avoid cross-contamination
+      const upper = analysis.toUpperCase()
+      if (action === 'lock') {
+        // For lock verification: only detect LOCK_SCREEN or DESKTOP
+        if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
+          status = 'LOCK_SCREEN'
+        } else if (upper.includes('DESKTOP') || upper.includes('TASKBAR') || upper.includes('ICON')) {
+          status = 'DESKTOP'
+        } else if (upper.includes('LOCK') || upper.includes('CLOCK') || upper.includes('AVATAR')) {
+          status = 'LOCK_SCREEN'
+        }
+      } else {
+        // For login verification: detect LOGIN_SUCCESS, LOGIN_FAILED, or LOCK_SCREEN
+        if (upper.includes('LOGIN_SUCCESS') || upper.includes('LOGIN SUCCESS')) {
+          status = 'LOGIN_SUCCESS'
+        } else if (upper.includes('LOGIN_FAILED') || upper.includes('LOGIN FAILED') || upper.includes('WRONG') || upper.includes('ERROR') || upper.includes('INCORRECT')) {
+          status = 'LOGIN_FAILED'
+        } else if (upper.includes('DESKTOP') || upper.includes('TASKBAR')) {
+          status = 'LOGIN_SUCCESS'
+        } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') || upper.includes('LOCK')) {
+          status = 'LOCK_SCREEN'
+        }
+      }
+
+      // Also try JSON parse as fallback
+      if (status === 'UNKNOWN') {
+        try {
+          const jsonMatch = analysis.match(/\{[^}]+\}/)
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0])
+            if (parsed.status) {
+              status = parsed.status
+              detail = parsed.detail || analysis
+            }
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+
+      // Generate feedback
+      let feedback = ''
+      if (action === 'lock') {
+        switch (status) {
+          case 'LOCK_SCREEN':
+            feedback = '🔒 ロック成功: ロック画面が確認できました。'
+            if (detail && detail !== analysis) feedback += `\n（${detail}）`
+            break
+          case 'DESKTOP':
+            feedback = '⚠️ ロック未完了: まだデスクトップ画面が表示されています。'
+            if (detail && detail !== analysis) feedback += `\n（${detail}）`
+            break
+          default:
+            feedback = `🔍 画面状態: ${detail}`
+        }
+      } else {
+        switch (status) {
+          case 'LOGIN_SUCCESS':
+            feedback = '✅ ログイン成功: デスクトップ画面が確認できました。'
+            if (detail && detail !== analysis) feedback += `\n（${detail}）`
+            break
+          case 'LOGIN_FAILED':
+            feedback = '❌ ログイン失敗: PIN/パスワードが正しくないようです。正しいPINコードで再試行してください。'
+            if (detail && detail !== analysis) feedback += `\n（${detail}）`
+            break
+          case 'LOCK_SCREEN':
+            feedback = '⚠️ ログイン未完了: まだサインイン画面が表示されています。'
+            if (detail && detail !== analysis) feedback += `\n（${detail}）`
+            break
+          default:
+            feedback = `🔍 画面状態: ${detail}`
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        success: true,
+        visionConfigured: true,
+        status,
+        detail,
+        feedback
+      }))
+    } catch (err) {
+      console.error('[API Server] Screen verify error:', err)
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: String(err) }))
     }

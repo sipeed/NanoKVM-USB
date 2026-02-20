@@ -54,9 +54,13 @@ export const Keyboard = (): ReactElement => {
     async function handleKeyDown(event: KeyboardEvent): Promise<void> {
       if (!isKeyboardEnabled) return
 
-      // Ignore keyboard events when typing in input/textarea fields (e.g., chat)
+      // Ignore keyboard events when typing in input/textarea or inside chat area
       const target = event.target as HTMLElement
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      if (target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.closest('[data-chat-area]')
+      )) {
         return
       }
 
@@ -116,9 +120,13 @@ export const Keyboard = (): ReactElement => {
     async function handleKeyUp(event: KeyboardEvent): Promise<void> {
       if (!isKeyboardEnabled) return
 
-      // Ignore keyboard events when typing in input/textarea fields (e.g., chat)
+      // Ignore keyboard events when typing in input/textarea or inside chat area
       const target = event.target as HTMLElement
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      if (target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.closest('[data-chat-area]')
+      )) {
         return
       }
 
