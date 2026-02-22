@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Divider, Popover } from 'antd';
-import { useAtom, useSetAtom } from 'jotai';
+import { Popover } from 'antd';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { MouseIcon } from 'lucide-react';
 
+import { menuConfigAtom } from '@/jotai/device';
 import {
   mouseJigglerModeAtom,
   mouseModeAtom,
@@ -10,6 +11,7 @@ import {
   scrollDirectionAtom,
   scrollIntervalAtom
 } from '@/jotai/mouse.ts';
+import type { MouseSubItemId } from '@/libs/menu-config';
 import { mouseJiggler } from '@/libs/mouse-jiggler';
 import * as storage from '@/libs/storage';
 
@@ -19,7 +21,16 @@ import { Mode } from './mode.tsx';
 import { Speed } from './speed.tsx';
 import { Style } from './style.tsx';
 
+const MOUSE_SUB_COMPONENTS: Record<MouseSubItemId, React.FC> = {
+  'mouse.style': Style,
+  'mouse.mode': Mode,
+  'mouse.direction': Direction,
+  'mouse.speed': Speed,
+  'mouse.jiggler': Jiggler,
+};
+
 export const Mouse = () => {
+  const menuConfig = useAtomValue(menuConfigAtom);
   const [mouseStyle, setMouseStyle] = useAtom(mouseStyleAtom);
   const [mouseMode, setMouseMode] = useAtom(mouseModeAtom);
   const setScrollDirection = useSetAtom(scrollDirectionAtom);
@@ -60,13 +71,10 @@ export const Mouse = () => {
 
   const content = (
     <div className="flex flex-col space-y-0.5">
-      <Style />
-      <Mode />
-      <Direction />
-      <Speed />
-
-      <Divider style={{ margin: '5px 0 5px 0' }} />
-      <Jiggler />
+      {menuConfig.subMenus.mouse.map((itemId) => {
+        const Component = MOUSE_SUB_COMPONENTS[itemId];
+        return Component ? <Component key={itemId} /> : null;
+      })}
     </div>
   );
 

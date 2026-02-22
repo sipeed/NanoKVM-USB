@@ -1,5 +1,7 @@
 import { atom } from 'jotai';
 
+import { type MenuConfig, DEFAULT_MENU_CONFIG, validateMenuConfig } from '@/libs/menu-config';
+import * as storage from '@/libs/storage';
 import type { Resolution, Rotation } from '@/types.ts';
 
 type VideoState = 'disconnected' | 'connecting' | 'connected';
@@ -18,3 +20,7 @@ export const videoDeviceIdAtom = atom('');
 export const videoStateAtom = atom<VideoState>('disconnected');
 
 export const serialStateAtom = atom<SerialState>('disconnected');
+
+export const menuConfigAtom = atom<MenuConfig>(
+  validateMenuConfig(storage.getMenuConfig() ?? { ...DEFAULT_MENU_CONFIG })
+);
