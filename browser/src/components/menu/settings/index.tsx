@@ -1,8 +1,10 @@
-import { Popover } from 'antd';
+import { Divider, Popover } from 'antd';
 import { BookIcon, DownloadIcon, SettingsIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { KeyboardLayout } from './keyboard-layout';
 import { Language } from './language.tsx';
+import { PasteSpeedSetting } from './paste-speed';
 
 export const Settings = () => {
   const { t } = useTranslation();
@@ -14,6 +16,10 @@ export const Settings = () => {
   const content = (
     <div className="flex flex-col space-y-0.5">
       <Language />
+      <KeyboardLayout />
+      <PasteSpeedSetting />
+
+      <Divider style={{ margin: '5px 0 5px 0' }} />
 
       <div
         className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
