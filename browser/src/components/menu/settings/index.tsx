@@ -1,8 +1,10 @@
-import { Popover } from 'antd';
+import { Divider, Popover } from 'antd';
 import { BookIcon, DownloadIcon, SettingsIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { MenuTooltip } from '../menu-tooltip';
 import { Language } from './language.tsx';
+import { TooltipsSetting } from './tooltips';
 
 export const Settings = () => {
   const { t } = useTranslation();
@@ -14,6 +16,9 @@ export const Settings = () => {
   const content = (
     <div className="flex flex-col space-y-0.5">
       <Language />
+      <TooltipsSetting />
+
+      <Divider style={{ margin: '5px 0 5px 0' }} />
 
       <div
         className="flex h-[32px] cursor-pointer items-center space-x-2 rounded px-3 text-neutral-300 hover:bg-neutral-700/50"
@@ -34,10 +39,12 @@ export const Settings = () => {
   );
 
   return (
-    <Popover content={content} placement="bottomLeft" trigger="click" arrow={false}>
-      <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/50 hover:text-white">
-        <SettingsIcon size={18} />
-      </div>
-    </Popover>
+    <MenuTooltip title={t('menu.settings', 'Settings')}>
+      <Popover content={content} placement="bottomLeft" trigger="click" arrow={false}>
+        <div className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/50 hover:text-white">
+          <SettingsIcon size={18} />
+        </div>
+      </Popover>
+    </MenuTooltip>
   );
 };

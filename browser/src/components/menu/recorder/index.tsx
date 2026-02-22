@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Video } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
+import { MenuTooltip } from '../menu-tooltip';
 import { camera } from '@/libs/media/camera';
 
 export const Recorder = () => {
+  const { t } = useTranslation();
   const [isRecording, setIsRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -116,11 +119,13 @@ export const Recorder = () => {
   }
 
   return (
-    <div
-      className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white"
-      onClick={handleStartRecording}
-    >
-      <Video size={18} />
-    </div>
+    <MenuTooltip title={t('menu.recorder', 'Record')}>
+      <div
+        className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white"
+        onClick={handleStartRecording}
+      >
+        <Video size={18} />
+      </div>
+    </MenuTooltip>
   );
 };
