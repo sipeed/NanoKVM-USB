@@ -6,6 +6,13 @@ import os from 'os'
 import http from 'http'
 import { translateApiError, RateLimitInfo } from '@common/error-messages'
 
+export interface ModelListEntry {
+  model_name: string
+  model: string
+  api_key: string
+  api_base: string
+}
+
 export interface PicoclawConfig {
   agents?: {
     defaults?: {
@@ -26,6 +33,7 @@ export interface PicoclawConfig {
       api_base?: string
     }
   }
+  model_list?: ModelListEntry[]
   channels?: Record<string, unknown>
   tools?: Record<string, unknown>
   gateway?: {
@@ -282,6 +290,9 @@ export class PicoclawManager {
     const config = this.getConfig()
     const newConfig = { ...config, ...updates }
 
+    // Sync model_list from agents.defaults + providers
+    this.syncModelList(newConfig)
+
     // Ensure config directory exists
     const configDir = path.dirname(this.configPath)
     if (!fs.existsSync(configDir)) {
@@ -290,6 +301,53 @@ export class PicoclawManager {
 
     fs.writeFileSync(this.configPath, JSON.stringify(newConfig, null, 2))
     console.log('[Picoclaw] Config updated')
+  }
+
+  /**
+   * Sync model_list from agents.defaults and providers configuration.
+   * The Go-side picoclaw requires model_list entries for GetModelConfig() lookups.
+   * This ensures model_list stays in sync when provider/model settings change.
+   */
+  private syncModelList(config: PicoclawConfig): void {
+    const defaults = config.agents?.defaults
+    if (!defaults?.provider || !defaults?.model) return
+
+    const providers = config.providers || {}
+    const modelList: ModelListEntry[] = [...(config.model_list || [])]
+
+    // Helper to upsert a model_list entry
+    const upsertModel = (modelName: string, provider: string): void => {
+      const providerConfig = providers[provider] || {}
+      const entry: ModelListEntry = {
+        model_name: modelName,
+        model: `${provider}/${modelName}`,
+        api_key: providerConfig.api_key || '',
+        api_base: providerConfig.api_base || ''
+      }
+
+      const existingIdx = modelList.findIndex((m) => m.model_name === modelName)
+      if (existingIdx >= 0) {
+        // Update existing entry with latest provider config
+        modelList[existingIdx] = entry
+      } else {
+        modelList.push(entry)
+      }
+    }
+
+    // Sync main model
+    upsertModel(defaults.model, defaults.provider)
+
+    // Sync vision model if it's different from main
+    if (defaults.vision_provider && defaults.vision_model) {
+      if (
+        defaults.vision_model !== defaults.model ||
+        defaults.vision_provider !== defaults.provider
+      ) {
+        upsertModel(defaults.vision_model, defaults.vision_provider)
+      }
+    }
+
+    config.model_list = modelList
   }
 
   /**
