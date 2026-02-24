@@ -517,10 +517,13 @@ export class ApiServer {
           'Answer with ONLY one word: LOCK_SCREEN or DESKTOP'
       } else {
         prompt =
-          'What is shown on this Windows screen?\n' +
-          'A) Desktop with taskbar and icons (login succeeded)\n' +
-          'B) Error message about wrong PIN or password\n' +
-          'C) Lock screen or sign-in screen with clock, user avatar, or password field\n\n' +
+          'After a Windows login attempt, what is currently shown on screen?\n' +
+          'Look carefully for these specific indicators:\n' +
+          '- TASKBAR at the bottom of the screen (thin bar with icons) = LOGIN_SUCCESS\n' +
+          '- Desktop icons, open windows, or Start menu = LOGIN_SUCCESS\n' +
+          '- "PIN is incorrect" or "password is incorrect" error text = LOGIN_FAILED\n' +
+          '- Large clock display, user avatar circle, or PIN input field = LOCK_SCREEN\n\n' +
+          'IMPORTANT: If you see a taskbar at the bottom, it is LOGIN_SUCCESS even if the wallpaper looks similar to a lock screen.\n\n' +
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN'
       }
 
