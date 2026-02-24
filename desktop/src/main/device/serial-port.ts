@@ -19,20 +19,45 @@ export class SerialPort {
 
   async init(options: Options): Promise<void> {
     try {
-      if (this.port?.isOpen) {
-        await this.close()
-        await new Promise((resolve) => setTimeout(resolve, 100))
+      // Always clean up existing port (even if not isOpen, it may hold OS-level lock)
+      if (this.port) {
+        try {
+          this.port.removeAllListeners()
+          if (this.port.isOpen) {
+            await new Promise<void>((resolve, reject) => {
+              this.port!.close((err) => {
+                if (err) reject(err)
+                else resolve()
+              })
+            })
+          } else {
+            // Force destroy to release file descriptor even if not fully open
+            this.port.destroy()
+          }
+        } catch (e) {
+          console.warn('Error cleaning up previous port:', e)
+        }
+        this.port = null
+        await new Promise((resolve) => setTimeout(resolve, 200))
       }
 
       const path = options.path
       const baudRate = options.baudRate || this.SERIAL_BAUD_RATE
 
-      this.port = new SP({ path, baudRate }, (err) => {
-        if (err) {
-          console.error('Error opening port: ', err.message)
-          throw err
-        }
+      const port = await new Promise<SP>((resolve, reject) => {
+        const sp = new SP({ path, baudRate }, (err) => {
+          if (err) {
+            console.error('Error opening port: ', err.message)
+            // Destroy to release any partially-acquired file descriptor
+            sp.destroy()
+            reject(err)
+          } else {
+            resolve(sp)
+          }
+        })
       })
+
+      this.port = port
 
       if (options.onDisconnect) {
         this.onDisconnect = options.onDisconnect
