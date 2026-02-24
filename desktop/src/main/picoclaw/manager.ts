@@ -469,7 +469,7 @@ export class PicoclawManager {
       }
     }
 
-    // Format 3: Python-like function call: nanokvm_login(password='123')
+    // Format 3: Python-like function call: nanokvm_login(password='mypin')
     if (!matched) {
       const funcPattern = /nanokvm_(\w+)\(([^)]+)\)/g
       let funcMatch: RegExpExecArray | null
@@ -498,11 +498,11 @@ export class PicoclawManager {
   }
 
   /**
-   * Parse Python-like function arguments: password='123qweasd', keys=['Win','L']
+   * Parse Python-like function arguments: password='mypin', keys=['Win','L']
    */
   private parseFunctionArgs(argsStr: string): Record<string, unknown> {
     const result: Record<string, unknown> = {}
-    // Match key=value pairs: password='123', keys=['Win','L'], username="admin"
+    // Match key=value pairs: password='mypin', keys=['Win','L'], username="admin"
     const pairPattern = /(\w+)\s*=\s*('[^']*'|"[^"]*"|\[[^\]]*\]|[^,]+)/g
     let pair: RegExpExecArray | null
     while ((pair = pairPattern.exec(argsStr)) !== null) {
@@ -530,7 +530,7 @@ export class PicoclawManager {
   /**
    * Parse action tag params into a normalized params object.
    * e.g. "Win,L" for shortcut → {keys: ["Win","L"]}
-   * e.g. "123qweasd" for login → {password: "123qweasd"}
+   * e.g. "mypin" for login → {password: "mypin"}
    */
   private parseActionTagParams(toolName: string, paramStr: string): Record<string, unknown> {
     switch (toolName) {
