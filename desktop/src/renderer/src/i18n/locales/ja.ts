@@ -151,7 +151,37 @@ const ja = {
         infoTitle: 'Picoclaw について',
         info1: 'AI エージェントは自然言語コマンドでリモート PC を制御できます',
         info2: '例: "ログインしてください" で自動ログイン実行',
-        info3: 'API キーは暗号化されて保存されます'
+        info3: 'API キーは暗号化されて保存されます',
+        modelUpdate: {
+          title: 'モデルリスト自動更新',
+          description: 'プロバイダのAPIを定期的にチェックし、モデルの提供状況の変更を検出します',
+          enabled: '自動更新を有効化',
+          frequency: '更新頻度',
+          daily: '毎日',
+          weekly: '毎週',
+          monthly: '毎月',
+          hour: '時刻（時）',
+          dayOfWeek: '曜日',
+          dayOfMonth: '日付',
+          sunday: '日曜日',
+          monday: '月曜日',
+          tuesday: '火曜日',
+          wednesday: '水曜日',
+          thursday: '木曜日',
+          friday: '金曜日',
+          saturday: '土曜日',
+          updateNow: '今すぐ更新',
+          updating: '確認中...',
+          lastChecked: '最終確認',
+          nextCheck: '次回確認',
+          never: '未実行',
+          saved: 'スケジュールを保存しました',
+          updateSuccess: 'モデルリストを更新しました',
+          updateFailed: 'モデルリストの更新に失敗しました',
+          modelsFound: '{{count}} モデルを検出',
+          autoSwitched: 'モデルを自動切替しました',
+          noChanges: '全モデルが引き続き利用可能です'
+        }
       }
     },
     chat: {

@@ -4,6 +4,7 @@ import { ClipboardIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
+import { ModelUpdateSettings } from './model-update'
 
 interface PicoclawConfig {
   agents?: {
@@ -662,6 +663,10 @@ export const PicoclawSettings = (): ReactElement => {
             </div>
           )}
         </div>
+
+        {/* Model List Auto-Update */}
+        <Divider />
+        <ModelUpdateSettings />
 
         {/* Telegram Bot Settings */}
         <Divider />

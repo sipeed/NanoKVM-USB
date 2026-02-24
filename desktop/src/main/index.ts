@@ -7,12 +7,14 @@ import log from 'electron-log/main'
 import icon from '../../resources/icon.png?asset'
 import * as events from './events'
 import { PicoclawManager } from './picoclaw/manager'
+import { ModelUpdater } from './picoclaw/model-updater'
 import { ApiServer } from './api/server'
 
 console.error = log.error
 
 let mainWindow: BrowserWindow
 let picoclawManager: PicoclawManager
+let modelUpdater: ModelUpdater
 let apiServer: ApiServer
 
 interface WindowState {
@@ -154,7 +156,8 @@ app.whenReady().then(() => {
 
   // Initialize picoclaw manager
   picoclawManager = new PicoclawManager()
-  events.registerPicoclawHandlers(picoclawManager)
+  modelUpdater = new ModelUpdater()
+  events.registerPicoclawHandlers(picoclawManager, modelUpdater)
 
   // Initialize API server
   apiServer = new ApiServer({ port: 18792, host: '127.0.0.1' })
@@ -175,6 +178,9 @@ app.whenReady().then(() => {
   // Auto-start Telegram gateway if previously enabled
   picoclawManager.autoStartGatewayIfEnabled()
 
+  // Initialize model update scheduler
+  modelUpdater.initialize()
+
   events.registerUpdater(mainWindow)
 
   app.on('activate', function () {
@@ -186,6 +192,11 @@ app.on('window-all-closed', () => {
   // Stop picoclaw when app closes
   if (picoclawManager) {
     picoclawManager.stop().catch((err) => log.error('Failed to stop picoclaw:', err))
+  }
+
+  // Stop model updater scheduler
+  if (modelUpdater) {
+    modelUpdater.stop()
   }
 
   // Stop API server when app closes

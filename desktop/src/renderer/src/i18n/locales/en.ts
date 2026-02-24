@@ -158,7 +158,37 @@ const en = {
         infoTitle: 'About Picoclaw',
         info1: 'AI agent can control remote PC with natural language commands',
         info2: 'Example: "Please login" to execute auto-login sequence',
-        info3: 'API keys are stored encrypted'
+        info3: 'API keys are stored encrypted',
+        modelUpdate: {
+          title: 'Model List Auto-Update',
+          description: 'Periodically check provider APIs for model availability changes',
+          enabled: 'Enable auto-update',
+          frequency: 'Frequency',
+          daily: 'Daily',
+          weekly: 'Weekly',
+          monthly: 'Monthly',
+          hour: 'Time (hour)',
+          dayOfWeek: 'Day of week',
+          dayOfMonth: 'Day of month',
+          sunday: 'Sunday',
+          monday: 'Monday',
+          tuesday: 'Tuesday',
+          wednesday: 'Wednesday',
+          thursday: 'Thursday',
+          friday: 'Friday',
+          saturday: 'Saturday',
+          updateNow: 'Update Now',
+          updating: 'Checking...',
+          lastChecked: 'Last checked',
+          nextCheck: 'Next check',
+          never: 'Never',
+          saved: 'Schedule saved',
+          updateSuccess: 'Model list updated successfully',
+          updateFailed: 'Model list update failed',
+          modelsFound: '{{count}} models found',
+          autoSwitched: 'Model auto-switched',
+          noChanges: 'All models are still available'
+        }
       }
     },
     chat: {

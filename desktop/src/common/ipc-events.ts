@@ -36,6 +36,12 @@ export enum IpcEvents {
   PICOCLAW_GATEWAY_STATUS = 'picoclaw-gateway-status',
   PICOCLAW_GET_VERSION = 'picoclaw-get-version',
 
+  // Model update
+  PICOCLAW_GET_MODEL_UPDATE_SCHEDULE = 'picoclaw-get-model-update-schedule',
+  PICOCLAW_SET_MODEL_UPDATE_SCHEDULE = 'picoclaw-set-model-update-schedule',
+  PICOCLAW_UPDATE_MODELS_NOW = 'picoclaw-update-models-now',
+  PICOCLAW_GET_MODEL_UPDATE_STATUS = 'picoclaw-get-model-update-status',
+
   // Screen capture & login verification
   SCREEN_CAPTURE = 'screen-capture',
   SCREEN_CAPTURE_RESULT = 'screen-capture-result',

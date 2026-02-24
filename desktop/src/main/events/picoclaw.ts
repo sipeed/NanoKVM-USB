@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron'
 import { IpcEvents } from '@common/ipc-events'
 import { PicoclawManager, PicoclawConfig } from '../picoclaw/manager'
+import { ModelUpdater, ModelUpdateSchedule } from '../picoclaw/model-updater'
 
-export function registerPicoclawHandlers(manager: PicoclawManager): void {
+export function registerPicoclawHandlers(manager: PicoclawManager, modelUpdater: ModelUpdater): void {
   // Start picoclaw gateway
   ipcMain.handle(IpcEvents.PICOCLAW_START, async () => {
     try {
@@ -109,6 +110,53 @@ export function registerPicoclawHandlers(manager: PicoclawManager): void {
       return { success: true, version }
     } catch (error) {
       console.error('[IPC] Failed to get picoclaw version:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Get model update schedule
+  ipcMain.handle(IpcEvents.PICOCLAW_GET_MODEL_UPDATE_SCHEDULE, () => {
+    try {
+      const schedule = modelUpdater.getSchedule()
+      return { success: true, schedule }
+    } catch (error) {
+      console.error('[IPC] Failed to get model update schedule:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Set model update schedule
+  ipcMain.handle(
+    IpcEvents.PICOCLAW_SET_MODEL_UPDATE_SCHEDULE,
+    (_event, schedule: ModelUpdateSchedule) => {
+      try {
+        modelUpdater.setSchedule(schedule)
+        return { success: true }
+      } catch (error) {
+        console.error('[IPC] Failed to set model update schedule:', error)
+        return { success: false, error: String(error) }
+      }
+    }
+  )
+
+  // Trigger model list update now
+  ipcMain.handle(IpcEvents.PICOCLAW_UPDATE_MODELS_NOW, async () => {
+    try {
+      const result = await modelUpdater.updateNow()
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] Failed to update models:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Get model update status
+  ipcMain.handle(IpcEvents.PICOCLAW_GET_MODEL_UPDATE_STATUS, () => {
+    try {
+      const status = modelUpdater.getStatus()
+      return { success: true, status }
+    } catch (error) {
+      console.error('[IPC] Failed to get model update status:', error)
       return { success: false, error: String(error) }
     }
   })

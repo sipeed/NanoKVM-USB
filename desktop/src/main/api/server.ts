@@ -232,15 +232,45 @@ export class ApiServer {
     return result
   }
 
+  // OS names, bot names, and other strings that LLMs sometimes hallucinate as usernames
+  private static readonly INVALID_USERNAMES = new Set([
+    'windows', 'win', 'win10', 'win11', 'microsoft',
+    'linux', 'ubuntu', 'macos', 'mac', 'android',
+    'pc', 'computer', 'desktop', 'laptop',
+    // Bot / AI names that LLMs use as usernames
+    'picoclaw', 'assistant', 'bot', 'ai', 'chatbot', 'copilot', 'claude', 'gpt'
+  ])
+
+  // Valid Windows username: ASCII alphanumeric + limited special chars, no emoji
+  private static readonly VALID_USERNAME_RE = /^[a-zA-Z0-9._\-@\\  ]+$/
+
+  private static isValidUsername(username: string): boolean {
+    if (!username || username.length === 0) return false
+    // Reject if it matches known invalid names (case-insensitive, ignoring emoji/whitespace)
+    const stripped = username.replace(/[^\w]/g, '').toLowerCase()
+    if (ApiServer.INVALID_USERNAMES.has(stripped)) return false
+    if (ApiServer.INVALID_USERNAMES.has(username.toLowerCase().trim())) return false
+    // Reject if it contains non-ASCII characters (emoji, CJK, etc.)
+    if (!ApiServer.VALID_USERNAME_RE.test(username)) return false
+    return true
+  }
+
   private async handleKeyboardLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const body = await this.readBody(req)
-      const { password, username } = JSON.parse(body)
+      const { password, username: rawUsername } = JSON.parse(body)
 
       if (typeof password !== 'string' || password === '') {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: 'password field is required' }))
         return
+      }
+
+      // Sanitize username: reject OS names, bot names, emoji, and non-ASCII
+      let username = typeof rawUsername === 'string' ? rawUsername.trim() : ''
+      if (username && !ApiServer.isValidUsername(username)) {
+        console.warn(`[API Server] Ignoring invalid username "${username}", using PIN-only mode`)
+        username = ''
       }
 
       if (!this.mainWindow) {

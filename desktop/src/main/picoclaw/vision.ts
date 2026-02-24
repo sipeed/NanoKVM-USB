@@ -44,6 +44,8 @@ const VISION_MODELS: Record<string, Set<string>> = {
     'gpt-4-turbo'
   ]),
   groq: new Set([
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
     'llama-3.2-11b-vision-preview',
     'llama-3.2-90b-vision-preview'
   ]),
@@ -65,7 +67,7 @@ const VISION_SETUP_MESSAGE =
   '🔍 画面検証にはVision LLMの設定が必要です。\n\n' +
   '設定 → picoclaw → 「👁️ 画面検証 Vision LLM」で設定してください。\n\n' +
   '無料のおすすめ:\n' +
-  '  • Groq + Llama 3.2 11B Vision（クラウド・無料・高速・クレカ不要）\n' +
+  '  • Groq + Llama 4 Scout（クラウド・無料・高速・クレカ不要）\n' +
   '  • Ollama + Moondream2（ローカル・無料・CPU向き）\n\n' +
   '設定後、ロック・ログイン操作の結果を自動判定します。'
 
@@ -316,9 +318,18 @@ function makeHttpRequest(
           const parsed = JSON.parse(data)
 
           // OpenAI format
-          if (parsed.choices?.[0]?.message?.content) {
-            resolve(parsed.choices[0].message.content)
-            return
+          if (parsed.choices?.[0]?.message) {
+            const content = parsed.choices[0].message.content
+            // Handle empty content (e.g. moondream returning content:"")
+            if (typeof content === 'string' && content.trim() === '') {
+              console.warn('[Vision] LLM returned empty content, treating as UNKNOWN')
+              resolve('UNKNOWN')
+              return
+            }
+            if (content) {
+              resolve(content)
+              return
+            }
           }
 
           // Anthropic format
