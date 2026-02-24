@@ -44,7 +44,12 @@ export function registerPicoclawHandlers(manager: PicoclawManager, modelUpdater:
       return { success: true, response }
     } catch (error) {
       console.error('[IPC] Failed to send message to picoclaw:', error)
-      return { success: false, error: String(error) }
+      const err = error as Error & { rateLimit?: { waitSeconds: number; waitTimeText: string; limitType?: string; limitValue?: number; resetAt?: string } }
+      return {
+        success: false,
+        error: String(err.message || err),
+        rateLimit: err.rateLimit || undefined
+      }
     }
   })
 
@@ -143,7 +148,7 @@ export function registerPicoclawHandlers(manager: PicoclawManager, modelUpdater:
   ipcMain.handle(IpcEvents.PICOCLAW_UPDATE_MODELS_NOW, async () => {
     try {
       const result = await modelUpdater.updateNow()
-      return { success: true, ...result }
+      return result
     } catch (error) {
       console.error('[IPC] Failed to update models:', error)
       return { success: false, error: String(error) }

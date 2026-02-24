@@ -4,7 +4,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import http from 'http'
-import { translateApiError } from '@common/error-messages'
+import { translateApiError, RateLimitInfo } from '@common/error-messages'
 
 export interface PicoclawConfig {
   agents?: {
@@ -164,9 +164,19 @@ export class PicoclawManager {
    * Detect error patterns in gateway stdout and send a Japanese follow-up
    * message to Telegram via stdin. picoclaw sends the raw English error first;
    * this adds a user-friendly Japanese explanation as a follow-up message.
+   *
+   * If the Go side already formatted the error (detected by emoji markers),
+   * skip the follow-up to avoid duplicate messages.
    */
   private sendGatewayErrorFollowUp(text: string): void {
     if (!this.process?.stdin?.writable) return
+
+    // Skip if Go's formatUserFriendlyError already produced a user-friendly message
+    // These emoji markers indicate the error was already formatted at the source
+    if (text.includes('🚫') || text.includes('🔑') || text.includes('🌐')) {
+      console.log('[Picoclaw] Error already formatted by Go, skipping follow-up')
+      return
+    }
 
     const { isError, message } = translateApiError(text)
     if (isError) {
@@ -322,8 +332,12 @@ export class PicoclawManager {
           resolve(cleanResponse)
         } else {
           // Translate error to Japanese before rejecting
-          const { message } = translateApiError(errorOutput)
-          reject(new Error(message))
+          const translated = translateApiError(errorOutput)
+          const err = new Error(translated.message) as Error & { rateLimit?: RateLimitInfo }
+          if (translated.rateLimit) {
+            err.rateLimit = translated.rateLimit
+          }
+          reject(err)
         }
       })
 

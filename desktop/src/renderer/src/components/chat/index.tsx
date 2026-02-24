@@ -1,10 +1,115 @@
 import { ReactElement, useState, useRef, useEffect } from 'react'
-import { MessageCircle, Send, X, Minimize2, Copy, Check } from 'lucide-react'
+import { MessageCircle, Send, X, Minimize2, Copy, Check, Clock, AlertTriangle } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
 import { chatMessagesAtom, chatExpandedAtom, chatLoadingAtom, ChatMessage } from '@renderer/jotai/chat'
+
+interface RateLimitPopupData {
+  waitSeconds: number
+  waitTimeText: string
+  limitType?: string
+  limitValue?: number
+  resetAt?: string
+}
+
+function RateLimitPopup({
+  data,
+  onClose
+}: {
+  data: RateLimitPopupData
+  onClose: () => void
+}): ReactElement {
+  const [remaining, setRemaining] = useState(data.waitSeconds)
+
+  useEffect(() => {
+    if (remaining <= 0) return
+    const timer = setInterval(() => {
+      setRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [remaining])
+
+  const formatCountdown = (sec: number): string => {
+    if (sec <= 0) return '利用可能です！'
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    if (m > 0) return `${m}分${s.toString().padStart(2, '0')}秒`
+    return `${s}秒`
+  }
+
+  const limitDesc = data.limitType === 'tokens' && data.limitValue
+    ? `${data.limitValue.toLocaleString()} トークン/分`
+    : data.limitType === 'requests' && data.limitValue
+      ? `${data.limitValue.toLocaleString()} リクエスト/分`
+      : '無料枠'
+
+  const resetTime = data.resetAt
+    ? new Date(data.resetAt).toLocaleTimeString('ja-JP')
+    : undefined
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-sm rounded-xl bg-neutral-800 p-6 shadow-2xl">
+        {/* Header */}
+        <div className="mb-4 flex items-center space-x-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20">
+            <AlertTriangle size={24} className="text-amber-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-white">無料枠の制限に到達</h3>
+            <p className="text-sm text-neutral-400">{limitDesc}</p>
+          </div>
+        </div>
+
+        {/* Countdown */}
+        <div className="mb-4 rounded-lg bg-neutral-900 p-4 text-center">
+          <div className="mb-1 flex items-center justify-center space-x-2 text-neutral-400">
+            <Clock size={16} />
+            <span className="text-sm">復帰までの待ち時間</span>
+          </div>
+          <div className={`text-3xl font-mono font-bold ${remaining <= 0 ? 'text-green-400' : 'text-amber-400'}`}>
+            {formatCountdown(remaining)}
+          </div>
+          {resetTime && remaining > 0 && (
+            <p className="mt-1 text-xs text-neutral-500">
+              復帰予定: {resetTime}
+            </p>
+          )}
+        </div>
+
+        {/* Tips */}
+        <div className="mb-4 space-y-2 text-sm text-neutral-300">
+          <p className="font-medium text-neutral-200">💡 節約のコツ:</p>
+          <ul className="ml-4 list-disc space-y-1 text-neutral-400">
+            <li>短いメッセージで指示する（例:「ロックして」）</li>
+            <li>メッセージの間隔を空ける</li>
+            <li>設定から別のプロバイダーに切り替える</li>
+          </ul>
+        </div>
+
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className={`w-full rounded-lg px-4 py-2.5 font-medium transition-colors ${
+            remaining <= 0
+              ? 'bg-green-600 text-white hover:bg-green-700'
+              : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+          }`}
+        >
+          {remaining <= 0 ? '✅ 再試行できます' : '閉じる'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export const Chat = (): ReactElement => {
   const { t, i18n } = useTranslation()
@@ -14,6 +119,7 @@ export const Chat = (): ReactElement => {
   const [input, setInput] = useState('')
   const [sessionId, setSessionId] = useState(() => `chat-${Date.now()}`)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [rateLimitPopup, setRateLimitPopup] = useState<RateLimitPopupData | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -95,6 +201,11 @@ export const Chat = (): ReactElement => {
       } else {
         // Error message is already translated to Japanese by manager.ts
         const errorContent = result.error || 'Unknown error'
+
+        // Show rate limit popup if rate limit info is available
+        if (result.rateLimit) {
+          setRateLimitPopup(result.rateLimit as RateLimitPopupData)
+        }
         
         const errorMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -257,6 +368,14 @@ export const Chat = (): ReactElement => {
           </button>
         </div>
       </div>
+
+      {/* Rate Limit Popup */}
+      {rateLimitPopup && (
+        <RateLimitPopup
+          data={rateLimitPopup}
+          onClose={() => setRateLimitPopup(null)}
+        />
+      )}
     </div>
   )
 }
