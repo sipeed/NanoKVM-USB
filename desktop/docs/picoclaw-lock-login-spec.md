@@ -354,6 +354,15 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | `LOCK_SCREEN` | 🔒 | ロック画面です。時計とユーザーアバターが表示されています。 |
 | `LOGIN_SCREEN` | 🔑 | サインイン画面です。PIN 入力フィールドが表示されています。 |
 | `DESCRIBED` | 🔍 | 画面状態: （Vision LLM の記述） |
+| `NO_VIDEO` | 📹 | 映像がありません。PCが接続されていてストリーミングが開始されていることを確認してください。 |
+
+### エラーハンドリング
+
+| 状況 | 原因 | Go側の判定 | ユーザーへのメッセージ |
+|------|------|-----------|---------------------|
+| **映像なし** | PC 未接続 / ストリーミング未開始 | `success=false`, `status="NO_VIDEO"` | 📹 映像がありません。PCがNanoKVM-USBに接続されていて… |
+| **アプリ未起動** | API Server に接続不可 | `result == nil` | NanoKVM-USB デスクトップアプリに接続できませんでした… |
+| **Vision 未設定** | Vision LLM プロバイダ/モデル未設定 | `visionConfigured=false` | Vision LLM が設定されていません… |
 ---
 
 ## チャット用 LLM（Chat LLM）
@@ -763,4 +772,5 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **デッドコード削除** | Antigravity プロバイダ、WeChat 企業アプリ等の未使用コードを除去 |
 | **`nanokvm_screen_check` 追加** | 画面状態をキャプチャ・ Vision LLM で分析して返却する新ツール。早期終了対応 |
 | **`/api/screen/verify` 拡張** | `action: "status"` を追加。汎用プロンプトで画面全体を記述 |
+| **NO_VIDEO 構造化レスポンス** | 映像なし時に HTTP 500 → 200 + `status: "NO_VIDEO"` に変更。「アプリ未起動」と「映像なし」を区別可能に |
 | **CGO_ENABLED=0 静的ビルド** | クロスプラットフォーム GLIBC エラーを防止 |
