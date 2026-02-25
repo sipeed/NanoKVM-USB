@@ -141,6 +141,29 @@ export function registerPicoclawHandlers(manager: PicoclawManager, modelUpdater:
     }
   })
 
+  // Initiate GitHub authentication (spawns gh auth login --web)
+  ipcMain.handle(IpcEvents.PICOCLAW_INITIATE_GITHUB_AUTH, async () => {
+    try {
+      if (!manager.isGhInstalled()) {
+        return {
+          success: false,
+          error: 'gh CLIがインストールされていません。https://cli.github.com からインストールしてください。'
+        }
+      }
+      const result = await manager.initiateGitHubAuth()
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] Failed to initiate GitHub auth:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Cancel ongoing GitHub authentication
+  ipcMain.handle(IpcEvents.PICOCLAW_CANCEL_GITHUB_AUTH, () => {
+    manager.cancelGitHubAuth()
+    return { success: true }
+  })
+
   // Get model update schedule
   ipcMain.handle(IpcEvents.PICOCLAW_GET_MODEL_UPDATE_SCHEDULE, () => {
     try {

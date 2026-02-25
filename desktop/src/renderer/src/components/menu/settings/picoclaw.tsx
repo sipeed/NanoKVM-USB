@@ -272,6 +272,8 @@ export const PicoclawSettings = (): ReactElement => {
   const [ghToken, setGhToken] = useState<string | null>(null)
   const [ghUser, setGhUser] = useState<string | null>(null)
   const [ghDetecting, setGhDetecting] = useState<boolean>(false)
+  const [ghAuthInProgress, setGhAuthInProgress] = useState<boolean>(false)
+  const [ghDeviceCode, setGhDeviceCode] = useState<string | null>(null)
 
   /** Check if a provider requires an API key */
   function requiresApiKey(providerName: string): boolean {
@@ -300,7 +302,64 @@ export const PicoclawSettings = (): ReactElement => {
       setGhDetecting(false)
     }
   }
-  
+
+  /** Initiate GitHub authentication via gh auth login --web */
+  async function initiateGitHubAuth(): Promise<void> {
+    setGhAuthInProgress(true)
+    setGhDeviceCode(null)
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_INITIATE_GITHUB_AUTH)
+      if (!result.success) {
+        message.error(result.error || 'GitHub認証の開始に失敗しました')
+        setGhAuthInProgress(false)
+        return
+      }
+
+      setGhDeviceCode(result.code)
+      // Open the device verification page in the browser
+      await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_EXTERNAL_URL, result.url)
+
+      // Poll for auth completion
+      const pollInterval = setInterval(async () => {
+        try {
+          const authResult = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_DETECT_GITHUB_AUTH)
+          if (authResult.found) {
+            clearInterval(pollInterval)
+            setGhAuthDetected(true)
+            setGhToken(authResult.token || null)
+            setGhUser(authResult.user || null)
+            setGhAuthInProgress(false)
+            setGhDeviceCode(null)
+            message.success(`GitHub認証完了 (${authResult.user || 'OK'})`)
+          }
+        } catch {
+          // continue polling
+        }
+      }, 3000)
+
+      // Stop polling after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval)
+        if (ghAuthInProgress) {
+          setGhAuthInProgress(false)
+          setGhDeviceCode(null)
+          message.warning('GitHub認証がタイムアウトしました。再度お試しください。')
+        }
+      }, 300000)
+    } catch (err) {
+      console.error('Failed to initiate GitHub auth:', err)
+      message.error(String(err))
+      setGhAuthInProgress(false)
+    }
+  }
+
+  /** Cancel ongoing GitHub auth */
+  function cancelGitHubAuth(): void {
+    window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_CANCEL_GITHUB_AUTH)
+    setGhAuthInProgress(false)
+    setGhDeviceCode(null)
+  }
+
   // Telegram settings
   const [telegramEnabled, setTelegramEnabled] = useState<boolean>(false)
   const [telegramToken, setTelegramToken] = useState<string>('')
@@ -407,7 +466,7 @@ export const PicoclawSettings = (): ReactElement => {
     // GitHub Copilot: require gh auth instead of API key
     if (isCopilotProvider(provider)) {
       if (!ghAuthDetected || !ghToken) {
-        message.error('GitHub認証が必要です。ターミナルで `gh auth login` を実行してください。')
+        message.error('GitHub認証が必要です。「🔑 GitHub 認証を開始」ボタンから認証してください。')
         return
       }
     } else if (!apiKey && requiresApiKey(provider)) {
@@ -417,7 +476,7 @@ export const PicoclawSettings = (): ReactElement => {
 
     // Vision provider is GitHub Copilot but no gh auth
     if (visionProvider && isCopilotProvider(visionProvider) && (!ghAuthDetected || !ghToken)) {
-      message.error('Vision用GitHub Copilotにはgh認証が必要です。`gh auth login` を実行してください。')
+      message.error('Vision用GitHub Copilotにはgh認証が必要です。「🔑 GitHub 認証を開始」ボタンから認証してください。')
       return
     }
 
@@ -762,6 +821,29 @@ export const PicoclawSettings = (): ReactElement => {
                   💡 GitHub Models API を使用します。保存するとトークンが自動設定されます。
                 </p>
               </div>
+            ) : ghAuthInProgress ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
+                  <span className="text-sm text-yellow-400">認証を待機中...</span>
+                </div>
+                {ghDeviceCode && (
+                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
+                    <p className="mb-1 text-xs text-neutral-400">
+                      ブラウザで以下のコードを入力してください:
+                    </p>
+                    <p className="font-mono text-2xl font-bold tracking-widest text-yellow-300">
+                      {ghDeviceCode}
+                    </p>
+                    <p className="mt-2 text-xs text-neutral-500">
+                      github.com/login/device が開いています。コードを入力して認証を完了してください。
+                    </p>
+                  </div>
+                )}
+                <Button size="small" onClick={cancelGitHubAuth}>
+                  キャンセル
+                </Button>
+              </div>
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -769,14 +851,26 @@ export const PicoclawSettings = (): ReactElement => {
                   <span className="text-sm text-red-400">GitHub 認証が必要です</span>
                 </div>
                 <p className="text-xs text-neutral-500">
-                  ターミナルで <code className="rounded bg-neutral-700 px-1">gh auth login</code> を実行してください。
+                  ボタンをクリックしてブラウザで GitHub 認証を行います。
                 </p>
-                <Button
-                  size="small"
-                  onClick={detectGitHubAuth}
-                >
-                  再検出
-                </Button>
+                <Space>
+                  <Button
+                    type="primary"
+                    size="small"
+                    onClick={initiateGitHubAuth}
+                  >
+                    🔑 GitHub 認証を開始
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={detectGitHubAuth}
+                  >
+                    再検出
+                  </Button>
+                </Space>
+                <p className="text-xs text-neutral-500">
+                  ※ <code className="rounded bg-neutral-700 px-1">gh</code> CLI のインストールが必要です（<a href="https://cli.github.com" className="text-blue-400 hover:underline" onClick={(e) => { e.preventDefault(); window.electron.ipcRenderer.invoke(IpcEvents.OPEN_EXTERNAL_URL, 'https://cli.github.com') }}>cli.github.com</a>）
+                </p>
               </div>
             )}
           </div>
@@ -877,15 +971,27 @@ export const PicoclawSettings = (): ReactElement => {
                   <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
                   GitHub 認証済み — Vision にも gh トークンを使用します
                 </div>
+              ) : ghAuthInProgress ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-yellow-400">
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
+                    認証を待機中...
+                  </div>
+                  {ghDeviceCode && (
+                    <p className="font-mono text-lg font-bold tracking-widest text-yellow-300">
+                      {ghDeviceCode}
+                    </p>
+                  )}
+                </div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-yellow-400">
                     <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
                     GitHub 認証が必要です
                   </div>
-                  <p className="text-xs text-neutral-500">
-                    チャット LLM で GitHub Copilot を選択して認証するか、<code className="rounded bg-neutral-700 px-1">gh auth login</code> を実行してください。
-                  </p>
+                  <Button size="small" type="primary" onClick={initiateGitHubAuth}>
+                    🔑 GitHub 認証を開始
+                  </Button>
                 </div>
               )}
             </div>

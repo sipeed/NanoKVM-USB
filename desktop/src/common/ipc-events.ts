@@ -38,6 +38,8 @@ export enum IpcEvents {
 
   PICOCLAW_GET_PROVIDERS = 'picoclaw-get-providers',
   PICOCLAW_DETECT_GITHUB_AUTH = 'picoclaw-detect-github-auth',
+  PICOCLAW_INITIATE_GITHUB_AUTH = 'picoclaw-initiate-github-auth',
+  PICOCLAW_CANCEL_GITHUB_AUTH = 'picoclaw-cancel-github-auth',
 
   // Model update
   PICOCLAW_GET_MODEL_UPDATE_SCHEDULE = 'picoclaw-get-model-update-schedule',

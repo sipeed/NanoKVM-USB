@@ -51,6 +51,7 @@ export interface PicoclawStatus {
 
 export class PicoclawManager {
   private process: ChildProcess | null = null
+  private ghAuthProcess: ChildProcess | null = null
   private configPath: string
   private picoclawBinary: string
   private recentApiCalls: Map<string, number> = new Map() // endpoint+body → timestamp for dedup
@@ -349,6 +350,166 @@ export class PicoclawManager {
 
     console.log('[Picoclaw] GitHub auth not found (install gh CLI and run: gh auth login)')
     return { found: false, token: null, user: null }
+  }
+
+  /**
+   * Check if gh CLI is installed and available.
+   */
+  isGhInstalled(): boolean {
+    const { execSync } = require('child_process')
+    const extraPaths = [
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      '/opt/local/bin',
+      path.join(os.homedir(), '.local', 'bin'),
+      path.join(os.homedir(), 'bin')
+    ]
+    const envPATH = [process.env.PATH, ...extraPaths].filter(Boolean).join(':')
+    try {
+      execSync('gh --version', {
+        encoding: 'utf-8',
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PATH: envPATH }
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Find the full path to gh CLI binary.
+   */
+  private findGhPath(): string {
+    const { execSync } = require('child_process')
+    const extraPaths = [
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      '/opt/local/bin',
+      path.join(os.homedir(), '.local', 'bin'),
+      path.join(os.homedir(), 'bin')
+    ]
+    const envPATH = [process.env.PATH, ...extraPaths].filter(Boolean).join(':')
+    try {
+      return execSync('which gh', {
+        encoding: 'utf-8',
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PATH: envPATH }
+      }).trim()
+    } catch {
+      return 'gh' // fallback
+    }
+  }
+
+  /**
+   * Initiate GitHub authentication via `gh auth login --web`.
+   *
+   * Spawns `gh auth login -h github.com -p https -w` in the background,
+   * parses the one-time device code from stderr, sends Enter to proceed,
+   * and returns the code + verification URL.
+   *
+   * The caller should:
+   * 1. Show the code to the user
+   * 2. Open github.com/login/device in browser
+   * 3. Poll detectGitHubToken() until auth completes
+   */
+  initiateGitHubAuth(): Promise<{
+    code: string
+    url: string
+  }> {
+    return new Promise((resolve, reject) => {
+      if (this.ghAuthProcess) {
+        try { this.ghAuthProcess.kill() } catch { /* ignore */ }
+        this.ghAuthProcess = null
+      }
+
+      const ghPath = this.findGhPath()
+      const extraPaths = [
+        '/usr/local/bin',
+        '/opt/homebrew/bin',
+        '/opt/local/bin',
+        path.join(os.homedir(), '.local', 'bin'),
+        path.join(os.homedir(), 'bin')
+      ]
+      const envPATH = [process.env.PATH, ...extraPaths].filter(Boolean).join(':')
+
+      console.log(`[Picoclaw] Starting gh auth login (${ghPath})`)
+
+      const proc = spawn(ghPath, ['auth', 'login', '-h', 'github.com', '-p', 'https', '-w'], {
+        env: { ...process.env, PATH: envPATH },
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+
+      this.ghAuthProcess = proc
+      let stderrData = ''
+      let resolved = false
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          try { proc.kill() } catch { /* ignore */ }
+          this.ghAuthProcess = null
+          reject(new Error('gh auth login timed out (30s)'))
+        }
+      }, 30000)
+
+      proc.stderr?.on('data', (data: Buffer) => {
+        const chunk = data.toString()
+        stderrData += chunk
+        console.log(`[Picoclaw] gh auth stderr: ${chunk.trim()}`)
+
+        // Look for one-time code: "First copy your one-time code: XXXX-XXXX"
+        const match = stderrData.match(/one-time code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})/i)
+        if (match && !resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          const code = match[1]
+
+          // Send Enter to skip "Press Enter to open github.com in your browser..."
+          setTimeout(() => {
+            try { proc.stdin?.write('\n') } catch { /* ignore */ }
+          }, 500)
+
+          resolve({ code, url: 'https://github.com/login/device' })
+        }
+      })
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        console.log(`[Picoclaw] gh auth stdout: ${data.toString().trim()}`)
+      })
+
+      proc.on('error', (err) => {
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          this.ghAuthProcess = null
+          reject(new Error(`Failed to start gh auth login: ${err.message}`))
+        }
+      })
+
+      proc.on('exit', (exitCode) => {
+        this.ghAuthProcess = null
+        console.log(`[Picoclaw] gh auth login exited with code ${exitCode}`)
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          reject(new Error(`gh auth login exited unexpectedly (code: ${exitCode}). Output: ${stderrData}`))
+        }
+      })
+    })
+  }
+
+  /**
+   * Cancel an ongoing gh auth login process.
+   */
+  cancelGitHubAuth(): void {
+    if (this.ghAuthProcess) {
+      try { this.ghAuthProcess.kill() } catch { /* ignore */ }
+      this.ghAuthProcess = null
+      console.log('[Picoclaw] gh auth login cancelled')
+    }
   }
 
   /**

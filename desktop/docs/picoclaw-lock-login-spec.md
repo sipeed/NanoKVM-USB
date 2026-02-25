@@ -359,6 +359,70 @@ picoclaw のチャット機能（自然言語によるコマンド解釈・応�
 GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.ai.azure.com) を使用します。
 `gh auth login` で取得した OAuth トークン (`gho_*`) で認証し、API キーの手動入力は不要です。
 
+#### 初回認証フロー
+
+GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと認証が必要です。
+アプリ内の「🔑 GitHub 認証を開始」ボタンから以下のフローで認証できます:
+
+```
+┌─────────────────────────────────────────────────┐
+│  NanoKVM-USB Desktop                             │
+│                                                  │
+│  🤖 GitHub Copilot 接続設定                      │
+│  [⚠️ GitHub 認証が必要です]                      │
+│                                                  │
+│  [🔑 GitHub 認証を開始] [再検出]                  │
+└──────────┬──────────────────────────────────────┘
+           │ クリック
+           ▼
+┌─────────────────────────────────────────────────┐
+│  Main Process                                    │
+│  spawn: gh auth login -h github.com -p https -w  │
+│  → stderr から one-time code を取得               │
+└──────────┬──────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────┐
+│  NanoKVM-USB Desktop                             │
+│                                                  │
+│  認証を待機中...                                  │
+│  ┌─────────────────────────────┐                 │
+│  │ ブラウザでこのコードを入力:   │                 │
+│  │   XXXX-XXXX                 │                 │
+│  │ github.com/login/device     │                 │
+│  └─────────────────────────────┘                 │
+│  [キャンセル]                                     │
+└──────────┬──────────────────────────────────────┘
+           │ ブラウザが自動で開く
+           ▼
+┌─────────────────────────────────────────────────┐
+│  ブラウザ: github.com/login/device               │
+│  → ユーザーがコードを入力 → 認証を許可            │
+└──────────┬──────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────┐
+│  NanoKVM-USB Desktop (3秒ポーリング)              │
+│  gh auth token で認証完了を検出                    │
+│  → ✅ GitHub 認証済み (user: xxx)                │
+│  → トークンを config に自動保存                    │
+└─────────────────────────────────────────────────┘
+```
+
+**前提条件**:
+- [GitHub CLI (`gh`)](https://cli.github.com) がインストール済み
+- GitHub アカウントを持っている（無料アカウントでOK）
+- GitHub Copilot の登録は**不要**（GitHub Models API は全ユーザーに無料提供）
+
+**実装ファイル**:
+| ファイル | 役割 |
+|---------|------|
+| `manager.ts` → `initiateGitHubAuth()` | `gh auth login --web` を spawn、デバイスコード取得 |
+| `manager.ts` → `detectGitHubToken()` | `gh auth token` でトークン検出 |
+| `manager.ts` → `cancelGitHubAuth()` | 認証プロセスを kill |
+| `picoclaw.ts` (events) | IPC ハンドラ (`INITIATE_GITHUB_AUTH`, `CANCEL_GITHUB_AUTH`) |
+| `picoclaw.tsx` (renderer) | UI: デバイスコード表示、ポーリング、完了通知 |
+
 | モデル名 | 種別 | Vision | 備考 |
 |---------|------|--------|------|
 | **gpt-4o-mini** | Chat | ✅ | **デフォルト**: 高速・軽量 |
@@ -582,24 +646,39 @@ Vision LLM が設定されていない場合:
 
 | プロバイダ | モデル | 料金 | 速度 | 備考 |
 |-----------|--------|------|------|------|
-| **Groq** | **Llama 4 Scout 17B** | **無料** | 高速 (~500ms) | **推奨**: クレカ不要 |
-| **Groq** | Llama 4 Maverick 17B | **無料** | 高速 | 高精度 |
-| **Groq** | Llama 3.2 11B Vision | **無料** | 高速 | レガシー |
-| **Groq** | Llama 3.2 90B Vision | **無料** | 低速 | 高精度 |
-| **GitHub Copilot** | **gpt-4o-mini** | **無料** | 高速 | gh 認証のみ・Vision対応 |
-| **GitHub Copilot** | gpt-4o | **無料** | 高速 | 高品質・Vision対応 |
-| **GitHub Copilot** | gpt-4.1 | **無料** | 高速 | 最新世代・Vision対応 |
+| **Groq** | **meta-llama/llama-4-scout-17b-16e-instruct** | **無料** | 高速 (~500ms) | **推奨**: Llama 4 Scout・クレカ不要 |
+| **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct | **無料** | 高速 | Llama 4 Maverick・高精度 |
+| **Groq** | llama-3.2-11b-vision-preview | **無料** | 高速 | Llama 3.2 11B Vision |
+| **Groq** | llama-3.2-90b-vision-preview | **無料** | 低速 | Llama 3.2 90B Vision・高精度 |
+| **GitHub Copilot** | **gpt-4o-mini** | **無料** | 高速 | gh 認証のみ・推奨 |
+| **GitHub Copilot** | gpt-4o | **無料** | 高速 | 高品質 |
+| **GitHub Copilot** | gpt-4.1 | **無料** | 高速 | 最新世代 |
 | **GitHub Copilot** | gpt-4.1-mini | **無料** | 高速 | 最新世代・軽量 |
 | **GitHub Copilot** | Llama-3.2-11B-Vision-Instruct | **無料** | 中速 | オープンモデル |
 | **GitHub Copilot** | Llama-3.2-90B-Vision-Instruct | **無料** | 低速 | 高精度 |
 | **GitHub Copilot** | Phi-4-multimodal-instruct | **無料** | 中速 | Microsoft モデル |
-| **Ollama** | Moondream2 (1.7B) | **無料** | ~60秒 | ローカル・CPU向き |
-| **Ollama** | LLaVA (7B) | **無料** | ~3分 | ローカル・高精度 |
-| OpenRouter | Gemini 2.0 Flash | 安価 | 高速 | API キー共有可 |
-| OpenAI | GPT-4o Mini | 安価 | 高速 | - |
-| OpenAI | GPT-4o | 高額 | 中速 | 高精度 |
-| Anthropic | Claude 3.5 Haiku | 安価 | 高速 | - |
-| Anthropic | Claude 3.5 Sonnet | 高額 | 中速 | 高精度 |
+| **Ollama** | moondream2:latest | **無料** | ~60秒 | 1.7B・ローカル・CPU向き |
+| **Ollama** | moondream:latest | **無料** | ~60秒 | Moondream v1 |
+| **Ollama** | llava:latest | **無料** | ~3分 | LLaVA 7B・高精度 |
+| **Ollama** | llava:7b | **無料** | ~3分 | LLaVA 7B 明示指定 |
+| **Ollama** | llava:13b | **無料** | ~5分 | LLaVA 13B・高精度・要GPU |
+| **Ollama** | llava-llama3:latest | **無料** | ~3分 | LLaVA-Llama3・新世代 |
+| **Ollama** | bakllava:latest | **無料** | ~3分 | BakLLaVA・Mistral ベース |
+| **OpenRouter** | google/gemini-2.0-flash-001 | 安価 | 高速 | Gemini 2.0 Flash |
+| **OpenRouter** | google/gemini-pro-1.5 | 安価 | 中速 | Gemini Pro 1.5 |
+| **OpenRouter** | anthropic/claude-3.5-sonnet | 高額 | 中速 | Claude 3.5 Sonnet |
+| **OpenRouter** | anthropic/claude-3-5-sonnet | 高額 | 中速 | Claude 3.5 Sonnet (旧ID) |
+| **OpenRouter** | anthropic/claude-3-haiku | 安価 | 高速 | Claude 3 Haiku |
+| **OpenRouter** | openai/gpt-4o | 高額 | 中速 | GPT-4o (OpenRouter 経由) |
+| **OpenRouter** | openai/gpt-4o-mini | 安価 | 高速 | GPT-4o Mini (OpenRouter 経由) |
+| **OpenAI** | gpt-4o-mini | 安価 | 高速 | 推奨・低コスト |
+| **OpenAI** | gpt-4o | 高額 | 中速 | 高精度 |
+| **OpenAI** | gpt-4-turbo | 高額 | 低速 | GPT-4 Turbo |
+| **Anthropic** | claude-3-5-haiku-20241022 | 安価 | 高速 | コスト効率 |
+| **Anthropic** | claude-3-5-sonnet-20241022 | 高額 | 中速 | 高精度 |
+| **Anthropic** | claude-3-opus-20240229 | 最高額 | 低速 | 最高精度 |
+| **Anthropic** | claude-3-sonnet-20240229 | 高額 | 中速 | バランス |
+| **Anthropic** | claude-3-haiku-20240307 | 安価 | 高速 | 旧世代・高速 |
 
 ### タイムアウト設定
 
