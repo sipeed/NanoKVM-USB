@@ -49,6 +49,15 @@ const VISION_MODELS: Record<string, Set<string>> = {
     'llama-3.2-11b-vision-preview',
     'llama-3.2-90b-vision-preview'
   ]),
+  'github-copilot': new Set([
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'Llama-3.2-11B-Vision-Instruct',
+    'Llama-3.2-90B-Vision-Instruct',
+    'Phi-4-multimodal-instruct'
+  ]),
   ollama: new Set([
     'llava:latest',
     'llava:7b',
@@ -161,6 +170,7 @@ function getApiBase(provider: string, configApiBase: string): string {
     case 'openai': return 'https://api.openai.com/v1'
     case 'deepseek': return 'https://api.deepseek.com/v1'
     case 'groq': return 'https://api.groq.com/openai/v1'
+    case 'github-copilot': return 'https://models.inference.ai.azure.com'
     case 'ollama': return 'http://127.0.0.1:11434/v1'
     default: return 'https://openrouter.ai/api/v1'
   }

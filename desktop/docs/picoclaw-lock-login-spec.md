@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-24
+> **最終更新**: 2026-02-25
 
 ## 概要
 
@@ -326,6 +326,157 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 
 ---
 
+## チャット用 LLM（Chat LLM）
+
+picoclaw のチャット機能（自然言語によるコマンド解釈・応答生成）に使用する LLM プロバイダとモデルの一覧です。
+自動更新機能によりモデルリストは定期的に更新されますが、以下が現在のデフォルト構成です。
+
+### チャット LLM プロバイダ・モデル一覧
+
+| プロバイダ | デフォルトモデル | 認証方式 | 料金 | 備考 |
+|-----------|-----------------|---------|------|------|
+| **Groq** | llama-3.3-70b-versatile | API Key | **無料枠あり** | 推奨: 高速・クレカ不要 |
+| **OpenAI** | gpt-5.2 | API Key | 有料 | 高品質・安定 |
+| **Anthropic** | claude-sonnet-4.6 | API Key | 有料 | 高品質 |
+| **DeepSeek** | deepseek-chat | API Key | 安価 | コスト効率 |
+| **Google Gemini** | gemini-2.0-flash-exp | API Key | 無料枠あり | 高速 |
+| **GitHub Copilot** | gpt-4o-mini | OAuth (gh CLI) | **無料** | `gh auth login` で認証 |
+| **OpenRouter** | auto | API Key | 従量制 | 多プロバイダ統合 |
+| **Mistral AI** | mistral-small-latest | API Key | 有料 | 欧州拠点 |
+| **Ollama** | llama3 | 不要 | **無料** | ローカル実行 |
+| **VLLM** | custom-model | 不要 | **無料** | ローカル実行 |
+| **NVIDIA** | nemotron-4-340b-instruct | API Key | 要確認 | GPU 推論 |
+| **Cerebras** | llama-3.3-70b | API Key | 要確認 | 高速推論 |
+| **Qwen** | qwen-plus | API Key | 安価 | 中国拠点 |
+| **Zhipu AI** | glm-4.7 | API Key | 安価 | 中国拠点 |
+| **Moonshot** | moonshot-v1-8k | API Key | 安価 | 中国拠点 |
+| **Volcengine** | doubao-pro-32k | API Key | 安価 | ByteDance |
+| **ShengsuanYun** | deepseek-v3 | API Key | 安価 | 中国拠点 |
+| **Antigravity** | gemini-3-flash | OAuth | 要確認 | Google Cloud |
+
+### GitHub Copilot / GitHub Models 対応モデル
+
+GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.ai.azure.com) を使用します。
+`gh auth login` で取得した OAuth トークン (`gho_*`) で認証し、API キーの手動入力は不要です。
+
+| モデル名 | 種別 | Vision | 備考 |
+|---------|------|--------|------|
+| **gpt-4o-mini** | Chat | ✅ | **デフォルト**: 高速・軽量 |
+| **gpt-4o** | Chat | ✅ | 高品質 |
+| **gpt-4.1** | Chat | ✅ | 最新世代 |
+| **gpt-4.1-mini** | Chat | ✅ | 最新世代・軽量 |
+| **gpt-4.1-nano** | Chat | - | 超軽量 |
+| **o1** | Reasoning | - | 推論特化 |
+| **o3** | Reasoning | - | 推論特化 |
+| **o3-mini** | Reasoning | - | 推論特化・軽量 |
+| **o4-mini** | Reasoning | - | 最新推論モデル |
+| **Meta-Llama-3.1-405B-Instruct** | Chat | - | 大型オープン |
+| **Meta-Llama-3.1-8B-Instruct** | Chat | - | 軽量オープン |
+| **Llama-3.2-11B-Vision-Instruct** | Chat | ✅ | **Vision対応**: 画面検証に使用可能 |
+| **Llama-3.2-90B-Vision-Instruct** | Chat | ✅ | **Vision対応**: 高精度 |
+| **Phi-4** | Chat | - | Microsoft 軽量 |
+| **Phi-4-multimodal-instruct** | Chat | ✅ | **Vision対応**: Microsoft |
+| **DeepSeek-R1** | Reasoning | - | 推論特化 |
+| **MAI-DS-R1** | Reasoning | - | Microsoft + DeepSeek |
+| **Mistral-large-2407** | Chat | - | Mistral 大型 |
+
+> **Note**: GitHub Copilot の Web/VS Code 版では Claude 等の Anthropic モデルも選択可能ですが、
+> GitHub Models API (`models.inference.ai.azure.com`) ではサポートされていません。
+> picoclaw は GitHub Models API を経由するため、上記のモデルのみ利用可能です。
+
+---
+
+## モデルリスト自動更新機能
+
+picoclaw のモデルリストは、プロバイダが新モデルを追加した際に自動更新されます。
+
+### 概要
+
+- **更新対象**: 各プロバイダが提供するモデルの一覧（`~/.picoclaw/config.json` の `model_list`）
+- **更新元**: `picoclaw providers` コマンドで取得するデフォルトモデル + UI 上の追加定義
+- **表示**: 設定画面のモデル選択ドロップダウンに反映
+
+### スケジュール設定
+
+| 項目 | オプション | デフォルト |
+|------|----------|----------|
+| **頻度** | 日次 / 週次 / 月次 | **月次** |
+| **実行時刻** | 0:00 〜 23:00 | **0:00** |
+| **曜日**（週次） | 月〜日 | 月曜日 |
+| **日付**（月次） | 1〜28日 | 1日 |
+| **有効/無効** | トグル | **有効** |
+
+### 更新フロー
+
+```
+┌──────────────────────┐
+│ Electron 起動時       │
+│ ModelUpdater.init()   │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐     ┌─────────────────────┐
+│ スケジュール確認      │────▶│ 次回実行時刻を計算   │
+│ (config.json)        │     │ setTimeout() 設定    │
+└──────────────────────┘     └──────────┬──────────┘
+                                        │
+                              (時刻到達) │
+                                        ▼
+                             ┌─────────────────────┐
+                             │ picoclaw providers   │
+                             │ コマンド実行          │
+                             └──────────┬──────────┘
+                                        │
+                                        ▼
+                             ┌─────────────────────┐
+                             │ config.json の       │
+                             │ model_list を更新     │
+                             └──────────┬──────────┘
+                                        │
+                                        ▼
+                             ┌─────────────────────┐
+                             │ 現在のモデルが存在    │
+                             │ するか確認            │
+                             │ (auto-switch)        │
+                             └──────────┬──────────┘
+                                        │
+                              ┌─────────┴─────────┐
+                              ▼                   ▼
+                         存在する             存在しない
+                         → 変更なし           → デフォルトに
+                                               自動切替 + 警告
+```
+
+### 手動更新
+
+設定画面の「🔄 今すぐ更新」ボタンで即時実行できます。
+
+### Config 構造（自動更新関連）
+
+```json
+{
+  "model_update": {
+    "enabled": true,
+    "frequency": "monthly",
+    "hour": 0,
+    "dayOfMonth": 1
+  }
+}
+```
+
+ステータスは `~/.picoclaw/model-update-status.json` に保存:
+
+```json
+{
+  "lastChecked": "2026-02-25T00:00:00Z",
+  "nextCheck": "2026-03-01T00:00:00Z",
+  "lastUpdatedModels": ["groq: 4 models", "openai: 1 model"],
+  "autoSwitched": false
+}
+```
+
+---
+
 ## 画面検証機能（Vision LLM）
 
 ロック・ログインコマンド実行後、NanoKVM-USB の HDMI キャプチャ映像をスクリーンキャプチャし、**専用の Vision LLM** で画面内容を解析して結果を自動判定します。
@@ -435,6 +586,13 @@ Vision LLM が設定されていない場合:
 | **Groq** | Llama 4 Maverick 17B | **無料** | 高速 | 高精度 |
 | **Groq** | Llama 3.2 11B Vision | **無料** | 高速 | レガシー |
 | **Groq** | Llama 3.2 90B Vision | **無料** | 低速 | 高精度 |
+| **GitHub Copilot** | **gpt-4o-mini** | **無料** | 高速 | gh 認証のみ・Vision対応 |
+| **GitHub Copilot** | gpt-4o | **無料** | 高速 | 高品質・Vision対応 |
+| **GitHub Copilot** | gpt-4.1 | **無料** | 高速 | 最新世代・Vision対応 |
+| **GitHub Copilot** | gpt-4.1-mini | **無料** | 高速 | 最新世代・軽量 |
+| **GitHub Copilot** | Llama-3.2-11B-Vision-Instruct | **無料** | 中速 | オープンモデル |
+| **GitHub Copilot** | Llama-3.2-90B-Vision-Instruct | **無料** | 低速 | 高精度 |
+| **GitHub Copilot** | Phi-4-multimodal-instruct | **無料** | 中速 | Microsoft モデル |
 | **Ollama** | Moondream2 (1.7B) | **無料** | ~60秒 | ローカル・CPU向き |
 | **Ollama** | LLaVA (7B) | **無料** | ~3分 | ローカル・高精度 |
 | OpenRouter | Gemini 2.0 Flash | 安価 | 高速 | API キー共有可 |

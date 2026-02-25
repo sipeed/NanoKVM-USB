@@ -200,6 +200,20 @@ const VISION_PROVIDERS = [
     ]
   },
   {
+    value: 'github-copilot',
+    label: 'GitHub Copilot (無料・gh認証)',
+    defaultModel: 'gpt-4o-mini',
+    apiUrl: 'https://github.com/settings/tokens',
+    models: [
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini 👁️ (推奨)', description: '無料・高速・gh認証のみ' },
+      { value: 'gpt-4o', label: 'GPT-4o 👁️', description: '無料・高品質' },
+      { value: 'gpt-4.1', label: 'GPT-4.1 👁️', description: '無料・最新世代' },
+      { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini 👁️', description: '無料・最新世代・軽量' },
+      { value: 'Llama-3.2-11B-Vision-Instruct', label: 'Llama 3.2 11B Vision 👁️', description: '無料・オープンモデル' },
+      { value: 'Llama-3.2-90B-Vision-Instruct', label: 'Llama 3.2 90B Vision 👁️', description: '無料・高精度' }
+    ]
+  },
+  {
     value: 'ollama',
     label: 'Ollama (無料・ローカル)',
     defaultModel: 'moondream2:latest',
@@ -401,6 +415,12 @@ export const PicoclawSettings = (): ReactElement => {
       return
     }
 
+    // Vision provider is GitHub Copilot but no gh auth
+    if (visionProvider && isCopilotProvider(visionProvider) && (!ghAuthDetected || !ghToken)) {
+      message.error('Vision用GitHub Copilotにはgh認証が必要です。`gh auth login` を実行してください。')
+      return
+    }
+
     setLoading(true)
     try {
       // Update config
@@ -421,10 +441,20 @@ export const PicoclawSettings = (): ReactElement => {
       }
 
       // Save Vision provider API key if it's a different provider
-      if (visionProvider && visionProvider !== provider && requiresApiKey(visionProvider)) {
-        providersUpdate[visionProvider] = {
-          api_key: visionApiKey,
-          api_base: config.providers?.[visionProvider]?.api_base || ''
+      if (visionProvider && visionProvider !== provider) {
+        if (isCopilotProvider(visionProvider)) {
+          // GitHub Copilot as Vision-only: use gh token
+          if (ghToken) {
+            providersUpdate[visionProvider] = {
+              api_key: ghToken,
+              api_base: 'https://models.inference.ai.azure.com'
+            }
+          }
+        } else if (requiresApiKey(visionProvider)) {
+          providersUpdate[visionProvider] = {
+            api_key: visionApiKey,
+            api_base: config.providers?.[visionProvider]?.api_base || ''
+          }
         }
       }
 
@@ -816,12 +846,12 @@ export const PicoclawSettings = (): ReactElement => {
               options={VISION_PROVIDERS.map((vp) => ({ value: vp.value, label: vp.label }))}
             />
             <p className="mt-1 text-xs text-neutral-500">
-              無料推奨: Groq（クレカ不要）またはOllama（ローカル）
+              無料推奨: Groq（クレカ不要）、GitHub Copilot（gh認証のみ）、またはOllama（ローカル）
             </p>
           </div>
 
-          {/* Vision API Key (only if different provider and not ollama) */}
-          {visionProvider && requiresApiKey(visionProvider) && visionProvider !== provider && (
+          {/* Vision API Key (only if different provider, not ollama, not copilot) */}
+          {visionProvider && requiresApiKey(visionProvider) && !isCopilotProvider(visionProvider) && visionProvider !== provider && (
             <div className="mb-4">
               <label className="mb-2 block text-sm font-medium">Vision API Key</label>
               <Input.Password
@@ -836,6 +866,28 @@ export const PicoclawSettings = (): ReactElement => {
                   ? 'console.groq.com/keys でAPIキーを取得（無料・クレカ不要）'
                   : `${visionProvider} 用の API キー`}
               </p>
+            </div>
+          )}
+
+          {/* GitHub Copilot Vision: show auth status */}
+          {visionProvider && isCopilotProvider(visionProvider) && (
+            <div className="mb-4 rounded-lg border border-neutral-700 bg-neutral-800/50 p-3">
+              {ghAuthDetected ? (
+                <div className="flex items-center gap-2 text-sm text-green-400">
+                  <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+                  GitHub 認証済み — Vision にも gh トークンを使用します
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm text-yellow-400">
+                    <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
+                    GitHub 認証が必要です
+                  </div>
+                  <p className="text-xs text-neutral-500">
+                    チャット LLM で GitHub Copilot を選択して認証するか、<code className="rounded bg-neutral-700 px-1">gh auth login</code> を実行してください。
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
