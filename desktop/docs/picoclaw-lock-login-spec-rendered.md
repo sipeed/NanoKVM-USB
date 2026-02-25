@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-24
+> **最終更新**: 2026-02-25
 
 ## 概要
 
@@ -188,79 +188,155 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 
 ---
 
+## チャット用 LLM（Chat LLM）
+
+picoclaw のチャット機能（自然言語によるコマンド解釈・応答生成）に使用する LLM プロバイダとモデルの一覧です。
+自動更新機能によりモデルリストは定期的に更新されますが、以下が現在のデフォルト構成です。
+
+### チャット LLM プロバイダ・モデル一覧
+
+| プロバイダ | デフォルトモデル | 認証方式 | 料金 | 備考 |
+|-----------|-----------------|---------|------|------|
+| **Groq** | llama-3.3-70b-versatile | API Key | **無料枠あり** | 推奨: 高速・クレカ不要 |
+| **OpenAI** | gpt-5.2 | API Key | 有料 | 高品質・安定 |
+| **Anthropic** | claude-sonnet-4.6 | API Key | 有料 | 高品質 |
+| **DeepSeek** | deepseek-chat | API Key | 安価 | コスト効率 |
+| **Google Gemini** | gemini-2.0-flash-exp | API Key | 無料枠あり | 高速 |
+| **GitHub Copilot** | gpt-4o-mini | OAuth (gh CLI) | **無料** | `gh auth login` で認証 |
+| **OpenRouter** | auto | API Key | 従量制 | 多プロバイダ統合 |
+| **Mistral AI** | mistral-small-latest | API Key | 有料 | 欧州拠点 |
+| **Ollama** | llama3 | 不要 | **無料** | ローカル実行 |
+| **VLLM** | custom-model | 不要 | **無料** | ローカル実行 |
+| **NVIDIA** | nemotron-4-340b-instruct | API Key | 要確認 | GPU 推論 |
+| **Cerebras** | llama-3.3-70b | API Key | 要確認 | 高速推論 |
+| **Qwen** | qwen-plus | API Key | 安価 | 中国拠点 |
+| **Zhipu AI** | glm-4.7 | API Key | 安価 | 中国拠点 |
+| **Moonshot** | moonshot-v1-8k | API Key | 安価 | 中国拠点 |
+| **Volcengine** | doubao-pro-32k | API Key | 安価 | ByteDance |
+| **ShengsuanYun** | deepseek-v3 | API Key | 安価 | 中国拠点 |
+| **Antigravity** | gemini-3-flash | OAuth | 要確認 | Google Cloud |
+
+### GitHub Copilot / GitHub Models 対応モデル
+
+GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.ai.azure.com) を使用します。
+`gh auth login` で取得した OAuth トークン (`gho_*`) で認証し、API キーの手動入力は不要です。
+
+#### 初回認証フロー
+
+GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと認証が必要です。
+アプリ内の「🔑 GitHub 認証を開始」ボタンから以下のフローで認証できます:
+
+![diagram](./picoclaw-lock-login-spec-rendered-3.svg)
+
+**前提条件**:
+- [GitHub CLI (`gh`)](https://cli.github.com) がインストール済み
+- GitHub アカウントを持っている（無料アカウントでOK）
+- GitHub Copilot の登録は**不要**（GitHub Models API は全ユーザーに無料提供）
+
+**実装ファイル**:
+| ファイル | 役割 |
+|---------|------|
+| `manager.ts` → `initiateGitHubAuth()` | `gh auth login --web` を spawn、デバイスコード取得 |
+| `manager.ts` → `detectGitHubToken()` | `gh auth token` でトークン検出 |
+| `manager.ts` → `cancelGitHubAuth()` | 認証プロセスを kill |
+| `picoclaw.ts` (events) | IPC ハンドラ (`INITIATE_GITHUB_AUTH`, `CANCEL_GITHUB_AUTH`) |
+| `picoclaw.tsx` (renderer) | UI: デバイスコード表示、ポーリング、完了通知 |
+
+| モデル名 | 種別 | Vision | 備考 |
+|---------|------|--------|------|
+| **gpt-4o-mini** | Chat | ✅ | **デフォルト**: 高速・軽量 |
+| **gpt-4o** | Chat | ✅ | 高品質 |
+| **gpt-4.1** | Chat | ✅ | 最新世代 |
+| **gpt-4.1-mini** | Chat | ✅ | 最新世代・軽量 |
+| **gpt-4.1-nano** | Chat | - | 超軽量 |
+| **o1** | Reasoning | - | 推論特化 |
+| **o3** | Reasoning | - | 推論特化 |
+| **o3-mini** | Reasoning | - | 推論特化・軽量 |
+| **o4-mini** | Reasoning | - | 最新推論モデル |
+| **Meta-Llama-3.1-405B-Instruct** | Chat | - | 大型オープン |
+| **Meta-Llama-3.1-8B-Instruct** | Chat | - | 軽量オープン |
+| **Llama-3.2-11B-Vision-Instruct** | Chat | ✅ | **Vision対応**: 画面検証に使用可能 |
+| **Llama-3.2-90B-Vision-Instruct** | Chat | ✅ | **Vision対応**: 高精度 |
+| **Phi-4** | Chat | - | Microsoft 軽量 |
+| **Phi-4-multimodal-instruct** | Chat | ✅ | **Vision対応**: Microsoft |
+| **DeepSeek-R1** | Reasoning | - | 推論特化 |
+| **MAI-DS-R1** | Reasoning | - | Microsoft + DeepSeek |
+| **Mistral-large-2407** | Chat | - | Mistral 大型 |
+
+> **Note**: GitHub Copilot の Web/VS Code 版では Claude 等の Anthropic モデルも選択可能ですが、
+> GitHub Models API (`models.inference.ai.azure.com`) ではサポートされていません。
+> picoclaw は GitHub Models API を経由するため、上記のモデルのみ利用可能です。
+
+---
+
+## モデルリスト自動更新機能
+
+picoclaw のモデルリストは、プロバイダが新モデルを追加した際に自動更新されます。
+
+### 概要
+
+- **更新対象**: 各プロバイダが提供するモデルの一覧（`~/.picoclaw/config.json` の `model_list`）
+- **更新元**: `picoclaw providers` コマンドで取得するデフォルトモデル + UI 上の追加定義
+- **表示**: 設定画面のモデル選択ドロップダウンに反映
+
+### スケジュール設定
+
+| 項目 | オプション | デフォルト |
+|------|----------|----------|
+| **頻度** | 日次 / 週次 / 月次 | **月次** |
+| **実行時刻** | 0:00 〜 23:00 | **0:00** |
+| **曜日**（週次） | 月〜日 | 月曜日 |
+| **日付**（月次） | 1〜28日 | 1日 |
+| **有効/無効** | トグル | **有効** |
+
+### 更新フロー
+
+![diagram](./picoclaw-lock-login-spec-rendered-4.svg)
+
+### 手動更新
+
+設定画面の「🔄 今すぐ更新」ボタンで即時実行できます。
+
+### Config 構造（自動更新関連）
+
+```json
+{
+  "model_update": {
+    "enabled": true,
+    "frequency": "monthly",
+    "hour": 0,
+    "dayOfMonth": 1
+  }
+}
+```
+
+ステータスは `~/.picoclaw/model-update-status.json` に保存:
+
+```json
+{
+  "lastChecked": "2026-02-25T00:00:00Z",
+  "nextCheck": "2026-03-01T00:00:00Z",
+  "lastUpdatedModels": ["groq: 4 models", "openai: 1 model"],
+  "autoSwitched": false
+}
+```
+
+---
+
 ## 画面検証機能（Vision LLM）
 
 ロック・ログインコマンド実行後、NanoKVM-USB の HDMI キャプチャ映像をスクリーンキャプチャし、**専用の Vision LLM** で画面内容を解析して結果を自動判定します。
 
 ### 設計思想: チャット用 LLM と Vision LLM の分離
 
-```
-┌─────────────────────────────────────────────────┐
-│  設定画面 (picoclaw.tsx)                         │
-│                                                  │
-│  ── チャット LLM ──                              │
-│  [Provider] Groq                                │
-│  [API Key]  gsk_...                             │
-│  [Model]    llama-3.1-8b-instant                │
-│                                                  │
-│  ── 👁️ 画面検証 Vision LLM ──                  │
-│  [Provider] Groq                                │
-│  [API Key]  gsk_... (共有可)                     │
-│  [Model]    Llama 4 Scout 17B 👁️               │
-└─────────────────────────────────────────────────┘
-```
+![diagram](./picoclaw-lock-login-spec-rendered-5.svg)
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
 例: チャット = llama-3.1-8b-instant (Groq 無料) + Vision = Llama 4 Scout (Groq 無料)
 
 ### 検証フロー
 
-```
-┌─────────────────────┐
-│ ロック or ログイン    │
-│ コマンド実行          │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ HID キー入力送信      │
-│ (Win+L or PIN入力)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐     ┌──────────────────────┐
-│ 待機                 │     │ 待機時間:             │
-│ (ロック: 3s)         │     │  Lock: 3秒           │
-│ (ログイン: 15s)      │     │  Login: 15秒          │
-│                      │     │  (Ollama: 各 +2〜3秒) │
-└──────────┬──────────┘     └──────────────────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ callScreenVerify()   │
-│ HTTP POST            │
-│ /api/screen/verify   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐     ┌──────────────────────┐
-│ API Server           │     │ HDMI → canvas →       │
-│ スクリーンキャプチャ   │────▶│ base64 JPEG           │
-│ + Vision LLM 呼び出し │     └──────────────────────┘
-└──────────┬──────────┘
-           │
-     ┌─────┴─────────────────────────────┐
-     │           Vision LLM 判定          │
-     ├────────────┬────────────┬──────────┤
-     ▼            ▼            ▼          ▼
- LOCK_SCREEN  LOGIN_SUCCESS  LOGIN_FAILED  DESKTOP
-     │            │            │          │
-     ▼            ▼            ▼          ▼
-  ロック時:     ログイン時:   ログイン時:  ロック時:
-  ✅ 成功      ✅ 成功      ❌ 失敗     ⚠️ 失敗
-                             + Enter で
-                             エラー解除
-```
+![diagram](./picoclaw-lock-login-spec-rendered-6.svg)
 
 ### Vision プロンプト
 
@@ -293,17 +369,39 @@ Vision LLM が設定されていない場合:
 
 | プロバイダ | モデル | 料金 | 速度 | 備考 |
 |-----------|--------|------|------|------|
-| **Groq** | **Llama 4 Scout 17B** | **無料** | 高速 (~500ms) | **推奨**: クレカ不要 |
-| **Groq** | Llama 4 Maverick 17B | **無料** | 高速 | 高精度 |
-| **Groq** | Llama 3.2 11B Vision | **無料** | 高速 | レガシー |
-| **Groq** | Llama 3.2 90B Vision | **無料** | 低速 | 高精度 |
-| **Ollama** | Moondream2 (1.7B) | **無料** | ~60秒 | ローカル・CPU向き |
-| **Ollama** | LLaVA (7B) | **無料** | ~3分 | ローカル・高精度 |
-| OpenRouter | Gemini 2.0 Flash | 安価 | 高速 | API キー共有可 |
-| OpenAI | GPT-4o Mini | 安価 | 高速 | - |
-| OpenAI | GPT-4o | 高額 | 中速 | 高精度 |
-| Anthropic | Claude 3.5 Haiku | 安価 | 高速 | - |
-| Anthropic | Claude 3.5 Sonnet | 高額 | 中速 | 高精度 |
+| **Groq** | **meta-llama/llama-4-scout-17b-16e-instruct** | **無料** | 高速 (~500ms) | **推奨**: Llama 4 Scout・クレカ不要 |
+| **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct | **無料** | 高速 | Llama 4 Maverick・高精度 |
+| **Groq** | llama-3.2-11b-vision-preview | **無料** | 高速 | Llama 3.2 11B Vision |
+| **Groq** | llama-3.2-90b-vision-preview | **無料** | 低速 | Llama 3.2 90B Vision・高精度 |
+| **GitHub Copilot** | **gpt-4o-mini** | **無料** | 高速 | gh 認証のみ・推奨 |
+| **GitHub Copilot** | gpt-4o | **無料** | 高速 | 高品質 |
+| **GitHub Copilot** | gpt-4.1 | **無料** | 高速 | 最新世代 |
+| **GitHub Copilot** | gpt-4.1-mini | **無料** | 高速 | 最新世代・軽量 |
+| **GitHub Copilot** | Llama-3.2-11B-Vision-Instruct | **無料** | 中速 | オープンモデル |
+| **GitHub Copilot** | Llama-3.2-90B-Vision-Instruct | **無料** | 低速 | 高精度 |
+| **GitHub Copilot** | Phi-4-multimodal-instruct | **無料** | 中速 | Microsoft モデル |
+| **Ollama** | moondream2:latest | **無料** | ~60秒 | 1.7B・ローカル・CPU向き |
+| **Ollama** | moondream:latest | **無料** | ~60秒 | Moondream v1 |
+| **Ollama** | llava:latest | **無料** | ~3分 | LLaVA 7B・高精度 |
+| **Ollama** | llava:7b | **無料** | ~3分 | LLaVA 7B 明示指定 |
+| **Ollama** | llava:13b | **無料** | ~5分 | LLaVA 13B・高精度・要GPU |
+| **Ollama** | llava-llama3:latest | **無料** | ~3分 | LLaVA-Llama3・新世代 |
+| **Ollama** | bakllava:latest | **無料** | ~3分 | BakLLaVA・Mistral ベース |
+| **OpenRouter** | google/gemini-2.0-flash-001 | 安価 | 高速 | Gemini 2.0 Flash |
+| **OpenRouter** | google/gemini-pro-1.5 | 安価 | 中速 | Gemini Pro 1.5 |
+| **OpenRouter** | anthropic/claude-3.5-sonnet | 高額 | 中速 | Claude 3.5 Sonnet |
+| **OpenRouter** | anthropic/claude-3-5-sonnet | 高額 | 中速 | Claude 3.5 Sonnet (旧ID) |
+| **OpenRouter** | anthropic/claude-3-haiku | 安価 | 高速 | Claude 3 Haiku |
+| **OpenRouter** | openai/gpt-4o | 高額 | 中速 | GPT-4o (OpenRouter 経由) |
+| **OpenRouter** | openai/gpt-4o-mini | 安価 | 高速 | GPT-4o Mini (OpenRouter 経由) |
+| **OpenAI** | gpt-4o-mini | 安価 | 高速 | 推奨・低コスト |
+| **OpenAI** | gpt-4o | 高額 | 中速 | 高精度 |
+| **OpenAI** | gpt-4-turbo | 高額 | 低速 | GPT-4 Turbo |
+| **Anthropic** | claude-3-5-haiku-20241022 | 安価 | 高速 | コスト効率 |
+| **Anthropic** | claude-3-5-sonnet-20241022 | 高額 | 中速 | 高精度 |
+| **Anthropic** | claude-3-opus-20240229 | 最高額 | 低速 | 最高精度 |
+| **Anthropic** | claude-3-sonnet-20240229 | 高額 | 中速 | バランス |
+| **Anthropic** | claude-3-haiku-20240307 | 安価 | 高速 | 旧世代・高速 |
 
 ### タイムアウト設定
 

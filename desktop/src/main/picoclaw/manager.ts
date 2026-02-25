@@ -41,6 +41,16 @@ export interface PicoclawConfig {
     port?: number
   }
   language?: string // User's preferred language (e.g., 'ja', 'en', 'zh')
+  model_update?: {
+    schedule?: {
+      frequency?: 'daily' | 'weekly' | 'monthly'
+      hour?: number
+      dayOfWeek?: number
+      dayOfMonth?: number
+      enabled?: boolean
+    }
+    cached_models?: Record<string, string[]>
+  }
 }
 
 export interface PicoclawStatus {

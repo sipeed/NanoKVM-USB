@@ -3,6 +3,7 @@ import http from 'http'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import type { PicoclawConfig } from './manager'
 
 /**
  * Model Update Schedule configuration.
@@ -399,11 +400,11 @@ export class ModelUpdater {
 
   // --- Private helpers ---
 
-  private readConfig(): Record<string, unknown> {
+  private readConfig(): PicoclawConfig {
     try {
       if (fs.existsSync(this.configPath)) {
         const content = fs.readFileSync(this.configPath, 'utf-8')
-        return JSON.parse(content)
+        return JSON.parse(content) as PicoclawConfig
       }
     } catch {
       // ignore
@@ -411,7 +412,7 @@ export class ModelUpdater {
     return {}
   }
 
-  private writeConfig(config: Record<string, unknown>): void {
+  private writeConfig(config: PicoclawConfig): void {
     const configDir = path.dirname(this.configPath)
     if (!fs.existsSync(configDir)) {
       fs.mkdirSync(configDir, { recursive: true })
