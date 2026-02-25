@@ -473,11 +473,11 @@ export class ApiServer {
 
     try {
       const body = await this.readBody(req)
-      const { action } = JSON.parse(body) as { action: 'lock' | 'login' }
+      const { action } = JSON.parse(body) as { action: 'lock' | 'login' | 'status' }
 
-      if (action !== 'lock' && action !== 'login') {
+      if (action !== 'lock' && action !== 'login' && action !== 'status') {
         res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'action must be "lock" or "login"' }))
+        res.end(JSON.stringify({ error: 'action must be "lock", "login", or "status"' }))
         return
       }
 
@@ -515,7 +515,7 @@ export class ApiServer {
           'Lock screen: shows clock, date, user avatar, background image, no taskbar.\n' +
           'Desktop: shows taskbar at bottom, application windows, desktop icons.\n\n' +
           'Answer with ONLY one word: LOCK_SCREEN or DESKTOP'
-      } else {
+      } else if (action === 'login') {
         prompt =
           'After a Windows login attempt, what is currently shown on screen?\n' +
           'Look carefully for these specific indicators:\n' +
@@ -525,6 +525,15 @@ export class ApiServer {
           '- Large clock display, user avatar circle, or PIN input field = LOCK_SCREEN\n\n' +
           'IMPORTANT: If you see a taskbar at the bottom, it is LOGIN_SUCCESS even if the wallpaper looks similar to a lock screen.\n\n' +
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN'
+      } else {
+        // action === 'status': general screen description
+        prompt =
+          'Describe what is currently shown on this computer screen in 2-3 sentences.\n' +
+          'Include:\n' +
+          '- What type of screen it is (desktop, lock screen, login screen, application window, etc.)\n' +
+          '- What applications or windows are visible (if any)\n' +
+          '- Any notable UI elements (taskbar, dialog boxes, error messages, etc.)\n\n' +
+          'Be specific and factual about what you see.'
       }
 
       // Analyze with Vision LLM
@@ -541,7 +550,20 @@ export class ApiServer {
       // Simple keyword detection from moondream's short response
       // Action-specific parsing to avoid cross-contamination
       const upper = analysis.toUpperCase()
-      if (action === 'lock') {
+      if (action === 'status') {
+        // For general status check: classify by priority (DESKTOP > LOCK > LOGIN)
+        if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
+          status = 'LOCK_SCREEN'
+        } else if (upper.includes('DESKTOP') || upper.includes('TASKBAR')) {
+          status = 'DESKTOP'
+        } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('PIN')) {
+          status = 'LOGIN_SCREEN'
+        } else if (upper.includes('LOCK')) {
+          status = 'LOCK_SCREEN'
+        } else {
+          status = 'DESCRIBED'
+        }
+      } else if (action === 'lock') {
         // For lock verification: only detect LOCK_SCREEN or DESKTOP
         if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
           status = 'LOCK_SCREEN'
@@ -581,7 +603,21 @@ export class ApiServer {
 
       // Generate feedback
       let feedback = ''
-      if (action === 'lock') {
+      if (action === 'status') {
+        switch (status) {
+          case 'LOCK_SCREEN':
+            feedback = `🔒 ロック画面です。\n${detail}`
+            break
+          case 'LOGIN_SCREEN':
+            feedback = `🔑 サインイン画面です。\n${detail}`
+            break
+          case 'DESKTOP':
+            feedback = `🖥️ デスクトップ画面です。\n${detail}`
+            break
+          default:
+            feedback = `🔍 画面状態:\n${detail}`
+        }
+      } else if (action === 'lock') {
         switch (status) {
           case 'LOCK_SCREEN':
             feedback = '🔒 ロック成功: ロック画面が確認できました。'

@@ -298,7 +298,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | POST | `/api/keyboard/type` | `{"text": "Hello"}` | テキスト入力 |
 | POST | `/api/mouse/click` | `{"button": "left"}` | マウスクリック |
 | GET | `/api/screen/capture` | なし | 現在の画面をキャプチャ（base64 JPEG） |
-| POST | `/api/screen/verify` | `{"action": "lock"\|"login"}` | 画面状態を Vision LLM で検証 |
+| POST | `/api/screen/verify` | `{"action": "lock"\|"login"\|"status"}` | 画面状態を Vision LLM で検証・確認 |
 
 ---
 
@@ -323,7 +323,37 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 - **ログイン待機**: PIN 入力後 15 秒の固定待機（デスクトップ描画完了まで）
 - **NanoKVM 操作回数**: 1メッセージあたり最大 4 回（不要な反復を防止）
 - **ユーザー名バリデーション**: "windows", "linux", "ubuntu" 等の OS 名は自動除外
+---
 
+## 画面状態確認機能（Screen Check）
+
+「画面状態を確認して」などの指示で、リモート PC の現在の画面をキャプチャし、Vision LLM で分析して結果を返却します。
+
+### 対応キーワード
+
+- 「画面状態を確認して」
+- 「今何が映ってる？」
+- 「画面を見て」
+- 「スクリーンショット」
+- "screen check"
+
+### 動作フロー
+
+1. picoclaw エージェントが `nanokvm_screen_check` ツールを呼び出し
+2. Go 側が `POST /api/screen/verify` に `{"action": "status"}` を送信
+3. Electron API Server が HDMI キャプチャを実行
+4. Vision LLM に汎用プロンプトで画面内容を記述させる
+5. ステータス分類（`DESKTOP` / `LOCK_SCREEN` / `LOGIN_SCREEN` / `DESCRIBED`）と詳細説明を返却
+6. 早期終了で即座にユーザーに結果を表示
+
+### レスポンス例
+
+| ステータス | アイコン | 例 |
+|------------|--------|-----|
+| `DESKTOP` | 🖥️ | デスクトップ画面です。複数のアプリケーションウィンドウが見えます。 |
+| `LOCK_SCREEN` | 🔒 | ロック画面です。時計とユーザーアバターが表示されています。 |
+| `LOGIN_SCREEN` | 🔑 | サインイン画面です。PIN 入力フィールドが表示されています。 |
+| `DESCRIBED` | 🔍 | 画面状態: （Vision LLM の記述） |
 ---
 
 ## チャット用 LLM（Chat LLM）
@@ -731,4 +761,6 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **Web プロキシ対応** | `tools.web.proxy` 設定で HTTP プロキシ経由の Web 検索が可能に |
 | **GitHub Copilot セッション管理改善** | SDK版: mutex 追加・Close() メソッド実装（HTTP API版には影響なし） |
 | **デッドコード削除** | Antigravity プロバイダ、WeChat 企業アプリ等の未使用コードを除去 |
+| **`nanokvm_screen_check` 追加** | 画面状態をキャプチャ・ Vision LLM で分析して返却する新ツール。早期終了対応 |
+| **`/api/screen/verify` 拡張** | `action: "status"` を追加。汎用プロンプトで画面全体を記述 |
 | **CGO_ENABLED=0 静的ビルド** | クロスプラットフォーム GLIBC エラーを防止 |
