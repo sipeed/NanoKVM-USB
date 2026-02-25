@@ -29,7 +29,9 @@ export const SerialPort = ({ setErrMsg, onDisconnect }: SerialPortProps) => {
     setErrMsg('');
 
     try {
-      const port = await navigator.serial.requestPort();
+      const port = await navigator.serial.requestPort({
+        filters: [{ usbVendorId: 0x1a86, usbProductId: 0x7523 }] // CH340
+      });
       await device.serialPort.init({ port, onDisconnect });
 
       setSerialState('connected');
