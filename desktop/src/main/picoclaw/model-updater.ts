@@ -112,6 +112,14 @@ const PROVIDER_API_ENDPOINTS: Record<
       const resp = data as { models?: Array<{ name: string; model: string }> }
       return (resp.models || []).map((m) => ({ id: m.name, name: m.name }))
     }
+  },
+  mistral: {
+    url: 'https://api.mistral.ai/v1/models',
+    authHeader: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+    parseModels: (data) => {
+      const resp = data as { data?: Array<{ id: string; owned_by?: string }> }
+      return (resp.data || []).map((m) => ({ id: m.id, name: m.id, owned_by: m.owned_by }))
+    }
   }
 }
 
@@ -138,7 +146,8 @@ const RECOMMENDED_FALLBACKS: Record<string, string[]> = {
     'claude-3-5-sonnet-20241022'
   ],
   deepseek: ['deepseek-chat', 'deepseek-coder'],
-  ollama: ['llama3.2:1b', 'llama3.2:latest', 'qwen2.5:latest']
+  ollama: ['llama3.2:1b', 'llama3.2:latest', 'qwen2.5:latest'],
+  mistral: ['mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest']
 }
 
 /** Vision-capable model fallbacks */

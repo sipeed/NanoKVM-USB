@@ -119,6 +119,28 @@ export function registerPicoclawHandlers(manager: PicoclawManager, modelUpdater:
     }
   })
 
+  // Get supported providers list from picoclaw binary
+  ipcMain.handle(IpcEvents.PICOCLAW_GET_PROVIDERS, async () => {
+    try {
+      const data = await manager.getProviders()
+      return { success: true, ...data }
+    } catch (error) {
+      console.error('[IPC] Failed to get providers:', error)
+      return { success: false, error: String(error), providers: [] }
+    }
+  })
+
+  // Detect GitHub authentication via gh CLI
+  ipcMain.handle(IpcEvents.PICOCLAW_DETECT_GITHUB_AUTH, () => {
+    try {
+      const result = manager.detectGitHubToken()
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] Failed to detect GitHub auth:', error)
+      return { success: false, found: false, token: null, user: null, error: String(error) }
+    }
+  })
+
   // Get model update schedule
   ipcMain.handle(IpcEvents.PICOCLAW_GET_MODEL_UPDATE_SCHEDULE, () => {
     try {

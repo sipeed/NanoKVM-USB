@@ -1,10 +1,10 @@
-import { ReactElement, useEffect, useState } from 'react'
+import { ReactElement, useEffect, useRef, useState } from 'react'
 import { Button, Input, message, Select, Space, Tooltip, Switch, Divider } from 'antd'
 import { ClipboardIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
-import { ModelUpdateSettings } from './model-update'
+import { ModelUpdateSettings, ModelUpdateSettingsRef } from './model-update'
 
 interface PicoclawConfig {
   agents?: {
@@ -32,72 +32,154 @@ interface PicoclawConfig {
   }
 }
 
-const PROVIDERS = [
+/** Dynamic provider from picoclaw CLI */
+interface DynamicProvider {
+  name: string
+  label: string
+  api_base: string
+  key_url: string
+  default_model: string
+  auth_method: string
+  models: string[]
+}
+
+/** UI-ready provider for Select components */
+interface ProviderOption {
+  value: string
+  label: string
+  defaultModel: string
+  apiUrl: string
+  authMethod: string // 'api_key' | 'none'
+  models: Array<{ value: string; label: string; description?: string; vision?: boolean }>
+}
+
+/**
+ * UI enrichment metadata for known providers and models.
+ * Used to add descriptions, vision flags, and emoji labels to dynamically loaded providers.
+ * When picoclaw adds new providers, they appear automatically with generic UI;
+ * enrichment can be added here for better UX.
+ */
+const PROVIDER_UI_META: Record<
+  string,
   {
-    value: 'openrouter',
-    label: 'OpenRouter',
-    defaultModel: 'meta-llama/llama-3.1-8b-instruct',
-    apiUrl: 'https://openrouter.ai/keys',
+    models?: Record<string, { label?: string; description?: string; vision?: boolean }>
+  }
+> = {
+  openrouter: {
+    models: {
+      'meta-llama/llama-3.1-8b-instruct': { label: 'Llama 3.1 8B 💨 (推奨・無料枠)', description: '軽量・高速・トークン節約' },
+      'google/gemini-2.0-flash-001': { label: 'Gemini 2.0 Flash 👁️ (Vision対応)', description: '高速・Vision対応・安価', vision: true },
+      'google/gemini-pro-1.5': { label: 'Gemini Pro 1.5 (無料枠)', description: '中型・バランス' },
+      'anthropic/claude-3.5-sonnet': { label: 'Claude 3.5 Sonnet 👁️', description: '大型・高品質・Vision対応', vision: true }
+    }
+  },
+  anthropic: {
+    models: {
+      'claude-3-5-haiku-20241022': { label: 'Claude 3.5 Haiku 💨 (推奨)', description: '軽量・高速・コスト効率', vision: true },
+      'claude-3-5-sonnet-20241022': { label: 'Claude 3.5 Sonnet 👁️', description: '大型・高品質・Vision対応', vision: true }
+    }
+  },
+  openai: {
+    models: {
+      'gpt-4o-mini': { label: 'GPT-4o Mini 💨👁️ (推奨)', description: '軽量・高速・Vision対応', vision: true },
+      'gpt-4o': { label: 'GPT-4o 👁️', description: '大型・高品質・Vision対応', vision: true }
+    }
+  },
+  deepseek: {
+    models: {
+      'deepseek-chat': { label: 'DeepSeek Chat (推奨)', description: '標準モデル・安価' },
+      'deepseek-coder': { label: 'DeepSeek Coder', description: 'コーディング特化' }
+    }
+  },
+  groq: {
+    models: {
+      'llama-3.1-8b-instant': { label: 'Llama 3.1 8B Instant 💨 (推奨)', description: '軽量・超高速・トークン節約' },
+      'llama-3.2-11b-vision-preview': { label: 'Llama 3.2 11B Vision 👁️', description: 'Vision対応・無料・高速', vision: true },
+      'mixtral-8x7b-32768': { label: 'Mixtral 8x7B', description: '中型・バランス' },
+      'llama-3.3-70b-versatile': { label: 'Llama 3.3 70B', description: '大型・高品質・トークン消費大' }
+    }
+  },
+  ollama: {
+    models: {
+      'llama3.2:1b': { label: 'Llama 3.2 1B 💨 (推奨)', description: '超軽量・高速・CPU向き' },
+      'llama3.2:latest': { label: 'Llama 3.2 3B', description: '標準・バランス' },
+      'moondream2:latest': { label: 'Moondream2 👁️ (軽量Vision)', description: 'Vision対応・1.7B・CPU向き', vision: true },
+      'llava:latest': { label: 'LLaVA 👁️', description: 'Vision対応・7B・ローカル', vision: true },
+      'qwen2.5:latest': { label: 'Qwen 2.5', description: '多言語対応' }
+    }
+  },
+  mistral: {
+    models: {
+      'mistral/mistral-small-latest': { label: 'Mistral Small 💨 (推奨)', description: '軽量・高速・コスト効率' },
+      'mistral/mistral-medium-latest': { label: 'Mistral Medium', description: '中型・バランス' },
+      'mistral/mistral-large-latest': { label: 'Mistral Large', description: '大型・高品質' }
+    }
+  }
+}
+
+/**
+ * Convert dynamic providers from picoclaw CLI to UI-ready format.
+ * Merges with PROVIDER_UI_META for enriched display of known providers/models.
+ */
+function buildProviderOptions(dynamicProviders: DynamicProvider[]): ProviderOption[] {
+  return dynamicProviders.map((dp) => {
+    const meta = PROVIDER_UI_META[dp.name]
+    // Build model options: start with models from Go, enrich with UI metadata
+    const modelOptions = dp.models.map((modelId) => {
+      const modelMeta = meta?.models?.[modelId]
+      return {
+        value: modelId,
+        label: modelMeta?.label || modelId,
+        description: modelMeta?.description,
+        vision: modelMeta?.vision || false
+      }
+    })
+    // Also add any models from UI meta that aren't in Go's list (e.g., manually curated)
+    if (meta?.models) {
+      for (const [modelId, modelMeta] of Object.entries(meta.models)) {
+        if (!dp.models.includes(modelId)) {
+          modelOptions.push({
+            value: modelId,
+            label: modelMeta.label || modelId,
+            description: modelMeta.description,
+            vision: modelMeta.vision || false
+          })
+        }
+      }
+    }
+    return {
+      value: dp.name,
+      label: dp.label,
+      defaultModel: dp.default_model,
+      apiUrl: dp.key_url,
+      authMethod: dp.auth_method,
+      models: modelOptions
+    }
+  })
+}
+
+/** Hardcoded fallback providers (used when picoclaw binary is unavailable) */
+const FALLBACK_PROVIDERS: ProviderOption[] = [
+  {
+    value: 'groq', label: 'Groq', defaultModel: 'llama-3.1-8b-instant',
+    apiUrl: 'https://console.groq.com/keys', authMethod: 'api_key',
     models: [
-      { value: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B 💨 (推奨・無料枠)', description: '軽量・高速・トークン節約', vision: false },
-      { value: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash 👁️ (Vision対応)', description: '高速・Vision対応・安価', vision: true },
-      { value: 'google/gemini-pro-1.5', label: 'Gemini Pro 1.5 (無料枠)', description: '中型・バランス', vision: false },
-      { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet 👁️', description: '大型・高品質・Vision対応', vision: true }
+      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant 💨 (推奨)', description: '軽量・超高速', vision: false },
+      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', description: '大型・高品質', vision: false }
     ]
   },
   {
-    value: 'anthropic',
-    label: 'Anthropic',
-    defaultModel: 'claude-3-5-haiku-20241022',
-    apiUrl: 'https://console.anthropic.com/settings/keys',
+    value: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o-mini',
+    apiUrl: 'https://platform.openai.com/api-keys', authMethod: 'api_key',
     models: [
-      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku 💨 (推奨)', description: '軽量・高速・コスト効率', vision: true },
-      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet 👁️', description: '大型・高品質・Vision対応', vision: true }
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini 💨👁️', description: '軽量・高速', vision: true }
     ]
   },
   {
-    value: 'openai',
-    label: 'OpenAI',
-    defaultModel: 'gpt-4o-mini',
-    apiUrl: 'https://platform.openai.com/api-keys',
+    value: 'ollama', label: 'Ollama (Local)', defaultModel: 'llama3.2:1b',
+    apiUrl: 'https://ollama.ai/download', authMethod: 'none',
     models: [
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini 💨👁️ (推奨)', description: '軽量・高速・Vision対応', vision: true },
-      { value: 'gpt-4o', label: 'GPT-4o 👁️', description: '大型・高品質・Vision対応', vision: true }
-    ]
-  },
-  {
-    value: 'deepseek',
-    label: 'DeepSeek',
-    defaultModel: 'deepseek-chat',
-    apiUrl: 'https://platform.deepseek.com/api_keys',
-    models: [
-      { value: 'deepseek-chat', label: 'DeepSeek Chat (推奨)', description: '標準モデル・安価', vision: false },
-      { value: 'deepseek-coder', label: 'DeepSeek Coder', description: 'コーディング特化', vision: false }
-    ]
-  },
-  {
-    value: 'groq',
-    label: 'Groq',
-    defaultModel: 'llama-3.1-8b-instant',
-    apiUrl: 'https://console.groq.com/keys',
-    models: [
-      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant 💨 (推奨)', description: '軽量・超高速・トークン節約', vision: false },
-      { value: 'llama-3.2-11b-vision-preview', label: 'Llama 3.2 11B Vision 👁️', description: 'Vision対応・無料・高速', vision: true },
-      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B', description: '中型・バランス', vision: false },
-      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', description: '大型・高品質・トークン消費大', vision: false }
-    ]
-  },
-  {
-    value: 'ollama',
-    label: 'Ollama (Local)',
-    defaultModel: 'llama3.2:1b',
-    apiUrl: 'https://ollama.ai/download',
-    models: [
-      { value: 'llama3.2:1b', label: 'Llama 3.2 1B 💨 (推奨)', description: '超軽量・高速・CPU向き', vision: false },
-      { value: 'llama3.2:latest', label: 'Llama 3.2 3B', description: '標準・バランス', vision: false },
-      { value: 'moondream2:latest', label: 'Moondream2 👁️ (軽量Vision)', description: 'Vision対応・1.7B・CPU向き', vision: true },
-      { value: 'llava:latest', label: 'LLaVA 👁️', description: 'Vision対応・7B・ローカル', vision: true },
-      { value: 'qwen2.5:latest', label: 'Qwen 2.5', description: '多言語対応', vision: false }
+      { value: 'llama3.2:1b', label: 'Llama 3.2 1B 💨', description: '超軽量・CPU向き', vision: false }
     ]
   }
 ]
@@ -168,6 +250,43 @@ export const PicoclawSettings = (): ReactElement => {
   const [apiKey, setApiKey] = useState<string>('')
   const [model, setModel] = useState<string>('')
   
+  // Dynamic providers loaded from picoclaw binary
+  const [providers, setProviders] = useState<ProviderOption[]>(FALLBACK_PROVIDERS)
+
+  // GitHub Copilot / GitHub Models authentication state
+  const [ghAuthDetected, setGhAuthDetected] = useState<boolean>(false)
+  const [ghToken, setGhToken] = useState<string | null>(null)
+  const [ghUser, setGhUser] = useState<string | null>(null)
+  const [ghDetecting, setGhDetecting] = useState<boolean>(false)
+
+  /** Check if a provider requires an API key */
+  function requiresApiKey(providerName: string): boolean {
+    const p = providers.find((pp) => pp.value === providerName)
+    if (p?.authMethod === 'oauth') return false  // GitHub Copilot uses gh CLI token
+    return p ? p.authMethod !== 'none' : providerName !== 'ollama' && providerName !== 'vllm'
+  }
+
+  /** Check if provider is GitHub Copilot / GitHub Models */
+  function isCopilotProvider(providerName: string): boolean {
+    return providerName === 'github-copilot' || providerName === 'copilot' || providerName === 'github_copilot'
+  }
+
+  /** Detect GitHub authentication via gh CLI */
+  async function detectGitHubAuth(): Promise<void> {
+    setGhDetecting(true)
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_DETECT_GITHUB_AUTH)
+      setGhAuthDetected(result.found)
+      setGhToken(result.token || null)
+      setGhUser(result.user || null)
+    } catch (err) {
+      console.error('Failed to detect GitHub auth:', err)
+      setGhAuthDetected(false)
+    } finally {
+      setGhDetecting(false)
+    }
+  }
+  
   // Telegram settings
   const [telegramEnabled, setTelegramEnabled] = useState<boolean>(false)
   const [telegramToken, setTelegramToken] = useState<string>('')
@@ -180,11 +299,30 @@ export const PicoclawSettings = (): ReactElement => {
   const [visionModel, setVisionModel] = useState<string>('')
   const [visionApiKey, setVisionApiKey] = useState<string>('')
 
+  // Ref for ModelUpdateSettings to consolidate save
+  const modelUpdateRef = useRef<ModelUpdateSettingsRef>(null)
+
   useEffect(() => {
+    loadProviders()
     loadConfig()
     loadGatewayStatus()
     loadVersion()
   }, [])
+
+  async function loadProviders(): Promise<void> {
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GET_PROVIDERS)
+      if (result.success && result.providers?.length > 0) {
+        const dynamicProviders = buildProviderOptions(result.providers as DynamicProvider[])
+        setProviders(dynamicProviders)
+        console.log(`[Picoclaw] Loaded ${dynamicProviders.length} providers dynamically`)
+      } else {
+        console.warn('[Picoclaw] Failed to load dynamic providers, using fallback')
+      }
+    } catch (err) {
+      console.error('[Picoclaw] Error loading providers:', err)
+    }
+  }
 
   async function loadConfig(): Promise<void> {
     try {
@@ -218,6 +356,11 @@ export const PicoclawSettings = (): ReactElement => {
             setTelegramUserId(result.config.channels.telegram.allow_from[0])
           }
         }
+
+        // Auto-detect GitHub auth if the saved provider is GitHub Copilot
+        if (isCopilotProvider(currentProvider)) {
+          detectGitHubAuth()
+        }
       }
     } catch (err) {
       console.error('Failed to load picoclaw config:', err)
@@ -247,7 +390,13 @@ export const PicoclawSettings = (): ReactElement => {
   }
 
   async function handleSave(): Promise<void> {
-    if (!apiKey && provider !== 'ollama') {
+    // GitHub Copilot: require gh auth instead of API key
+    if (isCopilotProvider(provider)) {
+      if (!ghAuthDetected || !ghToken) {
+        message.error('GitHub認証が必要です。ターミナルで `gh auth login` を実行してください。')
+        return
+      }
+    } else if (!apiKey && requiresApiKey(provider)) {
       message.error(t('settings.picoclaw.apiKeyRequired'))
       return
     }
@@ -255,16 +404,24 @@ export const PicoclawSettings = (): ReactElement => {
     setLoading(true)
     try {
       // Update config
-      const providersUpdate: Record<string, { api_key?: string; api_base?: string }> = {
+      const providerEntry: Record<string, unknown> = {
+        api_key: apiKey,
+        api_base: config.providers?.[provider]?.api_base || ''
+      }
+      
+      // For GitHub Copilot: use gh token as API key, set GitHub Models base URL
+      if (isCopilotProvider(provider) && ghToken) {
+        providerEntry.api_key = ghToken
+        providerEntry.api_base = 'https://models.inference.ai.azure.com'
+      }
+
+      const providersUpdate: Record<string, Record<string, unknown>> = {
         ...config.providers,
-        [provider]: {
-          api_key: apiKey,
-          api_base: config.providers?.[provider]?.api_base || ''
-        }
+        [provider]: providerEntry
       }
 
       // Save Vision provider API key if it's a different provider
-      if (visionProvider && visionProvider !== provider && visionProvider !== 'ollama') {
+      if (visionProvider && visionProvider !== provider && requiresApiKey(visionProvider)) {
         providersUpdate[visionProvider] = {
           api_key: visionApiKey,
           api_base: config.providers?.[visionProvider]?.api_base || ''
@@ -276,7 +433,7 @@ export const PicoclawSettings = (): ReactElement => {
           defaults: {
             ...config.agents?.defaults,
             provider,
-            model: model || PROVIDERS.find((p) => p.value === provider)?.defaultModel || '',
+            model: model || providers.find((p) => p.value === provider)?.defaultModel || '',
             // Groq free tier has very low TPM (6000); reduce max_tokens to avoid hitting limit
             ...(provider === 'groq' && { max_tokens: 1024 }),
             vision_provider: visionProvider || undefined,
@@ -301,6 +458,9 @@ export const PicoclawSettings = (): ReactElement => {
       )
 
       if (result.success) {
+        // Also save model update schedule
+        await modelUpdateRef.current?.save()
+
         message.success(t('settings.picoclaw.saved'))
         await loadConfig()
 
@@ -328,7 +488,7 @@ export const PicoclawSettings = (): ReactElement => {
   }
 
   async function handleTest(): Promise<void> {
-    if (!apiKey && provider !== 'ollama') {
+    if (!apiKey && requiresApiKey(provider)) {
       message.error(t('settings.picoclaw.apiKeyRequired'))
       return
     }
@@ -409,7 +569,7 @@ export const PicoclawSettings = (): ReactElement => {
    */
   function syncVisionIfCapable(chatProvider: string, chatModel: string): void {
     // Check if the selected chat model is Vision-capable
-    const providerData = PROVIDERS.find((p) => p.value === chatProvider)
+    const providerData = providers.find((p) => p.value === chatProvider)
     const modelData = providerData?.models?.find((m) => m.value === chatModel)
     if (!modelData?.vision) return
 
@@ -441,15 +601,20 @@ export const PicoclawSettings = (): ReactElement => {
     }
     
     // Set default model
-    const defaultModel = PROVIDERS.find((p) => p.value === value)?.defaultModel || ''
+    const defaultModel = providers.find((p) => p.value === value)?.defaultModel || ''
     setModel(defaultModel)
+
+    // Auto-detect GitHub auth when GitHub Copilot is selected
+    if (isCopilotProvider(value)) {
+      detectGitHubAuth()
+    }
 
     // Auto-sync Vision if the default model is Vision-capable
     syncVisionIfCapable(value, defaultModel)
   }
 
   async function openApiKeyPage(): Promise<void> {
-    const currentProvider = PROVIDERS.find((p) => p.value === provider)
+    const currentProvider = providers.find((p) => p.value === provider)
     if (currentProvider?.apiUrl) {
       await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_EXTERNAL_URL, currentProvider.apiUrl)
       message.info(t('settings.picoclaw.openedBrowser'))
@@ -503,13 +668,13 @@ export const PicoclawSettings = (): ReactElement => {
             value={provider}
             onChange={handleProviderChange}
             className="w-full"
-            options={PROVIDERS}
+            options={providers}
             size="large"
           />
         </div>
 
         {/* API Key */}
-        {provider !== 'ollama' && (
+        {requiresApiKey(provider) && (
           <div>
             <label className="mb-2 block text-sm font-medium">
               {t('settings.picoclaw.apiKey')}
@@ -544,6 +709,49 @@ export const PicoclawSettings = (): ReactElement => {
           </div>
         )}
 
+        {/* GitHub Copilot Auth Status */}
+        {isCopilotProvider(provider) && (
+          <div className="rounded-lg border border-neutral-700 bg-neutral-800/50 p-4">
+            <label className="mb-2 block text-sm font-medium">
+              🤖 GitHub Copilot 接続設定
+            </label>
+            {ghDetecting ? (
+              <p className="text-sm text-neutral-400">GitHub 認証を確認中...</p>
+            ) : ghAuthDetected ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+                  <span className="text-sm text-green-400">GitHub 認証済み</span>
+                </div>
+                {ghUser && (
+                  <p className="text-xs text-neutral-500">
+                    ユーザー: {ghUser}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-neutral-400">
+                  💡 GitHub Models API を使用します。保存するとトークンが自動設定されます。
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+                  <span className="text-sm text-red-400">GitHub 認証が必要です</span>
+                </div>
+                <p className="text-xs text-neutral-500">
+                  ターミナルで <code className="rounded bg-neutral-700 px-1">gh auth login</code> を実行してください。
+                </p>
+                <Button
+                  size="small"
+                  onClick={detectGitHubAuth}
+                >
+                  再検出
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Model Selection */}
         <div>
           <label className="mb-2 block text-sm font-medium">
@@ -555,11 +763,11 @@ export const PicoclawSettings = (): ReactElement => {
               setModel(value)
               syncVisionIfCapable(provider, value)
             }}
-            placeholder={PROVIDERS.find((p) => p.value === provider)?.defaultModel}
+            placeholder={providers.find((p) => p.value === provider)?.defaultModel}
             size="large"
             className="w-full"
             options={
-              PROVIDERS.find((p) => p.value === provider)?.models?.map((m) => ({
+              providers.find((p) => p.value === provider)?.models?.map((m) => ({
                 value: m.value,
                 label: (
                   <div className="flex items-center justify-between">
@@ -613,7 +821,7 @@ export const PicoclawSettings = (): ReactElement => {
           </div>
 
           {/* Vision API Key (only if different provider and not ollama) */}
-          {visionProvider && visionProvider !== 'ollama' && visionProvider !== provider && (
+          {visionProvider && requiresApiKey(visionProvider) && visionProvider !== provider && (
             <div className="mb-4">
               <label className="mb-2 block text-sm font-medium">Vision API Key</label>
               <Input.Password
@@ -666,7 +874,7 @@ export const PicoclawSettings = (): ReactElement => {
 
         {/* Model List Auto-Update */}
         <Divider />
-        <ModelUpdateSettings />
+        <ModelUpdateSettings ref={modelUpdateRef} />
 
         {/* Telegram Bot Settings */}
         <Divider />

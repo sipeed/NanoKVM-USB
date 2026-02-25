@@ -257,6 +257,101 @@ export class PicoclawManager {
   }
 
   /**
+   * Get supported providers from picoclaw binary
+   */
+  async getProviders(): Promise<{
+    providers: Array<{
+      name: string
+      label: string
+      api_base: string
+      key_url: string
+      default_model: string
+      auth_method: string
+      models: string[]
+    }>
+  }> {
+    return new Promise((resolve) => {
+      try {
+        const proc = spawn(this.picoclawBinary, ['providers'], { stdio: 'pipe' })
+        let output = ''
+        proc.stdout?.on('data', (data) => {
+          output += data.toString()
+        })
+        proc.on('close', () => {
+          try {
+            const parsed = JSON.parse(output)
+            resolve(parsed)
+          } catch {
+            console.error('[Picoclaw] Failed to parse providers JSON:', output)
+            resolve({ providers: [] })
+          }
+        })
+        proc.on('error', (err) => {
+          console.error('[Picoclaw] Failed to run providers command:', err)
+          resolve({ providers: [] })
+        })
+      } catch (err) {
+        console.error('[Picoclaw] Failed to spawn providers command:', err)
+        resolve({ providers: [] })
+      }
+    })
+  }
+
+  /**
+   * Detect GitHub authentication via `gh auth token`.
+   * Returns the GitHub token if authenticated, or null.
+   *
+   * In packaged Electron apps, PATH is limited to /usr/bin:/bin:/usr/sbin:/sbin.
+   * We extend it with common installation directories so `gh` can be found.
+   */
+  detectGitHubToken(): { found: boolean; token: string | null; user: string | null } {
+    const { execSync } = require('child_process')
+
+    // Extend PATH for packaged app — gh may be in Homebrew, MacPorts, etc.
+    const extraPaths = [
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      '/opt/local/bin',
+      path.join(os.homedir(), '.local', 'bin'),
+      path.join(os.homedir(), 'bin')
+    ]
+    const envPATH = [process.env.PATH, ...extraPaths].filter(Boolean).join(':')
+    const execOpts = {
+      encoding: 'utf-8' as const,
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'] as const,
+      env: { ...process.env, PATH: envPATH }
+    }
+
+    try {
+      const token = execSync('gh auth token', execOpts).trim()
+
+      if (token) {
+        // Get the username
+        let user: string | null = null
+        try {
+          const status = execSync('gh auth status 2>&1', {
+            ...execOpts,
+            shell: true
+          })
+          const match = status.match(/Logged in to github\.com account (\S+)/)
+          if (match) user = match[1]
+        } catch {
+          // ignore
+        }
+
+        console.log(`[Picoclaw] GitHub auth detected (user: ${user || 'unknown'})`)
+        return { found: true, token, user }
+      }
+    } catch {
+      // gh CLI not installed or not authenticated
+    }
+
+    console.log('[Picoclaw] GitHub auth not found (install gh CLI and run: gh auth login)')
+    return { found: false, token: null, user: null }
+  }
+
+  /**
    * Get picoclaw status
    */
   getStatus(): PicoclawStatus {
@@ -318,11 +413,29 @@ export class PicoclawManager {
     // Helper to upsert a model_list entry
     const upsertModel = (modelName: string, provider: string): void => {
       const providerConfig = providers[provider] || {}
+
+      // If modelName already contains a provider prefix (e.g. "github-copilot/gpt-4o-mini"),
+      // use it as-is for the model field instead of double-prefixing.
+      const hasPrefix = modelName.includes('/')
+      const canonicalProvider =
+        provider === 'github_copilot' || provider === 'copilot'
+          ? 'github-copilot'
+          : provider
+      const fullModel = hasPrefix ? modelName : `${canonicalProvider}/${modelName}`
+
       const entry: ModelListEntry = {
         model_name: modelName,
-        model: `${provider}/${modelName}`,
+        model: fullModel,
         api_key: providerConfig.api_key || '',
         api_base: providerConfig.api_base || ''
+      }
+
+      // Normalize protocol prefix for GitHub Copilot
+      if (
+        !hasPrefix &&
+        (provider === 'github-copilot' || provider === 'github_copilot' || provider === 'copilot')
+      ) {
+        entry.model = `github-copilot/${modelName}`
       }
 
       const existingIdx = modelList.findIndex((m) => m.model_name === modelName)

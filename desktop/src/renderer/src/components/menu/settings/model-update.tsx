@@ -1,5 +1,5 @@
-import { ReactElement, useEffect, useState } from 'react'
-import { Button, message, Select, Switch, Space } from 'antd'
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
+import { Button, message, Select, Switch } from 'antd'
 import { RefreshCwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -21,10 +21,14 @@ interface ModelUpdateStatus {
   autoSwitchDetails?: string
 }
 
-export const ModelUpdateSettings = (): ReactElement => {
+/** Imperative handle for parent to trigger save */
+export interface ModelUpdateSettingsRef {
+  save: () => Promise<boolean>
+}
+
+export const ModelUpdateSettings = forwardRef<ModelUpdateSettingsRef>((_props, ref) => {
   const { t } = useTranslation()
 
-  const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [enabled, setEnabled] = useState(true)
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly'>('monthly')
@@ -32,6 +36,8 @@ export const ModelUpdateSettings = (): ReactElement => {
   const [dayOfWeek, setDayOfWeek] = useState(1) // Monday
   const [dayOfMonth, setDayOfMonth] = useState(1)
   const [status, setStatus] = useState<ModelUpdateStatus>({})
+
+  useImperativeHandle(ref, () => ({ save: handleSave }))
 
   useEffect(() => {
     loadSchedule()
@@ -69,8 +75,7 @@ export const ModelUpdateSettings = (): ReactElement => {
     }
   }
 
-  async function handleSave(): Promise<void> {
-    setLoading(true)
+  async function handleSave(): Promise<boolean> {
     try {
       const schedule: ModelUpdateSchedule = {
         frequency,
@@ -86,16 +91,16 @@ export const ModelUpdateSettings = (): ReactElement => {
       )
 
       if (result.success) {
-        message.success(t('settings.picoclaw.modelUpdate.saved'))
         await loadStatus()
+        return true
       } else {
         message.error(result.error || 'Failed to save schedule')
+        return false
       }
     } catch (err) {
       console.error('Failed to save schedule:', err)
       message.error(String(err))
-    } finally {
-      setLoading(false)
+      return false
     }
   }
 
@@ -259,21 +264,16 @@ export const ModelUpdateSettings = (): ReactElement => {
         </>
       )}
 
-      {/* Save + Update Now buttons */}
-      <Space>
-        <Button type="primary" onClick={handleSave} loading={loading}>
-          {t('settings.picoclaw.save')}
-        </Button>
-        <Button
-          icon={<RefreshCwIcon size={14} />}
-          onClick={handleUpdateNow}
-          loading={updating}
-        >
-          {updating
-            ? t('settings.picoclaw.modelUpdate.updating')
-            : t('settings.picoclaw.modelUpdate.updateNow')}
-        </Button>
-      </Space>
+      {/* Update Now button */}
+      <Button
+        icon={<RefreshCwIcon size={14} />}
+        onClick={handleUpdateNow}
+        loading={updating}
+      >
+        {updating
+          ? t('settings.picoclaw.modelUpdate.updating')
+          : t('settings.picoclaw.modelUpdate.updateNow')}
+      </Button>
 
       {/* Status display */}
       <div className="rounded-lg bg-neutral-800 p-3 text-sm">
@@ -302,4 +302,6 @@ export const ModelUpdateSettings = (): ReactElement => {
       </div>
     </div>
   )
-}
+})
+
+ModelUpdateSettings.displayName = 'ModelUpdateSettings'

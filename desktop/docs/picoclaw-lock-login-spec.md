@@ -16,101 +16,157 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 
 ### 全体アーキテクチャ
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                       macOS ホストマシン                          │
-│                                                                  │
-│  ┌─────────────┐     ┌──────────────────────────────────────┐   │
-│  │  ユーザー     │     │  NanoKVM-USB Desktop (Electron)      │   │
-│  │             │     │                                      │   │
-│  │  ┌────────┐ │     │  ┌──────────┐     ┌──────────────┐  │   │
-│  │  │Chat UI │─┼────▶│  │manager.ts│     │ API Server   │  │   │
-│  │  └────────┘ │     │  │          │     │ :18792       │  │   │
-│  │             │     │  │ spawn    │     │              │  │   │
-│  │  ┌────────┐ │     │  │ agent -m │     │ /keyboard/*  │  │   │
-│  │  │Telegram│─┼──┐  │  └─────┬────┘     │ /screen/*    │  │   │
-│  │  └────────┘ │  │  │        │           └──────┬───────┘  │   │
-│  └─────────────┘  │  │        ▼                  │          │   │
-│                   │  │  ┌──────────┐              │          │   │
-│                   │  │  │picoclaw  │──HTTP POST──▶│          │   │
-│                   │  │  │agent -m  │              │          │   │
-│                   │  │  │(Go子プロセス)│           │          │   │
-│                   │  │  │          │   ┌──────────┘          │   │
-│                   │  │  │ ┌──────┐ │   │                     │   │
-│                   │  │  │ │ Tool │ │   ▼                     │   │
-│                   │  │  │ │ Call │ │  IPC                    │   │
-│                   │  │  │ └──────┘ │   │                     │   │
-│                   │  │  └──────────┘   ▼                     │   │
-│                   │  │           ┌──────────────┐            │   │
-│                   │  │           │ Renderer     │            │   │
-│  ┌────────────┐   │  │           │ (React)      │            │   │
-│  │ picoclaw   │   │  │           │              │            │   │
-│  │ gateway    │◀──┘  │           │ HID encode   │            │   │
-│  │ (常駐)     │      │           │ api-handler  │            │   │
-│  │            │      │           └──────┬───────┘            │   │
-│  │ One-Shot   │      │                  │                    │   │
-│  │ Dispatcher │      │                  ▼                    │   │
-│  │ ┌────────┐ │      │           ┌──────────────┐            │   │
-│  │ │Telegram│ │      │           │ Serial Port  │            │   │
-│  │ │ Bot    │ │      │           │ (USB)        │            │   │
-│  │ └────────┘ │      │           └──────┬───────┘            │   │
-│  │ ┌────────┐ │      └──────────────────┼────────────────────┘   │
-│  │ │ Cron   │ │                         │                        │
-│  │ └────────┘ │                         ▼                        │
-│  └────────────┘                  ┌──────────────┐                │
-│                                  │ NanoKVM-USB  │                │
-│                                  │ (Hardware)   │                │
-│                                  └──────┬───────┘                │
-└─────────────────────────────────────────┼────────────────────────┘
-                                          │ USB HID + HDMI
-                                          ▼
-                                   ┌──────────────┐
-                                   │ Windows PC   │
-                                   │ (リモート)    │
-                                   └──────────────┘
-```
+```mermaid
+graph TB
+    %% ===== 外部サービス =====
+    TelegramServer["📱 Telegram サーバー"]
+    subgraph Cloud["☁️ クラウド LLM API（Groq 等）"]
+        ChatLLM["Chat LLM\nllama-3.1-8b-instant"]
+        VisionLLM["Vision LLM\nLlama 4 Scout 17B"]
+    end
 
-### メッセージ処理フロー（One-Shot 方式）
+    %% ===== macOS ホストマシン =====
+    subgraph Mac["🖥️ macOS ホストマシン"]
 
-Chat UI と Telegram は**同一の処理パス**でメッセージを処理します:
+        ChatUI["💬 Chat UI"]
 
-```
-┌──── Chat UI ────┐     ┌──── Telegram ────────────────────────────┐
-│                  │     │                                          │
-│  ユーザー入力     │     │  Telegram メッセージ受信                  │
-│       │          │     │       │                                  │
-│       ▼          │     │       ▼                                  │
-│  manager.ts      │     │  picoclaw gateway (常駐プロセス)          │
-│  sendMessage()   │     │       │                                  │
-│       │          │     │       ▼                                  │
-│       │          │     │  One-Shot Dispatcher                     │
-│       │          │     │  (runOneShotDispatcher)                   │
-│       │          │     │       │                                  │
-└───────┼──────────┘     └───────┼──────────────────────────────────┘
-        │                        │
-        ▼                        ▼
-   ┌─────────────────────────────────┐
-   │  spawn: picoclaw agent -m ...   │  ← 毎回新規プロセス
-   │  (フレッシュな Go サブプロセス)    │
-   │                                  │
-   │  1. LLM 呼び出し (Chat LLM)      │
-   │  2. ツール呼び出し検出            │
-   │  3. nanokvm_lock / login 実行    │
-   │  4. → HTTP POST → API Server    │
-   │  5. → 画面検証 (Vision LLM)      │
-   │  6. 応答テキスト出力 (stdout)     │
-   └──────────────┬───────────────────┘
-                  │
-        ┌─────────┴─────────┐
-        ▼                   ▼
-   Chat 吹き出し       Telegram 返信
+        subgraph picoclaw["🐾 picoclaw（Go バイナリ）"]
+            subgraph gateway["gateway（常駐プロセス）"]
+                TelegramBot["Telegram Bot 受信"]
+                Cron["Cron スケジューラ"]
+                Dispatcher["One-Shot Dispatcher"]
+            end
+            Agent["agent -m\n（毎回新規の子プロセス）"]
+        end
+
+        subgraph Electron["⚡ NanoKVM-USB Desktop（Electron）"]
+            Manager["manager.ts\nsendMessage()"]
+            subgraph APIServer["API Server :18792"]
+                KeyboardAPI["/keyboard/*"]
+                ScreenAPI["/screen/verify"]
+            end
+            subgraph RendererBox["Renderer（React）"]
+                Video["📺 &lt;video&gt;\ngetUserMedia() ← UVC"]
+                Canvas["🖼️ &lt;canvas&gt;\n→ base64 JPEG"]
+                HIDEncode["⌨️ HID encode\napi-handler.ts"]
+            end
+            SerialPort["🔌 Serial Port\nUSB HID 出力"]
+        end
+    end
+
+    %% ===== ハードウェア =====
+    NanoKVM["🔧 NanoKVM-USB\n（Hardware）"]
+    WindowsPC["🪟 Windows PC\n（リモート対象）"]
+
+    %% ===== 接続線 =====
+    %% Telegram 経路
+    TelegramServer -- "Bot API" --> TelegramBot
+    TelegramBot --> Dispatcher
+    Cron --> Dispatcher
+    Dispatcher -- "spawn\n（メッセージごと）" --> Agent
+
+    %% Chat UI 経路
+    ChatUI --> Manager
+    Manager -- "spawn\nagent -m" --> Agent
+
+    %% agent → LLM
+    Agent -- "HTTPS\nChat LLM 呼出" --> ChatLLM
+
+    %% agent → API Server（Tool 実行）
+    Agent -- "HTTP POST\nTool 実行" --> KeyboardAPI
+    Agent -- "HTTP POST\n画面検証" --> ScreenAPI
+
+    %% API Server → Renderer（操作系）
+    KeyboardAPI -- "IPC" --> HIDEncode
+    HIDEncode -- "IPC" --> SerialPort
+
+    %% API Server → Renderer（映像キャプチャ系）
+    ScreenAPI -- "IPC\nキャプチャ要求" --> Canvas
+    Video -- "drawImage()" --> Canvas
+    Canvas -- "IPC\nbase64 JPEG" --> ScreenAPI
+    ScreenAPI -- "HTTPS\nbase64 JPEG 送信" --> VisionLLM
+
+    %% ハードウェア接続
+    SerialPort -- "USB" --> NanoKVM
+    NanoKVM -- "USB HID\n操作転送 ➡️" --> WindowsPC
+    WindowsPC -- "HDMI\n映像出力 ⬅️" --> NanoKVM
+    NanoKVM -- "USB UVC\n映像転送 ⬅️" --> Video
+
+    %% スタイル
+    style Cloud fill:#e8f4fd,stroke:#4a90d9
+    style picoclaw fill:#f0f9e8,stroke:#7cb342
+    style Electron fill:#fff3e0,stroke:#ff9800
+    style gateway fill:#e8f5e9,stroke:#66bb6a
+    style RendererBox fill:#fce4ec,stroke:#e91e63
+    style APIServer fill:#fff8e1,stroke:#ffc107
+    style NanoKVM fill:#f3e5f5,stroke:#9c27b0
+    style WindowsPC fill:#e3f2fd,stroke:#2196f3
 ```
 
-**One-Shot 方式の利点**:
-- 毎回フレッシュなプロセスでセッション蓄積なし
-- TPM（Tokens Per Minute）が自然に分散
-- 429 レートリミットエラーのカスケードを防止
-- Chat UI と Telegram の動作が完全に同一
+### Telegram ロック操作のシーケンス図
+
+```mermaid
+sequenceDiagram
+    actor User as 👤 ユーザー
+    participant TG as 📱 Telegram
+    participant GW as 🐾 gateway<br>(常駐)
+    participant Agent as 🐾 agent -m<br>(子プロセス)
+    participant ChatLLM as ☁️ Chat LLM<br>(Groq)
+    participant API as ⚡ API Server<br>:18792
+    participant Render as 🖥️ Renderer
+    participant KVM as 🔧 NanoKVM
+    participant WinPC as 🪟 Windows PC
+
+    User->>TG: 「ロックして」
+    TG->>GW: Bot API 通知
+    
+    Note over GW: One-Shot Dispatcher
+    GW->>Agent: spawn (新規プロセス)
+
+    rect rgb(232, 244, 253)
+        Note over Agent,ChatLLM: Chat LLM にユーザー意図を問い合わせ
+        Agent->>ChatLLM: HTTPS (メッセージ送信)
+        ChatLLM-->>Agent: Tool Call: nanokvm_lock
+    end
+
+    rect rgb(255, 243, 224)
+        Note over Agent,WinPC: Win+L キー送信
+        Agent->>API: POST /keyboard/type
+        API->>Render: IPC (HID encode)
+        Render->>KVM: Serial Port (USB)
+        KVM->>WinPC: USB HID (Win+L)
+        Note over WinPC: ロック画面に遷移
+    end
+
+    Note over Agent: ⏱️ 3秒待機
+
+    rect rgb(252, 228, 236)
+        Note over Agent,ChatLLM: 画面検証（Vision LLM）
+        Agent->>API: POST /screen/verify
+        API->>Render: IPC (キャプチャ要求)
+        Note over Render: drawImage() → base64 JPEG
+        WinPC-->>KVM: HDMI 映像
+        KVM-->>Render: USB UVC 映像
+        Render-->>API: IPC (base64 JPEG)
+        API->>ChatLLM: HTTPS (Vision LLM)
+        Note right of ChatLLM: Llama 4 Scout<br>画面を解析
+        ChatLLM-->>API: "LOCK_SCREEN"
+        API-->>Agent: 検証結果
+    end
+
+    Agent-->>GW: stdout: "✅ ロック完了"
+    Note over Agent: プロセス終了
+    GW->>TG: 返信送信
+    TG->>User: "✅ ロック完了"
+```
+
+**データフローの要点**:
+
+| 方向 | フロー | 説明 |
+|------|--------|------|
+| **➡️ 操作** | Chat/Telegram → picoclaw agent -m → Chat LLM → Tool Call → API Server → Renderer → Serial Port → NanoKVM → Windows PC | キー・マウス操作の送信 |
+| **⬅️ 映像** | Windows PC → HDMI → NanoKVM → USB (UVC) → Renderer `<video>` (getUserMedia) | HDMI 映像のリアルタイム表示 |
+| **🔄 検証** | API Server → Renderer canvas キャプチャ → base64 JPEG → Vision LLM (Groq) → 判定結果 | 画面キャプチャ + Vision 解析 |
 
 ---
 

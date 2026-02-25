@@ -36,6 +36,9 @@ export enum IpcEvents {
   PICOCLAW_GATEWAY_STATUS = 'picoclaw-gateway-status',
   PICOCLAW_GET_VERSION = 'picoclaw-get-version',
 
+  PICOCLAW_GET_PROVIDERS = 'picoclaw-get-providers',
+  PICOCLAW_DETECT_GITHUB_AUTH = 'picoclaw-detect-github-auth',
+
   // Model update
   PICOCLAW_GET_MODEL_UPDATE_SCHEDULE = 'picoclaw-get-model-update-schedule',
   PICOCLAW_SET_MODEL_UPDATE_SCHEDULE = 'picoclaw-set-model-update-schedule',
