@@ -364,49 +364,48 @@ GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.a
 GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと認証が必要です。
 アプリ内の「🔑 GitHub 認証を開始」ボタンから以下のフローで認証できます:
 
-```
-┌─────────────────────────────────────────────────┐
-│  NanoKVM-USB Desktop                             │
-│                                                  │
-│  🤖 GitHub Copilot 接続設定                      │
-│  [⚠️ GitHub 認証が必要です]                      │
-│                                                  │
-│  [🔑 GitHub 認証を開始] [再検出]                  │
-└──────────┬──────────────────────────────────────┘
-           │ クリック
-           ▼
-┌─────────────────────────────────────────────────┐
-│  Main Process                                    │
-│  spawn: gh auth login -h github.com -p https -w  │
-│  → stderr から one-time code を取得               │
-└──────────┬──────────────────────────────────────┘
-           │
-           ▼
-┌─────────────────────────────────────────────────┐
-│  NanoKVM-USB Desktop                             │
-│                                                  │
-│  認証を待機中...                                  │
-│  ┌─────────────────────────────┐                 │
-│  │ ブラウザでこのコードを入力:   │                 │
-│  │   XXXX-XXXX                 │                 │
-│  │ github.com/login/device     │                 │
-│  └─────────────────────────────┘                 │
-│  [キャンセル]                                     │
-└──────────┬──────────────────────────────────────┘
-           │ ブラウザが自動で開く
-           ▼
-┌─────────────────────────────────────────────────┐
-│  ブラウザ: github.com/login/device               │
-│  → ユーザーがコードを入力 → 認証を許可            │
-└──────────┬──────────────────────────────────────┘
-           │
-           ▼
-┌─────────────────────────────────────────────────┐
-│  NanoKVM-USB Desktop (3秒ポーリング)              │
-│  gh auth token で認証完了を検出                    │
-│  → ✅ GitHub 認証済み (user: xxx)                │
-│  → トークンを config に自動保存                    │
-└─────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    actor User as 👤 ユーザー
+    participant UI as ⚡ NanoKVM-USB<br>設定画面
+    participant Main as 🖥️ Main Process
+    participant GH as 🐙 gh CLI
+    participant Browser as 🌐 ブラウザ<br>github.com/login/device
+
+    Note over UI: 🤖 GitHub Copilot 接続設定<br>⚠️ GitHub 認証が必要です
+
+    User->>UI: 「🔑 GitHub 認証を開始」クリック
+    UI->>Main: IPC: INITIATE_GITHUB_AUTH
+
+    rect rgb(255, 243, 224)
+        Note over Main,GH: gh CLI で Device Flow 開始
+        Main->>GH: spawn: gh auth login<br>-h github.com -p https -w
+        GH-->>Main: stderr: one-time code<br>「XXXX-XXXX」
+    end
+
+    Main-->>UI: { code: "XXXX-XXXX", url }
+
+    rect rgb(232, 244, 253)
+        Note over UI,Browser: デバイスコード表示 + ブラウザ起動
+        UI->>UI: 画面にコード表示<br>「XXXX-XXXX」
+        UI->>Browser: shell.openExternal()<br>github.com/login/device
+        User->>Browser: コードを入力
+        User->>Browser: 認証を許可
+    end
+
+    rect rgb(232, 245, 233)
+        Note over UI,GH: ポーリングで認証完了を検出
+        loop 3秒間隔ポーリング (最大5分)
+            UI->>Main: IPC: DETECT_GITHUB_AUTH
+            Main->>GH: gh auth token
+            GH-->>Main: gho_xxxxx (OAuth トークン)
+            Main-->>UI: { found: true, token, user }
+        end
+    end
+
+    UI->>UI: ✅ GitHub 認証済み (user: xxx)
+    UI->>UI: トークンを config に自動保存
+    UI-->>User: 🎉 認証完了通知
 ```
 
 **前提条件**:
@@ -472,43 +471,30 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 更新フロー
 
-```
-┌──────────────────────┐
-│ Electron 起動時       │
-│ ModelUpdater.init()   │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐     ┌─────────────────────┐
-│ スケジュール確認      │────▶│ 次回実行時刻を計算   │
-│ (config.json)        │     │ setTimeout() 設定    │
-└──────────────────────┘     └──────────┬──────────┘
-                                        │
-                              (時刻到達) │
-                                        ▼
-                             ┌─────────────────────┐
-                             │ picoclaw providers   │
-                             │ コマンド実行          │
-                             └──────────┬──────────┘
-                                        │
-                                        ▼
-                             ┌─────────────────────┐
-                             │ config.json の       │
-                             │ model_list を更新     │
-                             └──────────┬──────────┘
-                                        │
-                                        ▼
-                             ┌─────────────────────┐
-                             │ 現在のモデルが存在    │
-                             │ するか確認            │
-                             │ (auto-switch)        │
-                             └──────────┬──────────┘
-                                        │
-                              ┌─────────┴─────────┐
-                              ▼                   ▼
-                         存在する             存在しない
-                         → 変更なし           → デフォルトに
-                                               自動切替 + 警告
+```mermaid
+flowchart TD
+    Start["⚡ Electron 起動時<br>ModelUpdater.init()"] --> CheckSchedule
+
+    CheckSchedule["📅 スケジュール確認<br>config.json 読み込み"] --> CalcNext["⏰ 次回実行時刻を計算<br>setTimeout() 設定"]
+
+    CalcNext -- "時刻到達" --> RunProviders["🐾 picoclaw providers<br>コマンド実行"]
+    Manual["👤 手動: 🔄 今すぐ更新"] --> RunProviders
+
+    RunProviders --> UpdateConfig["📝 config.json の<br>model_list を更新"]
+
+    UpdateConfig --> CheckModel{"現在のモデルが<br>新リストに存在する？"}
+
+    CheckModel -- "✅ 存在する" --> NoChange["変更なし"]
+    CheckModel -- "❌ 存在しない" --> AutoSwitch["⚠️ デフォルトモデルに<br>自動切替 + 警告表示"]
+
+    NoChange --> CalcNext
+    AutoSwitch --> CalcNext
+
+    style Start fill:#fff3e0,stroke:#ff9800
+    style RunProviders fill:#f0f9e8,stroke:#7cb342
+    style CheckModel fill:#e8f4fd,stroke:#4a90d9
+    style AutoSwitch fill:#fce4ec,stroke:#e91e63
+    style Manual fill:#e8f5e9,stroke:#66bb6a
 ```
 
 ### 手動更新
@@ -547,20 +533,28 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 設計思想: チャット用 LLM と Vision LLM の分離
 
-```
-┌─────────────────────────────────────────────────┐
-│  設定画面 (picoclaw.tsx)                         │
-│                                                  │
-│  ── チャット LLM ──                              │
-│  [Provider] Groq                                │
-│  [API Key]  gsk_...                             │
-│  [Model]    llama-3.1-8b-instant                │
-│                                                  │
-│  ── 👁️ 画面検証 Vision LLM ──                  │
-│  [Provider] Groq                                │
-│  [API Key]  gsk_... (共有可)                     │
-│  [Model]    Llama 4 Scout 17B 👁️               │
-└─────────────────────────────────────────────────┘
+```mermaid
+block-beta
+    columns 1
+    block:settings["⚙️ 設定画面 (picoclaw.tsx)"]
+        columns 2
+        block:chat["💬 チャット LLM"]:2
+            columns 2
+            chatProvider["Provider: Groq"]
+            chatModel["Model: llama-3.1-8b-instant"]
+            chatKey["API Key: gsk_..."]:2
+        end
+        block:vision["👁️ 画面検証 Vision LLM"]:2
+            columns 2
+            visionProvider["Provider: Groq"]
+            visionModel["Model: Llama 4 Scout 17B 👁️"]
+            visionKey["API Key: gsk_... (共有可)"]:2
+        end
+    end
+
+    style settings fill:#fff3e0,stroke:#ff9800
+    style chat fill:#e8f4fd,stroke:#4a90d9
+    style vision fill:#fce4ec,stroke:#e91e63
 ```
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
@@ -568,51 +562,43 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 検証フロー
 
-```
-┌─────────────────────┐
-│ ロック or ログイン    │
-│ コマンド実行          │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ HID キー入力送信      │
-│ (Win+L or PIN入力)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐     ┌──────────────────────┐
-│ 待機                 │     │ 待機時間:             │
-│ (ロック: 3s)         │     │  Lock: 3秒           │
-│ (ログイン: 15s)      │     │  Login: 15秒          │
-│                      │     │  (Ollama: 各 +2〜3秒) │
-└──────────┬──────────┘     └──────────────────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ callScreenVerify()   │
-│ HTTP POST            │
-│ /api/screen/verify   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐     ┌──────────────────────┐
-│ API Server           │     │ HDMI → canvas →       │
-│ スクリーンキャプチャ   │────▶│ base64 JPEG           │
-│ + Vision LLM 呼び出し │     └──────────────────────┘
-└──────────┬──────────┘
-           │
-     ┌─────┴─────────────────────────────┐
-     │           Vision LLM 判定          │
-     ├────────────┬────────────┬──────────┤
-     ▼            ▼            ▼          ▼
- LOCK_SCREEN  LOGIN_SUCCESS  LOGIN_FAILED  DESKTOP
-     │            │            │          │
-     ▼            ▼            ▼          ▼
-  ロック時:     ログイン時:   ログイン時:  ロック時:
-  ✅ 成功      ✅ 成功      ❌ 失敗     ⚠️ 失敗
-                             + Enter で
-                             エラー解除
+```mermaid
+flowchart TD
+    Command["🐾 ロック or ログイン<br>コマンド実行"] --> HID["⌨️ HID キー入力送信<br>Win+L or PIN入力"]
+
+    HID --> Wait["⏱️ 待機"]
+    Wait -. "Lock: 3秒<br>Login: 15秒<br>Ollama: 各 +2〜3秒" .-> WaitNote[" "]
+
+    Wait --> Verify["📡 callScreenVerify()<br>HTTP POST /api/screen/verify"]
+
+    Verify --> Capture["📺 API Server<br>スクリーンキャプチャ"]
+    Capture --> JPEG["🖼️ HDMI → canvas<br>→ base64 JPEG"]
+    JPEG --> VisionLLM["☁️ Vision LLM<br>画面を解析"]
+
+    VisionLLM --> Result{"判定結果"}
+
+    Result -- "LOCK_SCREEN" --> LockResult{"操作種別"}
+    Result -- "LOGIN_SUCCESS" --> LoginOK["✅ ログイン成功"]
+    Result -- "LOGIN_FAILED" --> LoginFail["❌ ログイン失敗<br>+ Enter でエラー解除"]
+    Result -- "DESKTOP" --> DesktopResult{"操作種別"}
+
+    LockResult -- "ロック操作" --> LockOK["✅ ロック成功"]
+    LockResult -- "ログイン操作" --> LockWarn["⚠️ まだロック画面"]
+
+    DesktopResult -- "ロック操作" --> DesktopWarn["⚠️ ロック失敗<br>デスクトップのまま"]
+    DesktopResult -- "ログイン操作" --> DesktopOK["✅ ログイン成功"]
+
+    style Command fill:#f0f9e8,stroke:#7cb342
+    style HID fill:#fff3e0,stroke:#ff9800
+    style VisionLLM fill:#e8f4fd,stroke:#4a90d9
+    style Result fill:#fff8e1,stroke:#ffc107
+    style LockOK fill:#e8f5e9,stroke:#4caf50
+    style LoginOK fill:#e8f5e9,stroke:#4caf50
+    style DesktopOK fill:#e8f5e9,stroke:#4caf50
+    style LoginFail fill:#ffebee,stroke:#f44336
+    style LockWarn fill:#fff8e1,stroke:#ff9800
+    style DesktopWarn fill:#fff8e1,stroke:#ff9800
+    style WaitNote fill:none,stroke:none
 ```
 
 ### Vision プロンプト
