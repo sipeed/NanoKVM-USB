@@ -20,9 +20,9 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 graph TB
     %% ===== 外部サービス =====
     TelegramServer["📱 Telegram サーバー"]
-    subgraph Cloud["☁️ クラウド LLM API（Groq 等）"]
-        ChatLLM["Chat LLM\nllama-3.1-8b-instant"]
-        VisionLLM["Vision LLM\nLlama 4 Scout 17B"]
+    subgraph Cloud["☁️ クラウド LLM API（GitHub Copilot 等）"]
+        ChatLLM["Chat LLM\ngpt-4.1"]
+        VisionLLM["Vision LLM\ngpt-4.1"]
     end
 
     %% ===== macOS ホストマシン =====
@@ -340,7 +340,7 @@ picoclaw のチャット機能（自然言語によるコマンド解釈・応�
 | **Anthropic** | claude-sonnet-4.6 | API Key | 有料 | 高品質 |
 | **DeepSeek** | deepseek-chat | API Key | 安価 | コスト効率 |
 | **Google Gemini** | gemini-2.0-flash-exp | API Key | 無料枠あり | 高速 |
-| **GitHub Copilot** | gpt-4o-mini | OAuth (gh CLI) | **無料** | `gh auth login` で認証 |
+| **GitHub Copilot** | **gpt-4.1** | OAuth (gh CLI) | **無料** | `gh auth login` で認証・**推奨** |
 | **OpenRouter** | auto | API Key | 従量制 | 多プロバイダ統合 |
 | **Mistral AI** | mistral-small-latest | API Key | 有料 | 欧州拠点 |
 | **Ollama** | llama3 | 不要 | **無料** | ローカル実行 |
@@ -352,7 +352,6 @@ picoclaw のチャット機能（自然言語によるコマンド解釈・応�
 | **Moonshot** | moonshot-v1-8k | API Key | 安価 | 中国拠点 |
 | **Volcengine** | doubao-pro-32k | API Key | 安価 | ByteDance |
 | **ShengsuanYun** | deepseek-v3 | API Key | 安価 | 中国拠点 |
-| **Antigravity** | gemini-3-flash | OAuth | 要確認 | Google Cloud |
 
 ### GitHub Copilot / GitHub Models 対応モデル
 
@@ -424,9 +423,9 @@ sequenceDiagram
 
 | モデル名 | 種別 | Vision | 備考 |
 |---------|------|--------|------|
-| **gpt-4o-mini** | Chat | ✅ | **デフォルト**: 高速・軽量 |
+| **gpt-4o-mini** | Chat | ✅ | 高速・軽量 |
 | **gpt-4o** | Chat | ✅ | 高品質 |
-| **gpt-4.1** | Chat | ✅ | 最新世代 |
+| **gpt-4.1** | Chat | ✅ | **推奨**: 最新世代・高品質 |
 | **gpt-4.1-mini** | Chat | ✅ | 最新世代・軽量 |
 | **gpt-4.1-nano** | Chat | - | 超軽量 |
 | **o1** | Reasoning | - | 推論特化 |
@@ -540,14 +539,14 @@ block-beta
         columns 2
         block:chat["💬 チャット LLM"]:2
             columns 2
-            chatProvider["Provider: Groq"]
-            chatModel["Model: llama-3.1-8b-instant"]
+            chatProvider["Provider: GitHub Copilot"]
+            chatModel["Model: gpt-4.1"]
             chatKey["API Key: gsk_..."]:2
         end
         block:vision["👁️ 画面検証 Vision LLM"]:2
             columns 2
-            visionProvider["Provider: Groq"]
-            visionModel["Model: Llama 4 Scout 17B 👁️"]
+            visionProvider["Provider: GitHub Copilot"]
+            visionModel["Model: gpt-4.1 👁️"]
             visionKey["API Key: gsk_... (共有可)"]:2
         end
     end
@@ -558,7 +557,9 @@ block-beta
 ```
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
-例: チャット = llama-3.1-8b-instant (Groq 無料) + Vision = Llama 4 Scout (Groq 無料)
+例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
+
+> **推奨構成**: GitHub Copilot の `gpt-4.1` を Chat・Vision 両方に設定。無料で高品質かつプロンプト調整が最小限で済みます。
 
 ### 検証フロー
 
@@ -636,9 +637,8 @@ Vision LLM が設定されていない場合:
 | **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct | **無料** | 高速 | Llama 4 Maverick・高精度 |
 | **Groq** | llama-3.2-11b-vision-preview | **無料** | 高速 | Llama 3.2 11B Vision |
 | **Groq** | llama-3.2-90b-vision-preview | **無料** | 低速 | Llama 3.2 90B Vision・高精度 |
-| **GitHub Copilot** | **gpt-4o-mini** | **無料** | 高速 | gh 認証のみ・推奨 |
+| **GitHub Copilot** | **gpt-4.1** | **無料** | 高速 | **推奨**: gh 認証のみ・最新世代 |
 | **GitHub Copilot** | gpt-4o | **無料** | 高速 | 高品質 |
-| **GitHub Copilot** | gpt-4.1 | **無料** | 高速 | 最新世代 |
 | **GitHub Copilot** | gpt-4.1-mini | **無料** | 高速 | 最新世代・軽量 |
 | **GitHub Copilot** | Llama-3.2-11B-Vision-Instruct | **無料** | 中速 | オープンモデル |
 | **GitHub Copilot** | Llama-3.2-90B-Vision-Instruct | **無料** | 低速 | 高精度 |
@@ -679,20 +679,23 @@ Vision LLM が設定されていない場合:
 {
   "agents": {
     "defaults": {
-      "provider": "groq",
-      "model": "llama-3.1-8b-instant",
-      "vision_provider": "groq",
-      "vision_model": "meta-llama/llama-4-scout-17b-16e-instruct"
+      "provider": "github-copilot",
+      "model_name": "github-copilot/gpt-4.1",
+      "vision_provider": "github-copilot",
+      "vision_model": "gpt-4.1"
     }
   },
   "providers": {
-    "groq": { "api_key": "gsk_..." }
+    "github-copilot": { "api_key": "(gh auth token で自動取得)" }
   },
-  "model_list": {
-    "groq": ["llama-3.1-8b-instant", "meta-llama/llama-4-scout-17b-16e-instruct"]
-  }
+  "model_list": [
+    { "model_name": "github-copilot/gpt-4.1", "model": "gpt-4.1" }
+  ]
 }
 ```
+
+> **Note**: 設定フィールド `model` は `model_name` にリネームされました（v2026.02.25〜）。
+> 旧 `model` フィールドは後方互換で引き続き読み込まれますが、新規設定では `model_name` を推奨します。
 
 ### レートリミット対策
 
@@ -705,3 +708,27 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | NanoKVM 回数制限 | 1メッセージあたり最大 4 回 |
 | REDACTED 拒否 | LLM がパスワードを *** にマスクした場合は実行拒否 |
 | 429 ポップアップ | レートリミット時にリトライ待ち時間を UI に表示 |
+
+---
+
+## 最新マージ変更履歴（v2026.02.25）
+
+### NanoKVM-USB (upstream 2コミット)
+
+| 変更 | 内容 |
+|------|------|
+| **Right Shift キー修正** | `normalizeKeyCode()` 関数追加。`event.code` が空の場合に `event.key` + `event.location` でフォールバック（browser版） |
+| **セキュリティ依存更新** | minimatch, tar, ajv 等の脆弱性対応 |
+
+### picoclaw (upstream 14コミット)
+
+| 変更 | 内容 |
+|------|------|
+| **`model` → `model_name` リネーム** | 設定フィールド名を変更。`GetModelName()` ヘルパーで旧フィールドも後方互換で読み込み |
+| **`reasoning_content` 対応** | DeepSeek-R1, Moonshot kimi-k2.5 等の推論モデルが返す思考過程フィールドを保持。ツール呼び出しの往復で400エラーが発生する問題を修正 |
+| **spawn ツール空タスク拒否** | 空文字列・空白のみのタスクを事前バリデーションで拒否。サブエージェントの無意味な起動を防止 |
+| **DefaultConfig テンプレート漏れ防止** | JSON Unmarshal 時にデフォルト値がユーザー設定に混入する問題を修正 |
+| **Web プロキシ対応** | `tools.web.proxy` 設定で HTTP プロキシ経由の Web 検索が可能に |
+| **GitHub Copilot セッション管理改善** | SDK版: mutex 追加・Close() メソッド実装（HTTP API版には影響なし） |
+| **デッドコード削除** | Antigravity プロバイダ、WeChat 企業アプリ等の未使用コードを除去 |
+| **CGO_ENABLED=0 静的ビルド** | クロスプラットフォーム GLIBC エラーを防止 |
