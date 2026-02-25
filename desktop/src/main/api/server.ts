@@ -501,8 +501,15 @@ export class ApiServer {
       // Capture screen
       const dataUrl = await this.requestScreenCapture()
       if (!dataUrl) {
-        res.writeHead(500, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'Failed to capture screen' }))
+        // Return structured response so callers can distinguish "no video" from other errors
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          success: false,
+          visionConfigured: true,
+          status: 'NO_VIDEO',
+          detail: 'No video stream available. The video feed is not active.',
+          feedback: '📹 映像がありません。PCがNanoKVM-USBに接続されていて、ストリーミングが開始されていることを確認してください。'
+        }))
         return
       }
 
