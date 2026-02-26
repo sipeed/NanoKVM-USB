@@ -458,7 +458,7 @@ export async function captureScreen(): Promise<CaptureResult> {
   const ctx = canvas.getContext('2d')
   if (!ctx) {
     console.warn('[API Handler] Failed to create canvas context')
-    return null
+    return { dataUrl: null, rejectReason: 'failed to create canvas context' }
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
@@ -524,16 +524,21 @@ export function initializeApiHandlers(): () => void {
     })
   }
 
-  // Wake screen by sending a tiny mouse jiggle (1px right, then 1px left)
-  // This is safe even during active use — the net movement is zero
+  // Wake screen by sending a left click (press + release)
+  // More reliable than mouse jiggle for waking from sleep/standby
   const handleMouseWake = async (_event): Promise<void> => {
-    console.log('[API Handler] Sending mouse wake jiggle (1px right + 1px left)')
+    console.log('[API Handler] Sending mouse click to wake screen')
     try {
-      await sendMouse(0, 1, 0)
+      // Left click press: [mode=relative, buttons=left(0x01), dx=0, dy=0, wheel=0]
+      const pressReport = [0x01, 0x01, 0x00, 0x00, 0x00]
+      await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, pressReport)
       await new Promise((r) => setTimeout(r, 50))
-      await sendMouse(0, -1, 0)
+      // Release: [mode=relative, buttons=none, dx=0, dy=0, wheel=0]
+      const releaseReport = [0x01, 0x00, 0x00, 0x00, 0x00]
+      await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, releaseReport)
+      console.log('[API Handler] Wake click sent successfully')
     } catch (err) {
-      console.error('[API Handler] Failed to send wake jiggle:', err)
+      console.error('[API Handler] Failed to send wake click:', err)
     }
   }
 

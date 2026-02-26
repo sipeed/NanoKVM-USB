@@ -504,13 +504,13 @@ export class ApiServer {
       let dataUrl = captureResult.dataUrl
       console.log(`[API Server] Screen verify: capture result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
 
-      // If black screen detected, send wake jiggle and retry once
+      // If black screen detected, send left click to wake and retry once
       if (!dataUrl && captureResult.rejectReason?.includes('black/no-signal')) {
-        console.log('[API Server] Screen verify: black screen detected, sending mouse wake jiggle...')
+        console.log('[API Server] Screen verify: black screen detected, sending mouse click to wake...')
         this.mainWindow!.webContents.send('api:mouse:wake')
         // Wait for screen to transition (sleep → lock screen typically takes 1-2s)
         await new Promise((r) => setTimeout(r, 2000))
-        console.log('[API Server] Screen verify: retrying capture after wake jiggle...')
+        console.log('[API Server] Screen verify: retrying capture after wake click...')
         captureResult = await this.requestScreenCapture()
         dataUrl = captureResult.dataUrl
         console.log(`[API Server] Screen verify: retry result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
