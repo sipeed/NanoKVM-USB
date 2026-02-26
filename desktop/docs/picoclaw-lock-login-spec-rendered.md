@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-25
+> **最終更新**: 2026-02-26
 
 ## 概要
 
@@ -160,7 +160,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | POST | `/api/keyboard/type` | `{"text": "Hello"}` | テキスト入力 |
 | POST | `/api/mouse/click` | `{"button": "left"}` | マウスクリック |
 | GET | `/api/screen/capture` | なし | 現在の画面をキャプチャ（base64 JPEG） |
-| POST | `/api/screen/verify` | `{"action": "lock"\|"login"}` | 画面状態を Vision LLM で検証 |
+| POST | `/api/screen/verify` | `{"action": "lock"\|"login"\|"status"}` | 画面状態を Vision LLM で検証・確認 |
 
 ---
 
@@ -185,7 +185,59 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 - **ログイン待機**: PIN 入力後 15 秒の固定待機（デスクトップ描画完了まで）
 - **NanoKVM 操作回数**: 1メッセージあたり最大 4 回（不要な反復を防止）
 - **ユーザー名バリデーション**: "windows", "linux", "ubuntu" 等の OS 名は自動除外
+---
 
+## 画面状態確認機能（Screen Check）
+
+「画面状態を確認して」などの指示で、リモート PC の現在の画面をキャプチャし、Vision LLM で分析して結果を返却します。
+
+### 対応キーワード
+
+- 「画面状態を確認して」
+- 「今何が映ってる？」
+- 「画面を見て」
+- 「スクリーンショット」
+- "screen check"
+
+### 動作フロー
+
+1. picoclaw エージェントが `nanokvm_screen_check` ツールを呼び出し
+2. Go 側が `POST /api/screen/verify` に `{"action": "status"}` を送信
+3. Electron API Server が HDMI キャプチャを実行
+4. **黒画面（brightness < 3）の場合**: マウスジグル（1px右+1px左）を HID 送信してスリープ復帰を試行 → 2秒待機 → 再キャプチャ
+5. 映像取得成功なら Vision LLM に汎用プロンプトで画面内容を記述させる
+6. ステータス分類（`DESKTOP` / `LOCK_SCREEN` / `LOGIN_SCREEN` / `DESCRIBED`）と詳細説明を返却
+7. リトライ後も黒画面の場合は `BLACK_SCREEN` ステータスを返却（「マウスジグルでの復帰を試みましたが画面が変わりませんでした」）
+8. 早期終了で即座にユーザーに結果を表示
+
+> **ウェイクジグルの安全性**: ネットの移動量は ±0px（1px右移動+1px左移動）。ユーザーが PC を操作中でも知覚不能。クリックやキー入力と異なり、アプリケーション操作に一切影響しない。
+
+### レスポンス例
+
+| ステータス | アイコン | 例 |
+|------------|--------|-----|
+| `DESKTOP` | 🖥️ | デスクトップ画面です。複数のアプリケーションウィンドウが見えます。 |
+| `LOCK_SCREEN` | 🔒 | ロック画面です。時計とユーザーアバターが表示されています。 |
+| `LOGIN_SCREEN` | 🔑 | サインイン画面です。PIN 入力フィールドが表示されています。 |
+| `DESCRIBED` | 🔍 | 画面状態: （Vision LLM の記述） |
+| `NO_VIDEO` | 📹 | 映像がありません。PCが接続されていてストリーミングが開始されていることを確認してください。 |
+| `BLACK_SCREEN` | 🖥️ | 画面が真っ黒です。マウスジグルでの復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。 |
+| `NO_SIGNAL` | 📡 | 信号がありません。黒い画面またはブランク画面が検出されました。 |
+
+### エラーハンドリング
+
+| 状況 | 原因 | Go側の判定 | ユーザーへのメッセージ |
+|------|------|-----------|---------------------|
+| **映像なし（screen_check）** | PC 未接続 / ストリーミング未開始 | `success=false`, `status="NO_VIDEO"` | 📹 映像がありません。PCがNanoKVM-USBに接続されていて… |
+| **映像なし（lock）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ Win+Lを送信しましたが、映像がないため結果を確認できません… |
+| **映像なし（login）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ ログイン操作を送信しましたが、映像がないため結果を確認できません… |
+| **黒画面（screen_check）** | PC スリープ / HDMI 信号未安定 | `success=false`, `status="BLACK_SCREEN"` | 🖥️ 画面が真っ黒です。PCがスリープ中か、HDMI信号が安定していない… |
+| **黒画面（lock）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ Win+Lを送信しましたが、画面が真っ黒です。PCがスリープ中か… |
+| **黒画面（login）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ ログイン操作を送信しましたが、画面が真っ黒です… |
+| **アプリ未起動** | API Server に接続不可 | `result == nil` | NanoKVM-USB デスクトップアプリに接続できませんでした… |
+| **Vision 未設定** | Vision LLM プロバイダ/モデル未設定 | `visionConfigured=false` | Vision LLM が設定されていません… |
+| **セッション履歴破損** | 並列 tool_calls のレスポンス欠落 | `sanitizeToolCallHistory()` で自動トランケート | （自動修復：ログに WARNING 出力、ユーザーへのメッセージなし） |
+| **並列 tool レスポンス欠落** | `sanitizeHistoryForProvider()` が連続 tool メッセージを削除 | predecessor チェックを `role=="tool"` にも拡張 | （透過的修正：ユーザー影響なし） |
 ---
 
 ## チャット用 LLM（Chat LLM）
@@ -202,7 +254,7 @@ picoclaw のチャット機能（自然言語によるコマンド解釈・応�
 | **Anthropic** | claude-sonnet-4.6 | API Key | 有料 | 高品質 |
 | **DeepSeek** | deepseek-chat | API Key | 安価 | コスト効率 |
 | **Google Gemini** | gemini-2.0-flash-exp | API Key | 無料枠あり | 高速 |
-| **GitHub Copilot** | gpt-4o-mini | OAuth (gh CLI) | **無料** | `gh auth login` で認証 |
+| **GitHub Copilot** | **gpt-4.1** | OAuth (gh CLI) | **無料** | `gh auth login` で認証・**推奨** |
 | **OpenRouter** | auto | API Key | 従量制 | 多プロバイダ統合 |
 | **Mistral AI** | mistral-small-latest | API Key | 有料 | 欧州拠点 |
 | **Ollama** | llama3 | 不要 | **無料** | ローカル実行 |
@@ -214,7 +266,6 @@ picoclaw のチャット機能（自然言語によるコマンド解釈・応�
 | **Moonshot** | moonshot-v1-8k | API Key | 安価 | 中国拠点 |
 | **Volcengine** | doubao-pro-32k | API Key | 安価 | ByteDance |
 | **ShengsuanYun** | deepseek-v3 | API Key | 安価 | 中国拠点 |
-| **Antigravity** | gemini-3-flash | OAuth | 要確認 | Google Cloud |
 
 ### GitHub Copilot / GitHub Models 対応モデル
 
@@ -244,9 +295,9 @@ GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと�
 
 | モデル名 | 種別 | Vision | 備考 |
 |---------|------|--------|------|
-| **gpt-4o-mini** | Chat | ✅ | **デフォルト**: 高速・軽量 |
+| **gpt-4o-mini** | Chat | ✅ | 高速・軽量 |
 | **gpt-4o** | Chat | ✅ | 高品質 |
-| **gpt-4.1** | Chat | ✅ | 最新世代 |
+| **gpt-4.1** | Chat | ✅ | **推奨**: 最新世代・高品質 |
 | **gpt-4.1-mini** | Chat | ✅ | 最新世代・軽量 |
 | **gpt-4.1-nano** | Chat | - | 超軽量 |
 | **o1** | Reasoning | - | 推論特化 |
@@ -332,7 +383,9 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 ![diagram](./picoclaw-lock-login-spec-rendered-5.svg)
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
-例: チャット = llama-3.1-8b-instant (Groq 無料) + Vision = Llama 4 Scout (Groq 無料)
+例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
+
+> **推奨構成**: GitHub Copilot の `gpt-4.1` を Chat・Vision 両方に設定。無料で高品質かつプロンプト調整が最小限で済みます。
 
 ### 検証フロー
 
@@ -373,9 +426,8 @@ Vision LLM が設定されていない場合:
 | **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct | **無料** | 高速 | Llama 4 Maverick・高精度 |
 | **Groq** | llama-3.2-11b-vision-preview | **無料** | 高速 | Llama 3.2 11B Vision |
 | **Groq** | llama-3.2-90b-vision-preview | **無料** | 低速 | Llama 3.2 90B Vision・高精度 |
-| **GitHub Copilot** | **gpt-4o-mini** | **無料** | 高速 | gh 認証のみ・推奨 |
+| **GitHub Copilot** | **gpt-4.1** | **無料** | 高速 | **推奨**: gh 認証のみ・最新世代 |
 | **GitHub Copilot** | gpt-4o | **無料** | 高速 | 高品質 |
-| **GitHub Copilot** | gpt-4.1 | **無料** | 高速 | 最新世代 |
 | **GitHub Copilot** | gpt-4.1-mini | **無料** | 高速 | 最新世代・軽量 |
 | **GitHub Copilot** | Llama-3.2-11B-Vision-Instruct | **無料** | 中速 | オープンモデル |
 | **GitHub Copilot** | Llama-3.2-90B-Vision-Instruct | **無料** | 低速 | 高精度 |
@@ -416,20 +468,23 @@ Vision LLM が設定されていない場合:
 {
   "agents": {
     "defaults": {
-      "provider": "groq",
-      "model": "llama-3.1-8b-instant",
-      "vision_provider": "groq",
-      "vision_model": "meta-llama/llama-4-scout-17b-16e-instruct"
+      "provider": "github-copilot",
+      "model_name": "github-copilot/gpt-4.1",
+      "vision_provider": "github-copilot",
+      "vision_model": "gpt-4.1"
     }
   },
   "providers": {
-    "groq": { "api_key": "gsk_..." }
+    "github-copilot": { "api_key": "(gh auth token で自動取得)" }
   },
-  "model_list": {
-    "groq": ["llama-3.1-8b-instant", "meta-llama/llama-4-scout-17b-16e-instruct"]
-  }
+  "model_list": [
+    { "model_name": "github-copilot/gpt-4.1", "model": "gpt-4.1" }
+  ]
 }
 ```
+
+> **Note**: 設定フィールド `model` は `model_name` にリネームされました（v2026.02.25〜）。
+> 旧 `model` フィールドは後方互換で引き続き読み込まれますが、新規設定では `model_name` を推奨します。
 
 ### レートリミット対策
 
@@ -442,3 +497,38 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | NanoKVM 回数制限 | 1メッセージあたり最大 4 回 |
 | REDACTED 拒否 | LLM がパスワードを *** にマスクした場合は実行拒否 |
 | 429 ポップアップ | レートリミット時にリトライ待ち時間を UI に表示 |
+
+---
+
+## 最新マージ変更履歴（v2026.02.25）
+
+### NanoKVM-USB (upstream 2コミット)
+
+| 変更 | 内容 |
+|------|------|
+| **Right Shift キー修正** | `normalizeKeyCode()` 関数追加。`event.code` が空の場合に `event.key` + `event.location` でフォールバック（browser版） |
+| **セキュリティ依存更新** | minimatch, tar, ajv 等の脆弱性対応 |
+
+### picoclaw (upstream 14コミット)
+
+| 変更 | 内容 |
+|------|------|
+| **`model` → `model_name` リネーム** | 設定フィールド名を変更。`GetModelName()` ヘルパーで旧フィールドも後方互換で読み込み |
+| **`reasoning_content` 対応** | DeepSeek-R1, Moonshot kimi-k2.5 等の推論モデルが返す思考過程フィールドを保持。ツール呼び出しの往復で400エラーが発生する問題を修正 |
+| **spawn ツール空タスク拒否** | 空文字列・空白のみのタスクを事前バリデーションで拒否。サブエージェントの無意味な起動を防止 |
+| **DefaultConfig テンプレート漏れ防止** | JSON Unmarshal 時にデフォルト値がユーザー設定に混入する問題を修正 |
+| **Web プロキシ対応** | `tools.web.proxy` 設定で HTTP プロキシ経由の Web 検索が可能に |
+| **GitHub Copilot セッション管理改善** | SDK版: mutex 追加・Close() メソッド実装（HTTP API版には影響なし） |
+| **デッドコード削除** | Antigravity プロバイダ、WeChat 企業アプリ等の未使用コードを除去 |
+| **`nanokvm_screen_check` 追加** | 画面状態をキャプチャ・ Vision LLM で分析して返却する新ツール。早期終了対応 |
+| **`/api/screen/verify` 拡張** | `action: "status"` を追加。汎用プロンプトで画面全体を記述 |
+| **NO_VIDEO 構造化レスポンス** | 映像なし時に HTTP 500 → 200 + `status: "NO_VIDEO"` に変更。「アプリ未起動」と「映像なし」を区別可能に |
+| **lock/login NO_VIDEO 警告** | ロック・ログインの post-verify で映像がない場合、嘘の成功メッセージではなく ⚠️ 警告を返すように修正 |
+| **CGO_ENABLED=0 静的ビルド** | クロスプラットフォーム GLIBC エラーを防止 |
+| **BLACK_SCREEN ステータス追加** | `NO_VIDEO` と `BLACK_SCREEN` を区別。キャプチャカードが黒フレームを配信する場合（スリープ/HDMI再取得中）に専用メッセージを表示 |
+| **CaptureResult IPC 拡張** | renderer → main の IPC に `rejectReason` を追加。キャプチャ失敗の理由をメインプロセスのログに記録 |
+| **ロック画面誤認修正** | Vision LLM が「no taskbar」と否定文で記述した場合のキーワード誤検出を修正。`hasPositive()` ヘルパーによる否定表現フィルタと `LOCK_SCREEN` 優先順位変更 |
+| **track.muted 除去** | HDMI 信号再取得中に一時的に muted=true になる問題で NO_VIDEO 誤判定が発生していたため除去 |
+| **自動ウェイクジグル** | BLACK_SCREEN 検出時にマウスジグル（1px右+1px左）を HID 送信してスリープ復帰を試行 → 2秒待機 → 再キャプチャ。ネット移動量±0pxで操作中でも安全 |
+| **セッション履歴自動修復** | `GetHistory()` で `sanitizeToolCallHistory()` を呼び出し、assistant の `tool_calls` に対応する tool レスポンスが欠落している場合、その手前で履歴をトランケート。並列ツール呼び出し後のセッション破損による LLM API 400 エラーを自動防止 |
+| **並列 tool_calls プロバイダサニタイザ修正** | `sanitizeHistoryForProvider()` が連続する tool レスポンス（並列 tool_calls 由来）の 2 件目以降を誤って削除していた問題を修正。predecessor チェックを `role=="assistant"` のみから `role=="tool"` も許容するよう拡張。10 件のユニットテスト追加 |
