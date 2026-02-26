@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-26
+> **最終更新**: 2026-02-26 (v2026.02.26)
 
 ## 概要
 
@@ -342,13 +342,13 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 1. picoclaw エージェントが `nanokvm_screen_check` ツールを呼び出し
 2. Go 側が `POST /api/screen/verify` に `{"action": "status"}` を送信
 3. Electron API Server が HDMI キャプチャを実行
-4. **黒画面（brightness < 3）の場合**: マウスジグル（1px右+1px左）を HID 送信してスリープ復帰を試行 → 2秒待機 → 再キャプチャ
+4. **黒画面（brightness < 3）の場合**: マウス左クリック＋キーボード Space キーを HID 送信してスリープ復帰を試行 → 4秒待機 → 再キャプチャ（最大2回リトライ）
 5. 映像取得成功なら Vision LLM に汎用プロンプトで画面内容を記述させる
 6. ステータス分類（`DESKTOP` / `LOCK_SCREEN` / `LOGIN_SCREEN` / `DESCRIBED`）と詳細説明を返却
-7. リトライ後も黒画面の場合は `BLACK_SCREEN` ステータスを返却（「マウスジグルでの復帰を試みましたが画面が変わりませんでした」）
+7. リトライ後も黒画面の場合は `BLACK_SCREEN` ステータスを返却（「マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした」）
 8. 早期終了で即座にユーザーに結果を表示
 
-> **ウェイクジグルの安全性**: ネットの移動量は ±0px（1px右移動+1px左移動）。ユーザーが PC を操作中でも知覚不能。クリックやキー入力と異なり、アプリケーション操作に一切影響しない。
+> **ウェイク操作の設計**: マウス左クリック（press+release）とキーボード Space キー（press+release）の両入力を送信。S3 スリープからの復帰はキーボード入力のみに応答する PC もあるため、両方を併用。4秒の待機時間は S3 レジューム + HDMI 信号安定に必要な時間を考慮。最大2回までリトライ。
 
 ### レスポンス例
 
@@ -359,7 +359,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | `LOGIN_SCREEN` | 🔑 | サインイン画面です。PIN 入力フィールドが表示されています。 |
 | `DESCRIBED` | 🔍 | 画面状態: （Vision LLM の記述） |
 | `NO_VIDEO` | 📹 | 映像がありません。PCが接続されていてストリーミングが開始されていることを確認してください。 |
-| `BLACK_SCREEN` | 🖥️ | 画面が真っ黒です。マウスジグルでの復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。 |
+| `BLACK_SCREEN` | 🖥️ | 画面が真っ黒です。マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。 |
 | `NO_SIGNAL` | 📡 | 信号がありません。黒い画面またはブランク画面が検出されました。 |
 
 ### エラーハンドリング
@@ -369,7 +369,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | **映像なし（screen_check）** | PC 未接続 / ストリーミング未開始 | `success=false`, `status="NO_VIDEO"` | 📹 映像がありません。PCがNanoKVM-USBに接続されていて… |
 | **映像なし（lock）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ Win+Lを送信しましたが、映像がないため結果を確認できません… |
 | **映像なし（login）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ ログイン操作を送信しましたが、映像がないため結果を確認できません… |
-| **黒画面（screen_check）** | PC スリープ / HDMI 信号未安定 | `success=false`, `status="BLACK_SCREEN"` | 🖥️ 画面が真っ黒です。PCがスリープ中か、HDMI信号が安定していない… |
+| **黒画面（screen_check）** | PC スリープ / HDMI 信号未安定 | `success=false`, `status="BLACK_SCREEN"` | 🖥️ 画面が真っ黒です。マウスクリック+キーボード入力で復帰試行済み… |
 | **黒画面（lock）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ Win+Lを送信しましたが、画面が真っ黒です。PCがスリープ中か… |
 | **黒画面（login）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ ログイン操作を送信しましたが、画面が真っ黒です… |
 | **アプリ未起動** | API Server に接続不可 | `result == nil` | NanoKVM-USB デスクトップアプリに接続できませんでした… |
@@ -792,6 +792,23 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **CaptureResult IPC 拡張** | renderer → main の IPC に `rejectReason` を追加。キャプチャ失敗の理由をメインプロセスのログに記録 |
 | **ロック画面誤認修正** | Vision LLM が「no taskbar」と否定文で記述した場合のキーワード誤検出を修正。`hasPositive()` ヘルパーによる否定表現フィルタと `LOCK_SCREEN` 優先順位変更 |
 | **track.muted 除去** | HDMI 信号再取得中に一時的に muted=true になる問題で NO_VIDEO 誤判定が発生していたため除去 |
-| **自動ウェイクジグル** | BLACK_SCREEN 検出時にマウスジグル（1px右+1px左）を HID 送信してスリープ復帰を試行 → 2秒待機 → 再キャプチャ。ネット移動量±0pxで操作中でも安全 |
+| **自動ウェイク** | BLACK_SCREEN 検出時にマウスクリック＋キーボード Space キーを HID 送信してスリープ復帰を試行 → 4秒待機 → 再キャプチャ（最大2回リトライ）。S3 スリープからの復帰にはキーボード入力が必要な PC にも対応 |
 | **セッション履歴自動修復** | `GetHistory()` で `sanitizeToolCallHistory()` を呼び出し、assistant の `tool_calls` に対応する tool レスポンスが欠落している場合、その手前で履歴をトランケート。並列ツール呼び出し後のセッション破損による LLM API 400 エラーを自動防止 |
 | **並列 tool_calls プロバイダサニタイザ修正** | `sanitizeHistoryForProvider()` が連続する tool レスポンス（並列 tool_calls 由来）の 2 件目以降を誤って削除していた問題を修正。predecessor チェックを `role=="assistant"` のみから `role=="tool"` も許容するよう拡張。10 件のユニットテスト追加 |
+
+### picoclaw (upstream 44コミットマージ v2026.02.26)
+
+| 変更 | 内容 |
+|------|------|
+| **正規表現プリコンパイル** | ツール出力パーサ等でのランタイム `regexp.MustCompile` をパッケージレベル変数に移行。hot path でのアロケーション削減 (mattn) |
+| **システムプロンプトキャッシュ** | `BuildSystemPromptWithCache()` 追加。ワークスペースファイル変更時のみ再構築（mtime チェック）。issue #607 修正 |
+| **動的コンテキスト分離** | 時刻・Runtime・ツールリスト・言語設定を `buildDynamicContext()` に移動。キャッシュ可能な静的部分（Identity・Skills・Memory）と分離 |
+| **per-model `request_timeout`** | プロバイダ設定に `request_timeout` フィールド追加。モデルごとの API タイムアウト設定が可能に |
+| **`dm_scope` デフォルト変更** | `global` → `per-channel-peer` に変更。DM スコープがチャネル+ピアごとに分離 |
+| **Cobra CLI リファクタ** | upstream が `spf13/cobra` ベースに移行。フォーク側は既存 switch/case CLI を維持（`cmd_*.go` 復元） |
+| **後方探索サニタイザー** | `sanitizeHistoryForProvider()` の tool レスポンス検証を後方探索に変更。並列 tool_calls の複数レスポンスをより堅牢に処理 |
+| **golangci-lint ルール追加** | `errorlint`, `gocritic`, `revive` 等 10+ ルール追加。コード品質向上 |
+| **冗長ツール説明削除** | システムプロンプトからツール定義の重複記述を除去。トークン消費削減 |
+| **HTTP リトライユーティリティ** | `pkg/utils/http_retry.go` 追加。HTTP リクエストの自動リトライ（指数バックオフ） |
+| **`connect_mode` 設定** | プロバイダ設定に `connect_mode` フィールド追加 |
+| **ウェイク方式改善** | 黒画面検出時のウェイク操作をマウスジグル（±1px）からマウスクリック＋キーボード Space に変更。S3 スリープ対応、待機時間 2秒→4秒、最大2回リトライ |
