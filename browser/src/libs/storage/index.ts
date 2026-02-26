@@ -1,4 +1,5 @@
 import type { Resolution, Rotation } from '@/types';
+import type { MenuConfig } from '@/libs/menu-config';
 
 const LANGUAGE_KEY = 'nanokvm-usb-language';
 const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id';
@@ -13,6 +14,8 @@ const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcut';
+const MENU_CONFIG_KEY = 'nanokvm-usb-menu-config';
+const MENU_ORIENTATION_KEY = 'nanokvm-usb-menu-orientation';
 
 export function getLanguage() {
   return localStorage.getItem(LANGUAGE_KEY);
@@ -154,4 +157,27 @@ export function getMouseJigglerMode(): 'enable' | 'disable' {
 
 export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
   localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler);
+}
+
+export function getMenuConfig(): MenuConfig | null {
+  const config = localStorage.getItem(MENU_CONFIG_KEY);
+  if (!config) return null;
+  try {
+    return JSON.parse(config) as MenuConfig;
+  } catch {
+    return null;
+  }
+}
+
+export function setMenuConfig(config: MenuConfig): void {
+  localStorage.setItem(MENU_CONFIG_KEY, JSON.stringify(config));
+}
+
+export function getMenuOrientation(): 'horizontal' | 'vertical' {
+  const orientation = localStorage.getItem(MENU_ORIENTATION_KEY);
+  return orientation === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+export function setMenuOrientation(orientation: 'horizontal' | 'vertical'): void {
+  localStorage.setItem(MENU_ORIENTATION_KEY, orientation);
 }
