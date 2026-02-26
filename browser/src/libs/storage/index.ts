@@ -13,6 +13,8 @@ const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcut';
+const TARGET_KEYBOARD_LAYOUT_KEY = 'nanokvm-usb-target-keyboard-layout';
+const PASTE_SPEED_KEY = 'nanokvm-usb-paste-speed';
 
 export function getLanguage() {
   return localStorage.getItem(LANGUAGE_KEY);
@@ -154,4 +156,28 @@ export function getMouseJigglerMode(): 'enable' | 'disable' {
 
 export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
   localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler);
+}
+
+export function getTargetKeyboardLayout(): string {
+  return localStorage.getItem(TARGET_KEYBOARD_LAYOUT_KEY) ?? 'us';
+}
+
+export function setTargetKeyboardLayout(layout: string): void {
+  localStorage.setItem(TARGET_KEYBOARD_LAYOUT_KEY, layout);
+}
+
+// Paste speed in milliseconds (key down delay)
+export function getPasteSpeed(): number {
+  const speed = localStorage.getItem(PASTE_SPEED_KEY);
+  if (speed) {
+    const value = Number(speed);
+    if (!isNaN(value) && value >= 1 && value <= 200) {
+      return value;
+    }
+  }
+  return 1; // Default to 1ms (fastest)
+}
+
+export function setPasteSpeed(speed: number): void {
+  localStorage.setItem(PASTE_SPEED_KEY, String(speed));
 }

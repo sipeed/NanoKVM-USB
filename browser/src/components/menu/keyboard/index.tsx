@@ -3,6 +3,7 @@ import { Popover } from 'antd';
 import { KeyboardIcon } from 'lucide-react';
 
 import { Paste } from './paste.tsx';
+import { PasteWithDialog } from './paste-dialog.tsx';
 import { Shortcuts } from './shortcuts';
 import { VirtualKeyboard } from './virtual-keyboard.tsx';
 
@@ -12,6 +13,7 @@ export const Keyboard = () => {
   const content = (
     <div className="flex flex-col space-y-0.5">
       <Paste />
+      <PasteWithDialog />
       <VirtualKeyboard />
       <Shortcuts />
     </div>

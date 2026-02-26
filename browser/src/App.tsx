@@ -9,6 +9,7 @@ import { DeviceModal } from '@/components/device-modal';
 import { Keyboard } from '@/components/keyboard';
 import { Menu } from '@/components/menu';
 import { Mouse } from '@/components/mouse';
+import { PasteDialog, pasteStateAtom } from '@/components/paste-dialog';
 import { VirtualKeyboard } from '@/components/virtual-keyboard';
 import {
   resolutionAtom,
@@ -17,7 +18,7 @@ import {
   videoScaleAtom,
   videoStateAtom
 } from '@/jotai/device.ts';
-import { isKeyboardEnableAtom } from '@/jotai/keyboard.ts';
+import { isKeyboardEnableAtom, targetKeyboardLayoutAtom } from '@/jotai/keyboard.ts';
 import { mouseStyleAtom } from '@/jotai/mouse.ts';
 import { device } from '@/libs/device';
 import { camera } from '@/libs/media/camera';
@@ -34,6 +35,8 @@ const App = () => {
   const videoState = useAtomValue(videoStateAtom);
   const serialState = useAtomValue(serialStateAtom);
   const isKeyboardEnable = useAtomValue(isKeyboardEnableAtom);
+  const targetLayout = useAtomValue(targetKeyboardLayoutAtom);
+  const setPasteState = useSetAtom(pasteStateAtom);
   const setResolution = useSetAtom(resolutionAtom);
   const [videoRotation, setVideoRotation] = useAtom(videoRotationAtom);
 
@@ -54,6 +57,44 @@ const App = () => {
   useEffect(() => {
     setShouldSwapDimensions(videoRotation === 90 || videoRotation === 270);
   }, [videoRotation]);
+
+  // Global Ctrl+Shift+Insert handler for paste with preview
+  useEffect(() => {
+    if (serialState !== 'connected') return;
+
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      const isPasteShortcut = e.ctrlKey && e.shiftKey && e.code === 'Insert';
+      
+      if (isPasteShortcut) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+          return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text) {
+            setPasteState({
+              isOpen: true,
+              text,
+              layoutId: targetLayout,
+              isPasting: false,
+              progress: 0,
+              currentChar: 0,
+              totalChars: text.length
+            });
+          }
+        } catch (err) {
+          console.error('Failed to read clipboard:', err);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [serialState, targetLayout]);
 
   const videoStyle = useMemo(() => {
     const baseStyle = {
@@ -160,6 +201,7 @@ const App = () => {
       />
 
       <VirtualKeyboard isBigScreen={isBigScreen} />
+      <PasteDialog />
     </>
   );
 };
