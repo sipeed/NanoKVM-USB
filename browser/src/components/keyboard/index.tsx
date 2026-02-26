@@ -6,6 +6,7 @@ import { getOperatingSystem } from '@/libs/browser';
 import { device } from '@/libs/device';
 import { KeyboardReport } from '@/libs/keyboard/keyboard.ts';
 import { isModifier } from '@/libs/keyboard/keymap.ts';
+import { learnFromKeyEvent } from '@/libs/keyboard/layouts.ts';
 
 interface AltGrState {
   active: boolean;
@@ -70,6 +71,10 @@ export const Keyboard = () => {
       }
 
       pressedKeys.current.add(code);
+
+      // Learn character mappings for paste feature
+      learnFromKeyEvent(event);
+
       await handleKeyEvent({ type: 'keydown', code });
     }
 
