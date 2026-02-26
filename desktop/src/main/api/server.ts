@@ -508,8 +508,10 @@ export class ApiServer {
       // Try up to 2 wake attempts — some PCs need keyboard input for S3 sleep,
       // and HDMI signal re-sync can take several seconds.
       const MAX_WAKE_ATTEMPTS = 2
-      for (let attempt = 1; attempt <= MAX_WAKE_ATTEMPTS && !dataUrl && captureResult.rejectReason?.includes('black/no-signal'); attempt++) {
-        console.log(`[API Server] Screen verify: black screen detected, wake attempt ${attempt}/${MAX_WAKE_ATTEMPTS}...`)
+      const isSleepScreen = (reason?: string): boolean =>
+        !!(reason?.includes('black/no-signal') || reason?.includes('solid-color/sleep'))
+      for (let attempt = 1; attempt <= MAX_WAKE_ATTEMPTS && !dataUrl && isSleepScreen(captureResult.rejectReason); attempt++) {
+        console.log(`[API Server] Screen verify: sleep/black screen detected, wake attempt ${attempt}/${MAX_WAKE_ATTEMPTS}...`)
         this.mainWindow!.webContents.send('api:mouse:wake')
         // Wait for PC to wake and HDMI signal to stabilize (4s accounts for S3 resume + HDMI sync)
         await new Promise((r) => setTimeout(r, 4000))
@@ -520,19 +522,22 @@ export class ApiServer {
       }
 
       if (!dataUrl) {
-        // Return structured response — differentiate black screen from no video stream
-        const isBlackScreen = captureResult.rejectReason?.includes('black/no-signal')
-        const detail = isBlackScreen
-          ? 'Screen capture returned a black frame. The PC may be in sleep/standby mode, or the HDMI signal may not have stabilized yet.'
+        // Return structured response — differentiate black/sleep screen from no video stream
+        const isBlackOrSleep = isSleepScreen(captureResult.rejectReason)
+        const isSolidColor = captureResult.rejectReason?.includes('solid-color/sleep')
+        const detail = isBlackOrSleep
+          ? isSolidColor
+            ? 'Screen capture returned a solid uniform color. The PC display is likely in sleep/standby mode (HDMI capture card outputting default frame).'
+            : 'Screen capture returned a black frame. The PC may be in sleep/standby mode, or the HDMI signal may not have stabilized yet.'
           : 'No video stream available. The video feed is not active.'
-        const feedback = isBlackScreen
-          ? '🖥️ 画面が真っ黒です。マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。'
+        const feedback = isBlackOrSleep
+          ? '🖥️ 画面がスリープ状態です。マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。'
           : '📹 映像がありません。PCがNanoKVM-USBに接続されていて、ストリーミングが開始されていることを確認してください。'
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           success: false,
           visionConfigured: true,
-          status: isBlackScreen ? 'BLACK_SCREEN' : 'NO_VIDEO',
+          status: isBlackOrSleep ? 'BLACK_SCREEN' : 'NO_VIDEO',
           detail,
           feedback
         }))

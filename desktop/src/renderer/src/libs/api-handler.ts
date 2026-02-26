@@ -344,17 +344,38 @@ export async function loginToWindows(password: string, username?: string): Promi
   await pressKey('Escape')
   await new Promise((r) => setTimeout(r, 300))
 
-  // --- Step 1: Wake sign-in screen ---
-  console.log('[API Handler] Step 1: Pressing Space to wake sign-in screen...')
+  // --- Step 1: Wake from sleep (mouse click + keyboard Space) ---
+  // When PC is in S3 sleep, we need physical HID input to wake it.
+  // Mouse click wakes some PCs, Space key wakes others. Send both.
+  console.log('[API Handler] Step 1: Sending mouse click + Space to wake from sleep...')
+  try {
+    // Mouse left click press + release
+    const pressReport = [0x01, 0x01, 0x00, 0x00, 0x00]
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, pressReport)
+    await new Promise((r) => setTimeout(r, 50))
+    const releaseReport = [0x01, 0x00, 0x00, 0x00, 0x00]
+    await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, releaseReport)
+    await new Promise((r) => setTimeout(r, 100))
+  } catch (err) {
+    console.warn('[API Handler] Mouse wake failed (non-fatal):', err)
+  }
+  await pressKey('Space')
+
+  // Wait for PC to wake from S3 sleep and HDMI signal to stabilize
+  // S3 resume typically takes 3-5 seconds + HDMI sync ~1s
+  console.log('[API Handler] Step 1b: Waiting 5s for S3 wake + HDMI sync...')
+  await new Promise((r) => setTimeout(r, 5000))
+
+  // --- Step 2: Transition from lock screen to PIN entry ---
+  // After waking from sleep, Windows shows the lock screen (clock/date).
+  // A key press or click is needed to transition to the PIN input field.
+  console.log('[API Handler] Step 2: Pressing Space to open PIN entry from lock screen...')
   await pressKey('Space')
   await new Promise((r) => setTimeout(r, 500))
-  
-  // Press Space again as backup wake
-  console.log('[API Handler] Step 1b: Pressing Space again as backup...')
   await pressKey('Space')
 
   // Wait for PIN / password input to appear and auto-focus
-  console.log('[API Handler] Step 2: Waiting 3s for sign-in screen...')
+  console.log('[API Handler] Step 2b: Waiting 3s for PIN entry field...')
   await new Promise((r) => setTimeout(r, 3000))
 
   // --- Step 2: Clear any existing content with Backspace ---
@@ -475,14 +496,40 @@ export async function captureScreen(): Promise<CaptureResult> {
   if (checkCtx) {
     checkCtx.drawImage(video, 0, 0, checkSize, checkSize)
     const pixelData = checkCtx.getImageData(0, 0, checkSize, checkSize).data
-    let totalBrightness = 0
+    const numPixels = checkSize * checkSize
+    let totalR = 0, totalG = 0, totalB = 0
     for (let i = 0; i < pixelData.length; i += 4) {
-      totalBrightness += pixelData[i] + pixelData[i + 1] + pixelData[i + 2]
+      totalR += pixelData[i]
+      totalG += pixelData[i + 1]
+      totalB += pixelData[i + 2]
     }
-    const avgBrightness = totalBrightness / (checkSize * checkSize * 3)
-    console.log(`[API Handler] Black screen check: avgBrightness=${avgBrightness.toFixed(1)}`)
+    const avgR = totalR / numPixels
+    const avgG = totalG / numPixels
+    const avgB = totalB / numPixels
+    const avgBrightness = (avgR + avgG + avgB) / 3
+    console.log(`[API Handler] Screen check: avgBrightness=${avgBrightness.toFixed(1)}, avgRGB=(${avgR.toFixed(1)},${avgG.toFixed(1)},${avgB.toFixed(1)})`)
     if (avgBrightness < 3) {
       return { dataUrl: null, rejectReason: `black/no-signal screen (brightness=${avgBrightness.toFixed(1)})` }
+    }
+
+    // ── Solid/uniform color detection ──
+    // When the HDMI source PC is in sleep/standby, the capture card may output
+    // a solid non-black color (e.g., solid red or blue). Detect this by checking
+    // pixel variance — a real desktop/lock/login screen has UI elements that
+    // create significant color variation, while a sleep-mode capture is uniform.
+    let varianceSum = 0
+    for (let i = 0; i < pixelData.length; i += 4) {
+      const dr = pixelData[i] - avgR
+      const dg = pixelData[i + 1] - avgG
+      const db = pixelData[i + 2] - avgB
+      varianceSum += dr * dr + dg * dg + db * db
+    }
+    const avgVariance = varianceSum / (numPixels * 3)
+    console.log(`[API Handler] Screen check: colorVariance=${avgVariance.toFixed(1)}`)
+    if (avgVariance < 5) {
+      // Entire screen is a single uniform color — likely HDMI capture card
+      // outputting a default frame while the source PC display is off/sleeping.
+      return { dataUrl: null, rejectReason: `solid-color/sleep screen (variance=${avgVariance.toFixed(1)}, avgRGB=${avgR.toFixed(0)},${avgG.toFixed(0)},${avgB.toFixed(0)})` }
     }
   }
 
