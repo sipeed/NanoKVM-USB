@@ -24,8 +24,9 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.maximize()
     mainWindow.show()
+    if(!is.dev) mainWindow.removeMenu()
+    mainWindow.maximize()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -46,10 +47,6 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
     const allowedPermissions = ['media', 'clipboard-read', 'pointerLock']
     callback(allowedPermissions.includes(permission))
-  })
-
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
   })
 
   events.registerApp()
