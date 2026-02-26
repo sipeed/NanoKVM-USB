@@ -524,21 +524,32 @@ export function initializeApiHandlers(): () => void {
     })
   }
 
-  // Wake screen by sending a left click (press + release)
-  // More reliable than mouse jiggle for waking from sleep/standby
+  // Wake screen by sending mouse click + keyboard key press
+  // Uses both inputs for maximum compatibility — some PCs in S3 sleep
+  // only respond to keyboard, not mouse.
   const handleMouseWake = async (_event): Promise<void> => {
-    console.log('[API Handler] Sending mouse click to wake screen')
+    console.log('[API Handler] Sending mouse click + keyboard Space to wake screen')
     try {
-      // Left click press: [mode=relative, buttons=left(0x01), dx=0, dy=0, wheel=0]
+      // 1. Mouse left click press + release
       const pressReport = [0x01, 0x01, 0x00, 0x00, 0x00]
       await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, pressReport)
       await new Promise((r) => setTimeout(r, 50))
-      // Release: [mode=relative, buttons=none, dx=0, dy=0, wheel=0]
       const releaseReport = [0x01, 0x00, 0x00, 0x00, 0x00]
       await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, releaseReport)
-      console.log('[API Handler] Wake click sent successfully')
+
+      await new Promise((r) => setTimeout(r, 100))
+
+      // 2. Keyboard Space key press + release (HID usage code 0x2C)
+      // Report: [modifiers, reserved, key1, key2, key3, key4, key5, key6]
+      const spacePress = [0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x00]
+      await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, spacePress)
+      await new Promise((r) => setTimeout(r, 50))
+      const spaceRelease = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      await window.electron.ipcRenderer.invoke(IpcEvents.SEND_KEYBOARD, spaceRelease)
+
+      console.log('[API Handler] Wake click + keyboard sent successfully')
     } catch (err) {
-      console.error('[API Handler] Failed to send wake click:', err)
+      console.error('[API Handler] Failed to send wake input:', err)
     }
   }
 

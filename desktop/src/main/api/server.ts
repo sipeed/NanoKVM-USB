@@ -504,16 +504,19 @@ export class ApiServer {
       let dataUrl = captureResult.dataUrl
       console.log(`[API Server] Screen verify: capture result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
 
-      // If black screen detected, send left click to wake and retry once
-      if (!dataUrl && captureResult.rejectReason?.includes('black/no-signal')) {
-        console.log('[API Server] Screen verify: black screen detected, sending mouse click to wake...')
+      // If black screen detected, wake the PC with mouse click + keyboard and retry
+      // Try up to 2 wake attempts — some PCs need keyboard input for S3 sleep,
+      // and HDMI signal re-sync can take several seconds.
+      const MAX_WAKE_ATTEMPTS = 2
+      for (let attempt = 1; attempt <= MAX_WAKE_ATTEMPTS && !dataUrl && captureResult.rejectReason?.includes('black/no-signal'); attempt++) {
+        console.log(`[API Server] Screen verify: black screen detected, wake attempt ${attempt}/${MAX_WAKE_ATTEMPTS}...`)
         this.mainWindow!.webContents.send('api:mouse:wake')
-        // Wait for screen to transition (sleep → lock screen typically takes 1-2s)
-        await new Promise((r) => setTimeout(r, 2000))
-        console.log('[API Server] Screen verify: retrying capture after wake click...')
+        // Wait for PC to wake and HDMI signal to stabilize (4s accounts for S3 resume + HDMI sync)
+        await new Promise((r) => setTimeout(r, 4000))
+        console.log(`[API Server] Screen verify: retrying capture after wake attempt ${attempt}...`)
         captureResult = await this.requestScreenCapture()
         dataUrl = captureResult.dataUrl
-        console.log(`[API Server] Screen verify: retry result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
+        console.log(`[API Server] Screen verify: retry ${attempt} result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
       }
 
       if (!dataUrl) {
@@ -523,7 +526,7 @@ export class ApiServer {
           ? 'Screen capture returned a black frame. The PC may be in sleep/standby mode, or the HDMI signal may not have stabilized yet.'
           : 'No video stream available. The video feed is not active.'
         const feedback = isBlackScreen
-          ? '🖥️ 画面が真っ黒です。マウスジグルでの復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。'
+          ? '🖥️ 画面が真っ黒です。マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。'
           : '📹 映像がありません。PCがNanoKVM-USBに接続されていて、ストリーミングが開始されていることを確認してください。'
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
