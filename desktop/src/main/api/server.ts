@@ -554,18 +554,22 @@ export class ApiServer {
       let status = 'UNKNOWN'
       let detail = analysis
 
-      // Simple keyword detection from moondream's short response
+      // Simple keyword detection from Vision LLM response
       // Action-specific parsing to avoid cross-contamination
       const upper = analysis.toUpperCase()
       if (action === 'status') {
-        // For general status check: classify by priority (DESKTOP > LOCK > LOGIN)
-        if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
-          status = 'LOCK_SCREEN'
+        // Detect black/blank/no-signal screen FIRST (highest priority)
+        if (upper.includes('BLACK SCREEN') || upper.includes('BLANK SCREEN') ||
+            upper.includes('NO SIGNAL') || upper.includes('COMPLETELY BLACK') ||
+            (upper.includes('NO VISIBLE') && upper.includes('BLACK'))) {
+          status = 'NO_SIGNAL'
         } else if (upper.includes('DESKTOP') || upper.includes('TASKBAR')) {
           status = 'DESKTOP'
+        } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
+          status = 'LOCK_SCREEN'
         } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('PIN')) {
           status = 'LOGIN_SCREEN'
-        } else if (upper.includes('LOCK')) {
+        } else if (upper.includes('LOCK') && !upper.includes('NOT') && !upper.includes('DOES NOT')) {
           status = 'LOCK_SCREEN'
         } else {
           status = 'DESCRIBED'
@@ -612,6 +616,9 @@ export class ApiServer {
       let feedback = ''
       if (action === 'status') {
         switch (status) {
+          case 'NO_SIGNAL':
+            feedback = `📹 映像信号がありません。PCの電源が入っていないか、HDMI接続が切れている可能性があります。\n${detail}`
+            break
           case 'LOCK_SCREEN':
             feedback = `🔒 ロック画面です。\n${detail}`
             break

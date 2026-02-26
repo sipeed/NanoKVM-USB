@@ -4,6 +4,58 @@ import { KeyboardReport } from './keyboard/keyboard'
 // Keyboard report instance for API typing
 const keyboardReport = new KeyboardReport()
 
+// ── Video Frame Freshness Monitoring ──────────────────────────────
+// Tracks whether the HDMI capture device is actually delivering new frames.
+// When the source PC is disconnected, the <video> element holds the last frame
+// but no new frames arrive. We use requestVideoFrameCallback to detect this.
+let lastVideoFrameTime = 0
+let frameMonitorVideoElement: HTMLVideoElement | null = null
+let frameMonitorIntervalId: ReturnType<typeof setInterval> | null = null
+
+/** Threshold in ms — if no new frame arrives within this period, video is stale */
+const FRAME_STALE_THRESHOLD_MS = 3000
+
+/**
+ * Start (or restart) frame delivery monitoring on the given <video> element.
+ * Uses requestVideoFrameCallback to track when new frames are actually composed.
+ */
+function startFrameMonitor(video: HTMLVideoElement): void {
+  const now = performance.now()
+  // Already monitoring this element and receiving recent frames
+  if (frameMonitorVideoElement === video && lastVideoFrameTime > 0 &&
+      now - lastVideoFrameTime < FRAME_STALE_THRESHOLD_MS) {
+    return
+  }
+
+  frameMonitorVideoElement = video
+  lastVideoFrameTime = now // seed with current time to avoid immediate stale detection
+
+  if (typeof video.requestVideoFrameCallback !== 'function') {
+    console.warn('[API Handler] requestVideoFrameCallback not available — frame freshness check disabled')
+    return
+  }
+
+  function onFrame(this: HTMLVideoElement, now: DOMHighResTimeStamp): void {
+    lastVideoFrameTime = now
+    try {
+      video.requestVideoFrameCallback(onFrame)
+    } catch {
+      // callback chain broken (e.g. video source changed)
+      frameMonitorVideoElement = null
+    }
+  }
+  video.requestVideoFrameCallback(onFrame)
+  console.log('[API Handler] Video frame monitor started')
+}
+
+/**
+ * Returns true if the video stream is receiving fresh frames.
+ */
+function isVideoFresh(): boolean {
+  if (lastVideoFrameTime === 0) return true // not yet monitoring — assume fresh
+  return performance.now() - lastVideoFrameTime < FRAME_STALE_THRESHOLD_MS
+}
+
 /**
  * Type text through NanoKVM keyboard interface
  * Called by API server when picoclaw sends a keyboard command
@@ -354,12 +406,41 @@ async function sendMouse(buttons: number, deltaX: number, deltaY: number): Promi
 
 /**
  * Capture the current screen from the HDMI video feed.
- * Returns a base64 JPEG data URL.
+ * Returns a base64 JPEG data URL, or null when the video stream is unavailable/stale.
  */
 export async function captureScreen(): Promise<string | null> {
   const video = document.getElementById('video') as HTMLVideoElement
   if (!video || !video.videoWidth || !video.videoHeight) {
     console.warn('[API Handler] Video element not ready for capture')
+    return null
+  }
+
+  // ── Check MediaStreamTrack health ──
+  const stream = video.srcObject as MediaStream | null
+  if (stream) {
+    const videoTracks = stream.getVideoTracks()
+    if (videoTracks.length === 0) {
+      console.warn('[API Handler] No video tracks in stream')
+      return null
+    }
+    const track = videoTracks[0]
+    if (track.readyState === 'ended') {
+      console.warn('[API Handler] Video track has ended')
+      return null
+    }
+    if (track.muted) {
+      console.warn('[API Handler] Video track is muted (no signal from capture device)')
+      return null
+    }
+  }
+
+  // ── Ensure frame monitor is running ──
+  startFrameMonitor(video)
+
+  // ── Check frame freshness ──
+  if (!isVideoFresh()) {
+    const elapsed = Math.round(performance.now() - lastVideoFrameTime)
+    console.warn(`[API Handler] Video stream appears frozen (no new frame for ${elapsed}ms)`)
     return null
   }
 
@@ -374,6 +455,30 @@ export async function captureScreen(): Promise<string | null> {
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+  // ── Black/no-signal screen detection ──
+  // When the HDMI source PC is off or disconnected, the capture card often outputs
+  // solid black frames. Detect this and return null to trigger the NO_VIDEO flow
+  // instead of wasting a Vision LLM call on a black image.
+  const checkSize = 32
+  const checkCanvas = document.createElement('canvas')
+  checkCanvas.width = checkSize
+  checkCanvas.height = checkSize
+  const checkCtx = checkCanvas.getContext('2d')
+  if (checkCtx) {
+    checkCtx.drawImage(video, 0, 0, checkSize, checkSize)
+    const pixelData = checkCtx.getImageData(0, 0, checkSize, checkSize).data
+    let totalBrightness = 0
+    for (let i = 0; i < pixelData.length; i += 4) {
+      totalBrightness += pixelData[i] + pixelData[i + 1] + pixelData[i + 2]
+    }
+    const avgBrightness = totalBrightness / (checkSize * checkSize * 3)
+    if (avgBrightness < 3) {
+      console.warn(`[API Handler] Screen appears black/no-signal (avg brightness: ${avgBrightness.toFixed(1)})`)
+      return null
+    }
+  }
+
   const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
   console.log(`[API Handler] Screen captured: ${canvas.width}x${canvas.height}, size: ${Math.round(dataUrl.length / 1024)}KB`)
   return dataUrl
@@ -434,6 +539,14 @@ export function initializeApiHandlers(): () => void {
     })
   }
 
+  // Start frame freshness monitor when video becomes available
+  frameMonitorIntervalId = setInterval(() => {
+    const video = document.getElementById('video') as HTMLVideoElement
+    if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+      startFrameMonitor(video)
+    }
+  }, 2000)
+
   // Register IPC listeners
   window.electron.ipcRenderer.on('api:keyboard:type', handleKeyboardType)
   window.electron.ipcRenderer.on('api:keyboard:shortcut', handleKeyboardShortcut)
@@ -450,5 +563,9 @@ export function initializeApiHandlers(): () => void {
     window.electron.ipcRenderer.removeListener('api:mouse:click', handleMouseClick)
     window.electron.ipcRenderer.removeListener('api:mouse:move', handleMouseMove)
     window.electron.ipcRenderer.removeListener(IpcEvents.SCREEN_CAPTURE, handleScreenCapture)
+    if (frameMonitorIntervalId) {
+      clearInterval(frameMonitorIntervalId)
+      frameMonitorIntervalId = null
+    }
   }
 }
