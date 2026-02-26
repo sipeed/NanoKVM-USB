@@ -49,11 +49,6 @@ app.whenReady().then(() => {
     callback(allowedPermissions.includes(permission))
   })
 
-  // app.on('browser-window-created', (_, window) => {
-  //   //optimizer.watchWindowShortcuts(window
-  //   window.show()
-  // })
-
   events.registerApp()
   events.registerSerialPort()
 
