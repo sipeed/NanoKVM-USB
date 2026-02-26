@@ -500,9 +500,22 @@ export class ApiServer {
 
       // Capture screen
       console.log('[API Server] Screen verify: requesting screen capture via IPC...')
-      const captureResult = await this.requestScreenCapture()
-      const dataUrl = captureResult.dataUrl
+      let captureResult = await this.requestScreenCapture()
+      let dataUrl = captureResult.dataUrl
       console.log(`[API Server] Screen verify: capture result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
+
+      // If black screen detected, send wake jiggle and retry once
+      if (!dataUrl && captureResult.rejectReason?.includes('black/no-signal')) {
+        console.log('[API Server] Screen verify: black screen detected, sending mouse wake jiggle...')
+        this.mainWindow!.webContents.send('api:mouse:wake')
+        // Wait for screen to transition (sleep → lock screen typically takes 1-2s)
+        await new Promise((r) => setTimeout(r, 2000))
+        console.log('[API Server] Screen verify: retrying capture after wake jiggle...')
+        captureResult = await this.requestScreenCapture()
+        dataUrl = captureResult.dataUrl
+        console.log(`[API Server] Screen verify: retry result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
+      }
+
       if (!dataUrl) {
         // Return structured response — differentiate black screen from no video stream
         const isBlackScreen = captureResult.rejectReason?.includes('black/no-signal')
@@ -510,7 +523,7 @@ export class ApiServer {
           ? 'Screen capture returned a black frame. The PC may be in sleep/standby mode, or the HDMI signal may not have stabilized yet.'
           : 'No video stream available. The video feed is not active.'
         const feedback = isBlackScreen
-          ? '🖥️ 画面が真っ黒です。PCがスリープ中か、HDMI信号が安定していない可能性があります。マウスクリックやキー入力で復帰してから再度お試しください。'
+          ? '🖥️ 画面が真っ黒です。マウスジグルでの復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。'
           : '📹 映像がありません。PCがNanoKVM-USBに接続されていて、ストリーミングが開始されていることを確認してください。'
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({

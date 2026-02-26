@@ -524,6 +524,19 @@ export function initializeApiHandlers(): () => void {
     })
   }
 
+  // Wake screen by sending a tiny mouse jiggle (1px right, then 1px left)
+  // This is safe even during active use — the net movement is zero
+  const handleMouseWake = async (_event): Promise<void> => {
+    console.log('[API Handler] Sending mouse wake jiggle (1px right + 1px left)')
+    try {
+      await sendMouse(0, 1, 0)
+      await new Promise((r) => setTimeout(r, 50))
+      await sendMouse(0, -1, 0)
+    } catch (err) {
+      console.error('[API Handler] Failed to send wake jiggle:', err)
+    }
+  }
+
   const handleKeyboardLogin = (
     _event,
     params: { password: string; username?: string }
@@ -564,6 +577,7 @@ export function initializeApiHandlers(): () => void {
   window.electron.ipcRenderer.on('api:keyboard:login', handleKeyboardLogin)
   window.electron.ipcRenderer.on('api:mouse:click', handleMouseClick)
   window.electron.ipcRenderer.on('api:mouse:move', handleMouseMove)
+  window.electron.ipcRenderer.on('api:mouse:wake', handleMouseWake)
   window.electron.ipcRenderer.on(IpcEvents.SCREEN_CAPTURE, handleScreenCapture)
 
   // Return cleanup function
@@ -573,6 +587,7 @@ export function initializeApiHandlers(): () => void {
     window.electron.ipcRenderer.removeListener('api:keyboard:login', handleKeyboardLogin)
     window.electron.ipcRenderer.removeListener('api:mouse:click', handleMouseClick)
     window.electron.ipcRenderer.removeListener('api:mouse:move', handleMouseMove)
+    window.electron.ipcRenderer.removeListener('api:mouse:wake', handleMouseWake)
     window.electron.ipcRenderer.removeListener(IpcEvents.SCREEN_CAPTURE, handleScreenCapture)
     if (frameMonitorIntervalId) {
       clearInterval(frameMonitorIntervalId)
