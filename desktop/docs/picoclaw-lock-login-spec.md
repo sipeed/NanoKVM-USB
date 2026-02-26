@@ -374,6 +374,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | **黒画面（login）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ ログイン操作を送信しましたが、画面が真っ黒です… |
 | **アプリ未起動** | API Server に接続不可 | `result == nil` | NanoKVM-USB デスクトップアプリに接続できませんでした… |
 | **Vision 未設定** | Vision LLM プロバイダ/モデル未設定 | `visionConfigured=false` | Vision LLM が設定されていません… |
+| **セッション履歴破損** | 並列 tool_calls のレスポンス欠落 | `sanitizeToolCallHistory()` で自動トランケート | （自動修復：ログに WARNING 出力、ユーザーへのメッセージなし） |
 ---
 
 ## チャット用 LLM（Chat LLM）
@@ -791,3 +792,4 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **ロック画面誤認修正** | Vision LLM が「no taskbar」と否定文で記述した場合のキーワード誤検出を修正。`hasPositive()` ヘルパーによる否定表現フィルタと `LOCK_SCREEN` 優先順位変更 |
 | **track.muted 除去** | HDMI 信号再取得中に一時的に muted=true になる問題で NO_VIDEO 誤判定が発生していたため除去 |
 | **自動ウェイクジグル** | BLACK_SCREEN 検出時にマウスジグル（1px右+1px左）を HID 送信してスリープ復帰を試行 → 2秒待機 → 再キャプチャ。ネット移動量±0pxで操作中でも安全 |
+| **セッション履歴自動修復** | `GetHistory()` で `sanitizeToolCallHistory()` を呼び出し、assistant の `tool_calls` に対応する tool レスポンスが欠落している場合、その手前で履歴をトランケート。並列ツール呼び出し後のセッション破損による LLM API 400 エラーを自動防止 |
