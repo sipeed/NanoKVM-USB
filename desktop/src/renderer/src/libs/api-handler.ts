@@ -405,14 +405,23 @@ async function sendMouse(buttons: number, deltaX: number, deltaY: number): Promi
 }
 
 /**
+ * Capture result with optional rejection reason for diagnostics
+ */
+interface CaptureResult {
+  dataUrl: string | null
+  rejectReason?: string
+}
+
+/**
  * Capture the current screen from the HDMI video feed.
  * Returns a base64 JPEG data URL, or null when the video stream is unavailable/stale.
  */
-export async function captureScreen(): Promise<string | null> {
+export async function captureScreen(): Promise<CaptureResult> {
   const video = document.getElementById('video') as HTMLVideoElement
   if (!video || !video.videoWidth || !video.videoHeight) {
-    console.warn('[API Handler] Video element not ready for capture')
-    return null
+    const reason = `video element not ready (exists=${!!video}, w=${video?.videoWidth}, h=${video?.videoHeight})`
+    console.warn(`[API Handler] ${reason}`)
+    return { dataUrl: null, rejectReason: reason }
   }
 
   // ── Check MediaStreamTrack health ──
@@ -420,18 +429,17 @@ export async function captureScreen(): Promise<string | null> {
   if (stream) {
     const videoTracks = stream.getVideoTracks()
     if (videoTracks.length === 0) {
-      console.warn('[API Handler] No video tracks in stream')
-      return null
+      return { dataUrl: null, rejectReason: 'no video tracks in stream' }
     }
     const track = videoTracks[0]
+    console.log(`[API Handler] Track state: readyState=${track.readyState}, muted=${track.muted}, enabled=${track.enabled}`)
     if (track.readyState === 'ended') {
-      console.warn('[API Handler] Video track has ended')
-      return null
+      return { dataUrl: null, rejectReason: 'video track ended' }
     }
-    if (track.muted) {
-      console.warn('[API Handler] Video track is muted (no signal from capture device)')
-      return null
-    }
+    // NOTE: track.muted can be transiently true during signal re-acquisition.
+    // Don't reject based on muted alone — let the black-screen pixel check handle it.
+  } else {
+    return { dataUrl: null, rejectReason: 'video.srcObject is null' }
   }
 
   // ── Ensure frame monitor is running ──
@@ -440,8 +448,7 @@ export async function captureScreen(): Promise<string | null> {
   // ── Check frame freshness ──
   if (!isVideoFresh()) {
     const elapsed = Math.round(performance.now() - lastVideoFrameTime)
-    console.warn(`[API Handler] Video stream appears frozen (no new frame for ${elapsed}ms)`)
-    return null
+    return { dataUrl: null, rejectReason: `video stream frozen (no new frame for ${elapsed}ms)` }
   }
 
   const canvas = document.createElement('canvas')
@@ -473,15 +480,15 @@ export async function captureScreen(): Promise<string | null> {
       totalBrightness += pixelData[i] + pixelData[i + 1] + pixelData[i + 2]
     }
     const avgBrightness = totalBrightness / (checkSize * checkSize * 3)
+    console.log(`[API Handler] Black screen check: avgBrightness=${avgBrightness.toFixed(1)}`)
     if (avgBrightness < 3) {
-      console.warn(`[API Handler] Screen appears black/no-signal (avg brightness: ${avgBrightness.toFixed(1)})`)
-      return null
+      return { dataUrl: null, rejectReason: `black/no-signal screen (brightness=${avgBrightness.toFixed(1)})` }
     }
   }
 
   const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
   console.log(`[API Handler] Screen captured: ${canvas.width}x${canvas.height}, size: ${Math.round(dataUrl.length / 1024)}KB`)
-  return dataUrl
+  return { dataUrl }
 }
 
 /**
@@ -531,11 +538,15 @@ export function initializeApiHandlers(): () => void {
 
   const handleScreenCapture = (_event): void => {
     console.log('[API Handler] Screen capture requested')
-    captureScreen().then((dataUrl) => {
-      window.electron.ipcRenderer.send(IpcEvents.SCREEN_CAPTURE_RESULT, dataUrl)
+    captureScreen().then((result) => {
+      if (result.rejectReason) {
+        console.warn(`[API Handler] Capture rejected: ${result.rejectReason}`)
+      }
+      // Send both dataUrl and reason through IPC
+      window.electron.ipcRenderer.send(IpcEvents.SCREEN_CAPTURE_RESULT, result.dataUrl, result.rejectReason || null)
     }).catch((err) => {
       console.error('[API Handler] Failed to capture screen:', err)
-      window.electron.ipcRenderer.send(IpcEvents.SCREEN_CAPTURE_RESULT, null)
+      window.electron.ipcRenderer.send(IpcEvents.SCREEN_CAPTURE_RESULT, null, `exception: ${err}`)
     })
   }
 

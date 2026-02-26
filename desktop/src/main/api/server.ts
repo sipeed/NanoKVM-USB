@@ -360,13 +360,13 @@ export class ApiServer {
     }
 
     try {
-      const dataUrl = await this.requestScreenCapture()
-      if (dataUrl) {
+      const result = await this.requestScreenCapture()
+      if (result.dataUrl) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ success: true, image: dataUrl }))
+        res.end(JSON.stringify({ success: true, image: result.dataUrl }))
       } else {
         res.writeHead(500, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'Failed to capture screen' }))
+        res.end(JSON.stringify({ error: 'Failed to capture screen', reason: result.rejectReason || 'unknown' }))
       }
     } catch (err) {
       console.error('[API Server] Screen capture error:', err)
@@ -400,7 +400,7 @@ export class ApiServer {
       }
 
       // Capture screen
-      const dataUrl = await this.requestScreenCapture()
+      const dataUrl = (await this.requestScreenCapture()).dataUrl
       if (!dataUrl) {
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: 'Failed to capture screen' }))
@@ -499,16 +499,26 @@ export class ApiServer {
       console.log('[API Server] Screen verify: Vision is configured, proceeding...')
 
       // Capture screen
-      const dataUrl = await this.requestScreenCapture()
+      console.log('[API Server] Screen verify: requesting screen capture via IPC...')
+      const captureResult = await this.requestScreenCapture()
+      const dataUrl = captureResult.dataUrl
+      console.log(`[API Server] Screen verify: capture result = ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}${captureResult.rejectReason ? ` reason=${captureResult.rejectReason}` : ''}`)
       if (!dataUrl) {
-        // Return structured response so callers can distinguish "no video" from other errors
+        // Return structured response — differentiate black screen from no video stream
+        const isBlackScreen = captureResult.rejectReason?.includes('black/no-signal')
+        const detail = isBlackScreen
+          ? 'Screen capture returned a black frame. The PC may be in sleep/standby mode, or the HDMI signal may not have stabilized yet.'
+          : 'No video stream available. The video feed is not active.'
+        const feedback = isBlackScreen
+          ? '🖥️ 画面が真っ黒です。PCがスリープ中か、HDMI信号が安定していない可能性があります。マウスクリックやキー入力で復帰してから再度お試しください。'
+          : '📹 映像がありません。PCがNanoKVM-USBに接続されていて、ストリーミングが開始されていることを確認してください。'
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           success: false,
           visionConfigured: true,
-          status: 'NO_VIDEO',
-          detail: 'No video stream available. The video feed is not active.',
-          feedback: '📹 映像がありません。PCがNanoKVM-USBに接続されていて、ストリーミングが開始されていることを確認してください。'
+          status: isBlackScreen ? 'BLACK_SCREEN' : 'NO_VIDEO',
+          detail,
+          feedback
         }))
         return
       }
@@ -557,16 +567,33 @@ export class ApiServer {
       // Simple keyword detection from Vision LLM response
       // Action-specific parsing to avoid cross-contamination
       const upper = analysis.toUpperCase()
+
+      // Helper: check if a keyword appears in a positive (non-negated) context
+      const hasPositive = (keyword: string): boolean => {
+        const idx = upper.indexOf(keyword)
+        if (idx < 0) return false
+        // Check for negation patterns immediately before the keyword
+        const prefix = upper.substring(Math.max(0, idx - 20), idx)
+        if (/\b(NO|NOT|WITHOUT|NO VISIBLE)\s*$/.test(prefix) ||
+            /\bDOES NOT\b/.test(prefix) ||
+            /\bNO VISIBLE[^.]*$/.test(prefix)) {
+          return false
+        }
+        return true
+      }
+
       if (action === 'status') {
         // Detect black/blank/no-signal screen FIRST (highest priority)
         if (upper.includes('BLACK SCREEN') || upper.includes('BLANK SCREEN') ||
             upper.includes('NO SIGNAL') || upper.includes('COMPLETELY BLACK') ||
             (upper.includes('NO VISIBLE') && upper.includes('BLACK'))) {
           status = 'NO_SIGNAL'
-        } else if (upper.includes('DESKTOP') || upper.includes('TASKBAR')) {
-          status = 'DESKTOP'
         } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
+          // LOCK_SCREEN before DESKTOP: Vision often says "lock screen...no taskbar"
           status = 'LOCK_SCREEN'
+        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR')) {
+          // Only match DESKTOP/TASKBAR in positive (non-negated) context
+          status = 'DESKTOP'
         } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('PIN')) {
           status = 'LOGIN_SCREEN'
         } else if (upper.includes('LOCK') && !upper.includes('NOT') && !upper.includes('DOES NOT')) {
@@ -578,10 +605,10 @@ export class ApiServer {
         // For lock verification: only detect LOCK_SCREEN or DESKTOP
         if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
           status = 'LOCK_SCREEN'
-        } else if (upper.includes('DESKTOP') || upper.includes('TASKBAR') || upper.includes('ICON')) {
-          status = 'DESKTOP'
         } else if (upper.includes('LOCK') || upper.includes('CLOCK') || upper.includes('AVATAR')) {
           status = 'LOCK_SCREEN'
+        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') || hasPositive('ICON')) {
+          status = 'DESKTOP'
         }
       } else {
         // For login verification: detect LOGIN_SUCCESS, LOGIN_FAILED, or LOCK_SCREEN
@@ -589,7 +616,7 @@ export class ApiServer {
           status = 'LOGIN_SUCCESS'
         } else if (upper.includes('LOGIN_FAILED') || upper.includes('LOGIN FAILED') || upper.includes('WRONG') || upper.includes('ERROR') || upper.includes('INCORRECT')) {
           status = 'LOGIN_FAILED'
-        } else if (upper.includes('DESKTOP') || upper.includes('TASKBAR')) {
+        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR')) {
           status = 'LOGIN_SUCCESS'
         } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') || upper.includes('LOCK')) {
           status = 'LOCK_SCREEN'
@@ -682,22 +709,27 @@ export class ApiServer {
    * Request screen capture from renderer process via IPC.
    * Returns a Promise that resolves with the base64 data URL.
    */
-  private requestScreenCapture(): Promise<string | null> {
+  private requestScreenCapture(): Promise<{ dataUrl: string | null; rejectReason?: string }> {
     return new Promise((resolve) => {
       if (!this.mainWindow) {
-        resolve(null)
+        console.warn('[API Server] requestScreenCapture: no mainWindow')
+        resolve({ dataUrl: null, rejectReason: 'no mainWindow' })
         return
       }
 
       const timeout = setTimeout(() => {
         ipcMain.removeAllListeners(IpcEvents.SCREEN_CAPTURE_RESULT)
-        console.warn('[API Server] Screen capture timed out')
-        resolve(null)
+        console.warn('[API Server] Screen capture timed out (5s)')
+        resolve({ dataUrl: null, rejectReason: 'IPC timeout (5s)' })
       }, 5000)
 
-      ipcMain.once(IpcEvents.SCREEN_CAPTURE_RESULT, (_event, dataUrl: string | null) => {
+      ipcMain.once(IpcEvents.SCREEN_CAPTURE_RESULT, (_event, dataUrl: string | null, rejectReason?: string) => {
         clearTimeout(timeout)
-        resolve(dataUrl)
+        if (rejectReason) {
+          console.warn(`[API Server] Screen capture rejected by renderer: ${rejectReason}`)
+        }
+        console.log(`[API Server] Screen capture IPC result: ${dataUrl ? `data(${Math.round(dataUrl.length / 1024)}KB)` : 'null'}`)
+        resolve({ dataUrl, rejectReason: rejectReason || undefined })
       })
 
       this.mainWindow.webContents.send(IpcEvents.SCREEN_CAPTURE)
