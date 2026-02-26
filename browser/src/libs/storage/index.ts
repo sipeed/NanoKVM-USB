@@ -13,6 +13,7 @@ const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcut';
+const SHOW_TOOLTIPS_KEY = 'nanokvm-usb-show-tooltips';
 
 export function getLanguage() {
   return localStorage.getItem(LANGUAGE_KEY);
@@ -154,4 +155,13 @@ export function getMouseJigglerMode(): 'enable' | 'disable' {
 
 export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
   localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler);
+}
+
+export function getShowTooltips(): boolean {
+  const value = localStorage.getItem(SHOW_TOOLTIPS_KEY);
+  return value !== 'false'; // Default to true
+}
+
+export function setShowTooltips(show: boolean): void {
+  localStorage.setItem(SHOW_TOOLTIPS_KEY, show ? 'true' : 'false');
 }

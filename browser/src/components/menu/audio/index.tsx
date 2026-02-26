@@ -8,6 +8,8 @@ import { videoDeviceIdAtom, videoStateAtom } from '@/jotai/device.ts';
 import { camera } from '@/libs/media/camera.ts';
 import { checkPermission, requestMicrophonePermission } from '@/libs/media/permission.ts';
 
+import { MenuTooltip } from '../menu-tooltip';
+
 export const Audio = () => {
   const { t } = useTranslation();
 
@@ -51,12 +53,14 @@ export const Audio = () => {
 
   return (
     <>
-      <div
-        className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white"
-        onClick={requestPermission}
-      >
-        <VolumeOffIcon size={18} />
-      </div>
+      <MenuTooltip title={t('menu.audio', 'Enable Audio')}>
+        <div
+          className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white"
+          onClick={requestPermission}
+        >
+          <VolumeOffIcon size={18} />
+        </div>
+      </MenuTooltip>
 
       <Modal open={isModalOpen} title={t('audio.tip')} footer={null} onCancel={closeModal}>
         <div className="whitespace-pre-line py-5">{t('audio.permission')}</div>
