@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-25
+> **最終更新**: 2026-02-26
 
 ## 概要
 
@@ -355,6 +355,8 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | `LOGIN_SCREEN` | 🔑 | サインイン画面です。PIN 入力フィールドが表示されています。 |
 | `DESCRIBED` | 🔍 | 画面状態: （Vision LLM の記述） |
 | `NO_VIDEO` | 📹 | 映像がありません。PCが接続されていてストリーミングが開始されていることを確認してください。 |
+| `BLACK_SCREEN` | 🖥️ | 画面が真っ黒です。PCがスリープ中か、HDMI信号が安定していない可能性があります。 |
+| `NO_SIGNAL` | 📡 | 信号がありません。黒い画面またはブランク画面が検出されました。 |
 
 ### エラーハンドリング
 
@@ -363,6 +365,9 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | **映像なし（screen_check）** | PC 未接続 / ストリーミング未開始 | `success=false`, `status="NO_VIDEO"` | 📹 映像がありません。PCがNanoKVM-USBに接続されていて… |
 | **映像なし（lock）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ Win+Lを送信しましたが、映像がないため結果を確認できません… |
 | **映像なし（login）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ ログイン操作を送信しましたが、映像がないため結果を確認できません… |
+| **黒画面（screen_check）** | PC スリープ / HDMI 信号未安定 | `success=false`, `status="BLACK_SCREEN"` | 🖥️ 画面が真っ黒です。PCがスリープ中か、HDMI信号が安定していない… |
+| **黒画面（lock）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ Win+Lを送信しましたが、画面が真っ黒です。PCがスリープ中か… |
+| **黒画面（login）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ ログイン操作を送信しましたが、画面が真っ黒です… |
 | **アプリ未起動** | API Server に接続不可 | `result == nil` | NanoKVM-USB デスクトップアプリに接続できませんでした… |
 | **Vision 未設定** | Vision LLM プロバイダ/モデル未設定 | `visionConfigured=false` | Vision LLM が設定されていません… |
 ---
@@ -777,3 +782,7 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **NO_VIDEO 構造化レスポンス** | 映像なし時に HTTP 500 → 200 + `status: "NO_VIDEO"` に変更。「アプリ未起動」と「映像なし」を区別可能に |
 | **lock/login NO_VIDEO 警告** | ロック・ログインの post-verify で映像がない場合、嘘の成功メッセージではなく ⚠️ 警告を返すように修正 |
 | **CGO_ENABLED=0 静的ビルド** | クロスプラットフォーム GLIBC エラーを防止 |
+| **BLACK_SCREEN ステータス追加** | `NO_VIDEO` と `BLACK_SCREEN` を区別。キャプチャカードが黒フレームを配信する場合（スリープ/HDMI再取得中）に専用メッセージを表示 |
+| **CaptureResult IPC 拡張** | renderer → main の IPC に `rejectReason` を追加。キャプチャ失敗の理由をメインプロセスのログに記録 |
+| **ロック画面誤認修正** | Vision LLM が「no taskbar」と否定文で記述した場合のキーワード誤検出を修正。`hasPositive()` ヘルパーによる否定表現フィルタと `LOCK_SCREEN` 優先順位変更 |
+| **track.muted 除去** | HDMI 信号再取得中に一時的に muted=true になる問題で NO_VIDEO 誤判定が発生していたため除去 |
