@@ -7,6 +7,7 @@ import { IpcEvents } from '@common/ipc-events'
 import { scrollDirectionAtom, scrollIntervalAtom } from '@renderer/jotai/mouse'
 import { MouseReportRelative } from '@renderer/libs/mouse'
 import { mouseJiggler } from '@renderer/libs/mouse-jiggler'
+import { updateAutoClickerActivity } from '@renderer/libs/auto-clicker'
 
 import type { MouseRelativeEvent } from './types'
 
@@ -137,6 +138,7 @@ export const Relative = (): ReactElement => {
     window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, [0x01, ...report])
 
     mouseJiggler.moveEventCallback()
+    updateAutoClickerActivity()
   }
 
   function showMessage(): void {

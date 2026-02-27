@@ -1,31 +1,133 @@
 import { join } from 'path'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, session, shell } from 'electron'
 import log from 'electron-log/main'
 
 import icon from '../../resources/icon.png?asset'
 import * as events from './events'
+import { PicoclawManager } from './picoclaw/manager'
+import { ModelUpdater } from './picoclaw/model-updater'
+import { ApiServer } from './api/server'
 
+// Redirect all console methods to electron-log so they appear in main.log
+console.log = log.log
+console.warn = log.warn
 console.error = log.error
 
 let mainWindow: BrowserWindow
+let picoclawManager: PicoclawManager
+let modelUpdater: ModelUpdater
+let apiServer: ApiServer
+
+interface WindowState {
+  width: number
+  height: number
+  x?: number
+  y?: number
+  isMaximized: boolean
+}
+
+function getWindowStatePath(): string {
+  return join(app.getPath('userData'), 'window-state.json')
+}
+
+function loadWindowState(): WindowState {
+  const defaultState: WindowState = {
+    width: 1200,
+    height: 800,
+    isMaximized: false
+  }
+
+  try {
+    const statePath = getWindowStatePath()
+    if (existsSync(statePath)) {
+      const data = readFileSync(statePath, 'utf8')
+      return { ...defaultState, ...JSON.parse(data) }
+    }
+  } catch (err) {
+    log.error('Failed to load window state:', err)
+  }
+
+  return defaultState
+}
+
+function saveWindowState(): void {
+  try {
+    if (!mainWindow) return
+
+    const bounds = mainWindow.getBounds()
+    const state: WindowState = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: mainWindow.isMaximized()
+    }
+
+    writeFileSync(getWindowStatePath(), JSON.stringify(state, null, 2))
+  } catch (err) {
+    log.error('Failed to save window state:', err)
+  }
+}
 
 function createWindow(): void {
+  const windowState = loadWindowState()
+
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      zoomFactor: 1.0
     }
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.maximize()
+    if (windowState.isMaximized) {
+      mainWindow.maximize()
+    }
     mainWindow.show()
+    mainWindow.webContents.setZoomFactor(1.0)
+  })
+
+  // Save window state on resize and move
+  mainWindow.on('resize', () => {
+    if (!mainWindow.isMaximized()) {
+      saveWindowState()
+    }
+  })
+
+  mainWindow.on('move', () => {
+    if (!mainWindow.isMaximized()) {
+      saveWindowState()
+    }
+  })
+
+  mainWindow.on('maximize', saveWindowState)
+  mainWindow.on('unmaximize', saveWindowState)
+  mainWindow.on('close', saveWindowState)
+
+  // Open DevTools with keyboard shortcut (Cmd+Option+I on Mac, Ctrl+Shift+I on others)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown') {
+      // Mac: Cmd+Option+I
+      if (process.platform === 'darwin' && input.meta && input.alt && input.key.toLowerCase() === 'i') {
+        mainWindow.webContents.toggleDevTools()
+        event.preventDefault()
+      }
+      // Windows/Linux: Ctrl+Shift+I
+      else if (process.platform !== 'darwin' && input.control && input.shift && input.key.toLowerCase() === 'i') {
+        mainWindow.webContents.toggleDevTools()
+        event.preventDefault()
+      }
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -44,7 +146,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.sipeed.usbkvm')
 
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
-    const allowedPermissions = ['media', 'clipboard-read', 'pointerLock']
+    const allowedPermissions = ['media', 'clipboard-read', 'clipboard-sanitized-write', 'pointerLock']
     callback(allowedPermissions.includes(permission))
   })
 
@@ -55,7 +157,32 @@ app.whenReady().then(() => {
   events.registerApp()
   events.registerSerialPort()
 
+  // Initialize picoclaw manager
+  picoclawManager = new PicoclawManager()
+  modelUpdater = new ModelUpdater()
+  events.registerPicoclawHandlers(picoclawManager, modelUpdater)
+
+  // Initialize API server
+  apiServer = new ApiServer({ port: 18792, host: '127.0.0.1' })
+  apiServer
+    .start()
+    .then(() => {
+      log.info('[API Server] Started successfully')
+    })
+    .catch((err) => {
+      log.error('[API Server] Failed to start:', err)
+    })
+
   createWindow()
+
+  // Set main window for API server
+  apiServer.setMainWindow(mainWindow)
+
+  // Auto-start Telegram gateway if previously enabled
+  picoclawManager.autoStartGatewayIfEnabled()
+
+  // Initialize model update scheduler
+  modelUpdater.initialize()
 
   events.registerUpdater(mainWindow)
 
@@ -65,6 +192,21 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // Stop picoclaw when app closes
+  if (picoclawManager) {
+    picoclawManager.stop().catch((err) => log.error('Failed to stop picoclaw:', err))
+  }
+
+  // Stop model updater scheduler
+  if (modelUpdater) {
+    modelUpdater.stop()
+  }
+
+  // Stop API server when app closes
+  if (apiServer) {
+    apiServer.stop().catch((err) => log.error('Failed to stop API server:', err))
+  }
+
   if (process.platform !== 'darwin') {
     app.quit()
   }

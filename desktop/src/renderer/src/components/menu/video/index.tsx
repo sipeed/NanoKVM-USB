@@ -3,15 +3,19 @@ import { Popover } from 'antd'
 import { MonitorIcon } from 'lucide-react'
 
 import { Device } from './device'
+import { Info } from './info'
+import { MaxResolution } from './max-resolution'
 import { Resolution } from './resolution'
 import { Scale } from './scale'
 
 export const Video = (): ReactElement => {
   const content = (
     <div className="flex flex-col space-y-1">
+      <MaxResolution />
       <Resolution />
       <Scale />
       <Device />
+      <Info />
     </div>
   )
 

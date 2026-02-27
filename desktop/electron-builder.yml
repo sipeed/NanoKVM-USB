@@ -28,6 +28,7 @@ nsis:
   createStartMenuShortcut: true
 
 mac:
+  executableName: NanoKVM-USB
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     NSCameraUsageDescription: Application requests access to the device's camera.
@@ -37,10 +38,11 @@ mac:
   hardenedRuntime: true
   gatekeeperAssess: false
   notarize: false
+  identity: null
 
 dmg:
   artifactName: ${productName}-${version}-${os}-${arch}.${ext}
-  sign: true
+  sign: false
 
 linux:
   target:

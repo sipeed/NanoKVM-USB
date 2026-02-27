@@ -1,0 +1,13 @@
+{
+  "theme": "default",
+  "themeVariables": {
+    "fontFamily": "\"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Yu Gothic\", \"Meiryo\", \"Noto Sans JP\", sans-serif"
+  },
+  "flowchart": {
+    "htmlLabels": true,
+    "useMaxWidth": false
+  },
+  "sequence": {
+    "useMaxWidth": false
+  }
+}

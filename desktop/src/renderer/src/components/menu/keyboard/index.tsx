@@ -2,6 +2,9 @@ import { ReactElement, useState } from 'react'
 import { Popover } from 'antd'
 import { KeyboardIcon } from 'lucide-react'
 
+import { CommandToCtrl } from './command-to-ctrl'
+import { IgnoreCapsLock } from './ignore-capslock'
+import { NumLock } from './numlock'
 import { Paste } from './paste'
 import { Shortcuts } from './shortcuts'
 import { VirtualKeyboard } from './virtual-keyboard'
@@ -13,6 +16,9 @@ export const Keyboard = (): ReactElement => {
     <div className="flex flex-col space-y-1">
       <Paste />
       <VirtualKeyboard />
+      <NumLock />
+      <CommandToCtrl />
+      <IgnoreCapsLock />
       <Shortcuts />
     </div>
   )

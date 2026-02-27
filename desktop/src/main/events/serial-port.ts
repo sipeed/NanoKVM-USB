@@ -16,6 +16,7 @@ async function getSerialPorts(): Promise<string[]> {
   try {
     const ports = await SerialPort.list()
     const paths = ports.map((port) => port.path)
+    console.log('[SerialPort] Available ports:', paths)
 
     return paths.sort((a, b) => {
       const aHasUSB = a.toLowerCase().includes('usb')
@@ -26,7 +27,7 @@ async function getSerialPorts(): Promise<string[]> {
       return a.localeCompare(b)
     })
   } catch (error) {
-    console.error('Error listing serial ports:', error)
+    console.error('[SerialPort] Error listing serial ports:', error)
     return []
   }
 }
@@ -37,16 +38,20 @@ async function openSerialPort(
   baudRate: number = 57600
 ): Promise<boolean> {
   try {
+    console.log(`[SerialPort] Opening port: ${path} at ${baudRate} baud`)
+    
     const onDisconnect = () => {
+      console.log('[SerialPort] Device disconnected')
       e.sender.send(IpcEvents.SERIAL_PORT_DISCONNECTED)
     }
 
     await device.serialPort.init({ path, baudRate, onDisconnect })
 
+    console.log('[SerialPort] ✓ Port opened successfully')
     e.sender.send(IpcEvents.OPEN_SERIAL_PORT_RSP, '')
     return true
   } catch (error) {
-    console.error('Error opening serial port:', error)
+    console.error('[SerialPort] ✗ Error opening serial port:', error)
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'
     e.sender.send(IpcEvents.OPEN_SERIAL_PORT_RSP, errorMsg)
     return false
@@ -55,7 +60,9 @@ async function openSerialPort(
 
 async function closeSerialPort(): Promise<boolean> {
   try {
+    console.log('[SerialPort] Closing port')
     await device.serialPort.close()
+    console.log('[SerialPort] ✓ Port closed')
     return true
   } catch (error) {
     console.error('Error closing serial port:', error)
@@ -73,8 +80,11 @@ async function sendKeyboard(_: IpcMainInvokeEvent, report: number[]): Promise<vo
 
 async function sendMouse(_: IpcMainInvokeEvent, report: number[]): Promise<void> {
   try {
+    console.log('[SerialPort] Sending mouse data:', report)
     await device.sendMouseData(report)
+    console.log('[SerialPort] ✓ Mouse data sent successfully')
   } catch (error) {
-    console.error('Error sending mouse data:', error)
+    console.error('[SerialPort] ✗ Error sending mouse data:', error)
+    throw error
   }
 }

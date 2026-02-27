@@ -1,7 +1,7 @@
 import { IpcEvents } from '@common/ipc-events'
 import { MouseReportRelative } from '@renderer/libs/mouse'
 
-const MOUSE_JIGGLER_INTERVAL = 15_000
+const MOUSE_JIGGLER_INTERVAL = 5_000 // 5 seconds (reduced from 15s)
 
 class MouseJiggler {
   private lastMoveTime: number
@@ -19,6 +19,7 @@ class MouseJiggler {
   // enable or disable mouse jiggler
   setMode(mode: 'enable' | 'disable'): void {
     this.mode = mode
+    console.log('[MouseJiggler] Mode changed to:', mode)
     if (mode === 'disable' && this.timer !== null) {
       clearInterval(this.timer)
       this.timer = null
@@ -26,6 +27,7 @@ class MouseJiggler {
       this.timer = setInterval(() => {
         this.timeoutCallback()
       }, MOUSE_JIGGLER_INTERVAL / 5)
+      console.log('[MouseJiggler] Timer started, interval:', MOUSE_JIGGLER_INTERVAL, 'ms')
     }
   }
 
@@ -39,17 +41,19 @@ class MouseJiggler {
   timeoutCallback(): void {
     if (Date.now() - this.lastMoveTime > MOUSE_JIGGLER_INTERVAL) {
       this.lastMoveTime = Date.now() - 1_000
+      console.log('[MouseJiggler] Sending jiggle movement')
       this.sendJiggle()
     }
   }
 
   async sendJiggle(): Promise<void> {
     // Build reports directly using the report builder
-    const report1 = this.mouseReport.buildReport(10, 10, 0)
-    const report2 = this.mouseReport.buildReport(-10, -10, 0)
+    const report1 = this.mouseReport.buildReport(50, 50, 0)
+    const report2 = this.mouseReport.buildReport(-50, -50, 0)
 
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, [0x01, report1])
     await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, [0x01, report2])
+    console.log('[MouseJiggler] Jiggle sent')
   }
 }
 

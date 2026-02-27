@@ -24,16 +24,28 @@ const zh = {
       }
     },
     video: {
+      auto: '自动',
       resolution: '分辨率',
       scale: '缩放',
       customResolution: '自定义',
       device: '设备',
+      maxResolution: {
+        title: '最大分辨率',
+        mode1440p30: '2560x1440@30fps',
+        mode1080p60: '1920x1080@60fps'
+      },
       custom: {
         title: '自定义分辨率',
         width: '宽度',
         height: '高度',
         confirm: '确定',
         cancel: '取消'
+      },
+      info: {
+        title: '显示信息',
+        capturedResolution: '捕获分辨率',
+        displayResolution: '显示分辨率',
+        displayScale: '显示比例'
       }
     },
     audio: {
@@ -71,6 +83,7 @@ const zh = {
       speed: '滚轮速度',
       fast: '快',
       slow: '慢',
+
       requestPointer: '正在使用鼠标相对模式，请点击桌面获取鼠标指针。',
       jiggler: {
         title: '空闲晃动',

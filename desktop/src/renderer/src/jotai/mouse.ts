@@ -14,3 +14,6 @@ export const scrollIntervalAtom = atom(0)
 
 // mouse jiggler mode: enable or disable
 export const mouseJigglerModeAtom = atom<'enable' | 'disable'>('disable')
+
+// auto clicker mode: enable or disable
+export const autoClickerModeAtom = atom<'enable' | 'disable'>('disable')

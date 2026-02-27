@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { LanguagesIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { IpcEvents } from '@common/ipc-events'
 import languages from '@renderer/i18n/languages'
 import { setLanguage } from '@renderer/libs/storage'
 
@@ -15,6 +16,13 @@ export const Language = (): ReactElement => {
 
     i18n.changeLanguage(lng)
     setLanguage(lng)
+
+    // Sync language to picoclaw config so gateway uses the correct language
+    window.electron.ipcRenderer
+      .invoke(IpcEvents.PICOCLAW_UPDATE_CONFIG, { language: lng })
+      .catch(() => {
+        // Ignore errors (picoclaw may not be configured yet)
+      })
   }
 
   const content = (
