@@ -12,22 +12,110 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 
 ---
 
+## 物理接続トポロジー
+
+### NanoKVM-USB とは
+
+NanoKVM-USB は、USB 接続の小型 KVM（Keyboard, Video, Mouse）ドングルです。
+Host PC（Mac）と対象 PC（Windows）の間に接続し、以下の2つの役割を果たします:
+
+1. **仮想キーボード/マウス**: Host PC から送信された HID コマンドを、対象 PC に対して USB キーボード/マウスとして転送
+2. **映像キャプチャ**: 対象 PC の HDMI 映像出力を受け取り、USB UVC カメラとして Host PC に映像を転送
+
+これにより、Host PC 上のアプリケーションから対象 PC を完全にリモート操作できます。
+対象 PC にソフトウェアをインストールする必要はなく、BIOS/UEFI レベルの操作も可能です。
+
+### 物理配線図
+
+![Diagram 1](picoclaw-lock-login-spec-rendered-1.svg)
+
+### 接続ケーブルと信号の流れ
+
+| # | ケーブル | 方向 | 信号 | 説明 |
+|---|---------|------|------|------|
+| ① | USB (Mac → NanoKVM) | Host → NanoKVM | Serial Port | Mac から NanoKVM に HID キーボード/マウスコマンドを送信 |
+| ② | USB (Mac ← NanoKVM) | NanoKVM → Host | USB UVC | NanoKVM が Windows の HDMI 映像を UVC カメラとして Mac に転送 |
+| ③ | USB (NanoKVM → Windows) | NanoKVM → 対象PC | USB HID | NanoKVM が Windows に対して USB キーボード/マウスとしてデバイスを提示 |
+| ④ | HDMI (Windows → NanoKVM) | 対象PC → NanoKVM | HDMI 映像 | Windows の GPU が出力した映像を NanoKVM が受け取り |
+
+> **Note**: ① と ② は同一の USB ケーブル（Mac ↔ NanoKVM 間）で双方向に通信します。
+> Mac からは NanoKVM がシリアルポートデバイスと UVC カメラの2つのデバイスとして認識されます。
+
+### キーボード入力の経路
+
+Mac のキーボードから Windows PC への入力は以下の経路で転送されます:
+
+```
+Mac キーボード
+  │ keydown/keyup イベント
+  ▼
+Electron Renderer（React）
+  │ event.code → HID Usage Code 変換
+  │ 例: 'KeyA' → 0x04, 'ShiftLeft' → modifier bit 0x02
+  ▼
+8バイト HID レポート構築
+  │ [modifiers, 0x00, key1, key2, key3, key4, key5, key6]
+  │ 例: Shift+A → [0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00]
+  ▼
+Electron Main Process（Serial Port）
+  │ プロトコルパケット化 + CRC 付与
+  ▼
+USB Serial → NanoKVM-USB ハードウェア
+  │ パケット解析 → USB HID デバイスとして出力
+  ▼
+Windows PC（USB HID 受信）
+  │ 物理キーボードと同等の入力として処理
+  ▼
+Windows が 'A' を入力として認識
+```
+
+この経路は、ユーザーが Mac のキーボードを直接操作する場合も、AI エージェント（picoclaw）がプログラム的にキーを送信する場合も同一です。AI エージェントの場合は「Mac キーボード」の代わりに API Server が HID レポートを生成します。
+
+### 画面表示の経路
+
+Windows PC の画面が Mac に表示される経路は以下のとおりです:
+
+```
+Windows PC（GPU 映像出力）
+  │ HDMI ケーブル
+  ▼
+NanoKVM-USB ハードウェア
+  │ HDMI → USB UVC 変換（ハードウェアエンコード）
+  │ Mac には USB カメラとして認識される
+  ▼
+Mac（USB UVC デバイス）
+  │
+  ├──→ Electron Renderer: getUserMedia() API
+  │     <video> 要素に Windows 画面をリアルタイム表示（30fps）
+  │     → Mac モニター上に Windows デスクトップが表示される
+  │
+  └──→ AI エージェント使用時: <canvas> で静止画キャプチャ
+        → base64 JPEG → Vision LLM で画面状態を解析
+        （ロック画面かデスクトップか等を判定）
+```
+
+> **Mac ロック中の映像キャプチャ**: macOS がロックされると Renderer プロセスがスロットリングされ、
+> `getUserMedia()` が応答しなくなります。この場合、ffmpeg が AVFoundation 経由で
+> 直接 UVC デバイスからキャプチャするフォールバックが動作します（後述の「ffmpeg キャプチャ実装アーキテクチャ」参照）。
+
+---
+
 ## システム構成ブロック図
 
 ### 全体アーキテクチャ
 
-![Diagram 1](picoclaw-lock-login-spec-rendered-1.svg)
+![Diagram 2](picoclaw-lock-login-spec-rendered-2.svg)
 
 ### Telegram ロック操作のシーケンス図
 
-![Diagram 2](picoclaw-lock-login-spec-rendered-2.svg)
+![Diagram 3](picoclaw-lock-login-spec-rendered-3.svg)
 
 ### ChatUI ロック操作のシーケンス図
 
 > アプリ内蔵の ChatUI から同じロック操作を行う場合のシーケンスです。
 > Telegram 経由とは異なり、gateway を介さず Renderer → Main Process 間の IPC で直接 picoclaw を呼び出します。
 
-![Diagram 3](picoclaw-lock-login-spec-rendered-3.svg)
+![Diagram 4](picoclaw-lock-login-spec-rendered-4.svg)
 
 **Telegram と ChatUI の比較**:
 
@@ -247,7 +335,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 
 #### ログイン操作フロー（Vault 有効時）
 
-![Diagram 4](picoclaw-lock-login-spec-rendered-4.svg)
+![Diagram 5](picoclaw-lock-login-spec-rendered-5.svg)
 
 #### LLM バイパスの仕組み
 
@@ -407,7 +495,7 @@ ffmpeg -f dshow -video_size 1920x1080 -i "video=USB3 Video" -frames:v 1 -f image
 
 画面キャプチャは **Renderer IPC（高速パス）** と **ffmpeg ネイティブキャプチャ（フォールバック）** の2段階で動作します。
 
-![Diagram 5](picoclaw-lock-login-spec-rendered-5.svg)
+![Diagram 6](picoclaw-lock-login-spec-rendered-6.svg)
 
 ### 通常利用時（ロック解除状態）とロック時の動作
 
@@ -585,7 +673,7 @@ GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.a
 GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと認証が必要です。
 アプリ内の「🔑 GitHub 認証を開始」ボタンから以下のフローで認証できます:
 
-![Diagram 6](picoclaw-lock-login-spec-rendered-6.svg)
+![Diagram 7](picoclaw-lock-login-spec-rendered-7.svg)
 
 **前提条件**:
 - [GitHub CLI (`gh`)](https://cli.github.com) がインストール済み
@@ -650,7 +738,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 更新フロー
 
-![Diagram 7](picoclaw-lock-login-spec-rendered-7.svg)
+![Diagram 8](picoclaw-lock-login-spec-rendered-8.svg)
 
 ### 手動更新
 
@@ -688,7 +776,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 設計思想: チャット用 LLM と Vision LLM の分離
 
-![Diagram 8](picoclaw-lock-login-spec-rendered-8.svg)
+![Diagram 9](picoclaw-lock-login-spec-rendered-9.svg)
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
 例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
@@ -697,7 +785,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 検証フロー
 
-![Diagram 9](picoclaw-lock-login-spec-rendered-9.svg)
+![Diagram 10](picoclaw-lock-login-spec-rendered-10.svg)
 
 ### Vision プロンプト
 

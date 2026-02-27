@@ -12,6 +12,121 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 
 ---
 
+## 物理接続トポロジー
+
+### NanoKVM-USB とは
+
+NanoKVM-USB は、USB 接続の小型 KVM（Keyboard, Video, Mouse）ドングルです。
+Host PC（Mac）と対象 PC（Windows）の間に接続し、以下の2つの役割を果たします:
+
+1. **仮想キーボード/マウス**: Host PC から送信された HID コマンドを、対象 PC に対して USB キーボード/マウスとして転送
+2. **映像キャプチャ**: 対象 PC の HDMI 映像出力を受け取り、USB UVC カメラとして Host PC に映像を転送
+
+これにより、Host PC 上のアプリケーションから対象 PC を完全にリモート操作できます。
+対象 PC にソフトウェアをインストールする必要はなく、BIOS/UEFI レベルの操作も可能です。
+
+### 物理配線図
+
+```mermaid
+graph LR
+    subgraph HostPC["🖥️ Host PC（Mac）"]
+        direction TB
+        MacKeyboard["⌨️ Mac キーボード"]
+        MacScreen["🖥️ Mac モニター"]
+        ElectronApp["⚡ NanoKVM-USB Desktop<br>（Electron アプリ）"]
+        MacKeyboard -. "キー入力" .-> ElectronApp
+        ElectronApp -. "Windows 画面を表示" .-> MacScreen
+    end
+
+    NanoKVM["🔧 NanoKVM-USB<br>（USB ドングル）"]
+
+    subgraph TargetPC["🪟 対象 PC（Windows）"]
+        direction TB
+        WinOS["Windows OS"]
+        WinGPU["🖥️ GPU"]
+    end
+
+    ElectronApp == "① USB Serial<br>HID コマンド送信 ➡️" ==> NanoKVM
+    NanoKVM == "② USB UVC<br>映像転送 ⬅️" ==> ElectronApp
+    NanoKVM == "③ USB HID<br>仮想キーボード/マウス ➡️" ==> WinOS
+    WinGPU == "④ HDMI<br>映像出力 ⬅️" ==> NanoKVM
+
+    style HostPC fill:#e8f5e9,stroke:#4caf50
+    style TargetPC fill:#e3f2fd,stroke:#2196f3
+    style NanoKVM fill:#f3e5f5,stroke:#9c27b0
+```
+
+### 接続ケーブルと信号の流れ
+
+| # | ケーブル | 方向 | 信号 | 説明 |
+|---|---------|------|------|------|
+| ① | USB (Mac → NanoKVM) | Host → NanoKVM | Serial Port | Mac から NanoKVM に HID キーボード/マウスコマンドを送信 |
+| ② | USB (Mac ← NanoKVM) | NanoKVM → Host | USB UVC | NanoKVM が Windows の HDMI 映像を UVC カメラとして Mac に転送 |
+| ③ | USB (NanoKVM → Windows) | NanoKVM → 対象PC | USB HID | NanoKVM が Windows に対して USB キーボード/マウスとしてデバイスを提示 |
+| ④ | HDMI (Windows → NanoKVM) | 対象PC → NanoKVM | HDMI 映像 | Windows の GPU が出力した映像を NanoKVM が受け取り |
+
+> **Note**: ① と ② は同一の USB ケーブル（Mac ↔ NanoKVM 間）で双方向に通信します。
+> Mac からは NanoKVM がシリアルポートデバイスと UVC カメラの2つのデバイスとして認識されます。
+
+### キーボード入力の経路
+
+Mac のキーボードから Windows PC への入力は以下の経路で転送されます:
+
+```
+Mac キーボード
+  │ keydown/keyup イベント
+  ▼
+Electron Renderer（React）
+  │ event.code → HID Usage Code 変換
+  │ 例: 'KeyA' → 0x04, 'ShiftLeft' → modifier bit 0x02
+  ▼
+8バイト HID レポート構築
+  │ [modifiers, 0x00, key1, key2, key3, key4, key5, key6]
+  │ 例: Shift+A → [0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00]
+  ▼
+Electron Main Process（Serial Port）
+  │ プロトコルパケット化 + CRC 付与
+  ▼
+USB Serial → NanoKVM-USB ハードウェア
+  │ パケット解析 → USB HID デバイスとして出力
+  ▼
+Windows PC（USB HID 受信）
+  │ 物理キーボードと同等の入力として処理
+  ▼
+Windows が 'A' を入力として認識
+```
+
+この経路は、ユーザーが Mac のキーボードを直接操作する場合も、AI エージェント（picoclaw）がプログラム的にキーを送信する場合も同一です。AI エージェントの場合は「Mac キーボード」の代わりに API Server が HID レポートを生成します。
+
+### 画面表示の経路
+
+Windows PC の画面が Mac に表示される経路は以下のとおりです:
+
+```
+Windows PC（GPU 映像出力）
+  │ HDMI ケーブル
+  ▼
+NanoKVM-USB ハードウェア
+  │ HDMI → USB UVC 変換（ハードウェアエンコード）
+  │ Mac には USB カメラとして認識される
+  ▼
+Mac（USB UVC デバイス）
+  │
+  ├──→ Electron Renderer: getUserMedia() API
+  │     <video> 要素に Windows 画面をリアルタイム表示（30fps）
+  │     → Mac モニター上に Windows デスクトップが表示される
+  │
+  └──→ AI エージェント使用時: <canvas> で静止画キャプチャ
+        → base64 JPEG → Vision LLM で画面状態を解析
+        （ロック画面かデスクトップか等を判定）
+```
+
+> **Mac ロック中の映像キャプチャ**: macOS がロックされると Renderer プロセスがスロットリングされ、
+> `getUserMedia()` が応答しなくなります。この場合、ffmpeg が AVFoundation 経由で
+> 直接 UVC デバイスからキャプチャするフォールバックが動作します（後述の「ffmpeg キャプチャ実装アーキテクチャ」参照）。
+
+---
+
 ## システム構成ブロック図
 
 ### 全体アーキテクチャ
@@ -25,43 +140,56 @@ graph TB
         VisionLLM["Vision LLM\ngpt-4.1"]
     end
 
-    %% ===== NanoKVM-USB Desktop アプリ =====
-    subgraph Electron["⚡ NanoKVM-USB Desktop（Electron アプリ）"]
+    %% ===== Host PC (Mac) =====
+    subgraph HostPC["🖥️ Host PC（Mac）"]
 
-        subgraph MainProcess["Main Process（Node.js）"]
-            Manager["manager.ts\nsendMessage()"]
-            subgraph APIServer["API Server :18792"]
-                KeyboardAPI["/keyboard/*"]
-                ScreenAPI["/screen/verify"]
+        MacKeyboard["⌨️ Mac キーボード\n（物理入力 or AI エージェント）"]
+
+        subgraph Electron["⚡ NanoKVM-USB Desktop（Electron アプリ）"]
+
+            subgraph MainProcess["Main Process（Node.js）"]
+                Manager["manager.ts\nsendMessage()"]
+                subgraph APIServer["API Server :18792"]
+                    KeyboardAPI["/keyboard/*"]
+                    ScreenAPI["/screen/verify"]
+                end
+                SerialPort["🔌 Serial Port\nUSB HID 出力"]
+                CaptureEngine["📸 capture.ts\n2段階フォールバック"]
             end
-            SerialPort["🔌 Serial Port\nUSB HID 出力"]
-            CaptureEngine["📸 capture.ts\n2段階フォールバック"]
-        end
 
-        subgraph picoclaw["🐾 picoclaw（バンドル済み Go バイナリ）\nresources/bin/picoclaw"]
-            subgraph gateway["gateway（常駐プロセス）"]
-                TelegramBot["Telegram Bot 受信"]
-                Cron["Cron スケジューラ"]
-                Dispatcher["One-Shot Dispatcher"]
+            subgraph picoclaw["🐾 picoclaw（バンドル済み Go バイナリ）\nresources/bin/picoclaw"]
+                subgraph gateway["gateway（常駐プロセス）"]
+                    TelegramBot["Telegram Bot 受信"]
+                    Cron["Cron スケジューラ"]
+                    Dispatcher["One-Shot Dispatcher"]
+                end
+                Agent["agent -m\n（毎回新規の子プロセス）"]
             end
-            Agent["agent -m\n（毎回新規の子プロセス）"]
+
+            FfmpegBin["🎬 ffmpeg（バンドル済み）\nResources/bin/ffmpeg\n80MB 静的バイナリ"]
+
+            subgraph RendererBox["Renderer（React）"]
+                ChatUI["💬 Chat UI"]
+                Video["📺 &lt;video&gt;\ngetUserMedia() ← UVC"]
+                Canvas["🖼️ &lt;canvas&gt;\n→ base64 JPEG"]
+                HIDEncode["⌨️ HID encode\napi-handler.ts"]
+            end
         end
 
-        FfmpegBin["🎬 ffmpeg（バンドル済み）\nResources/bin/ffmpeg\n80MB 静的バイナリ"]
-
-        subgraph RendererBox["Renderer（React）"]
-            ChatUI["💬 Chat UI"]
-            Video["📺 &lt;video&gt;\ngetUserMedia() ← UVC"]
-            Canvas["🖼️ &lt;canvas&gt;\n→ base64 JPEG"]
-            HIDEncode["⌨️ HID encode\napi-handler.ts"]
-        end
+        MacScreen["🖥️ Mac モニター\n（Windows 画面をリアルタイム表示）"]
     end
 
     %% ===== ハードウェア =====
-    NanoKVM["🔧 NanoKVM-USB\n（Hardware）"]
-    WindowsPC["🪟 Windows PC\n（リモート対象）"]
+    NanoKVM["🔧 NanoKVM-USB\n（USB ドングル）\nシリアルポート + UVC カメラ\nとして Mac に認識"]
+    WindowsPC["🪟 Windows PC\n（リモート対象）\nNanoKVM を USB キーボード/\nマウスとして認識"]
 
     %% ===== 接続線 =====
+    %% ユーザー入力（Mac キーボード → Renderer）
+    MacKeyboard -- "keydown/keyup" --> HIDEncode
+
+    %% 画面表示（Renderer → Mac モニター）
+    Video -- "リアルタイム映像" --> MacScreen
+
     %% Telegram 経路
     TelegramServer -- "Bot API" --> TelegramBot
     TelegramBot --> Dispatcher
@@ -96,14 +224,15 @@ graph TB
     CaptureEngine -- "base64 JPEG" --> ScreenAPI
     ScreenAPI -- "HTTPS\nbase64 JPEG 送信" --> VisionLLM
 
-    %% ハードウェア接続
-    SerialPort -- "USB" --> NanoKVM
-    NanoKVM -- "USB HID\n操作転送 ➡️" --> WindowsPC
-    WindowsPC -- "HDMI\n映像出力 ⬅️" --> NanoKVM
-    NanoKVM -- "USB UVC\n映像転送 ⬅️" --> Video
+    %% ハードウェア接続（Mac ↔ NanoKVM ↔ Windows）
+    SerialPort == "USB Serial\nHID コマンド ➡️" ==> NanoKVM
+    NanoKVM == "USB HID\n仮想キーボード/マウス ➡️" ==> WindowsPC
+    WindowsPC == "HDMI\n映像出力 ⬅️" ==> NanoKVM
+    NanoKVM == "USB UVC\n映像転送 ⬅️" ==> Video
     NanoKVM -. "USB UVC\n（AVFoundation経由）" .-> FfmpegBin
 
     %% スタイル
+    style HostPC fill:#e8f5e9,stroke:#4caf50
     style Cloud fill:#e8f4fd,stroke:#4a90d9
     style Electron fill:#fff3e0,stroke:#ff9800
     style MainProcess fill:#fff8e1,stroke:#ffc107
