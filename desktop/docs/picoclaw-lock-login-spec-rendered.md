@@ -218,6 +218,151 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 
 ---
 
+## セキュリティ: Credential Vault（認証情報保管庫）
+
+### 課題: 現行方式のセキュリティリスク
+
+現行のログイン操作では、ユーザーがチャットメッセージに PIN コードやパスワードを平文で記載します。
+これにより以下のリスクが存在します:
+
+| リスク | 現行の状態 | 影響 |
+|--------|-----------|------|
+| **チャット履歴への露出** | Telegram 履歴・Chat UI に PIN/パスワードが平文で残る | 第三者の覗き見、端末紛失時の漏洩 |
+| **LLM プロバイダへの送信** | メッセージ全体が Chat LLM に送信される | クラウドサーバーに認証情報が到達 |
+| **ログファイルへの記録** | インターセプター・API Server のログに記録される可能性 | ディスク上に平文で残存 |
+
+> **現行の緩和策**: LLM がパスワードを `***` にマスクした場合は実行を拒否する「REDACTED 拒否」機能は存在しますが、
+> これは LLM が自発的にマスクしたケースのみを防ぐもので、LLM への送信自体は防止できません。
+
+### 解決策: Credential Vault
+
+暗号化された認証情報保管庫（Credential Vault）を導入し、**Windows の PIN/パスワードがチャット経路を一切通らない**設計にします。
+
+#### 設計原則
+
+1. **Windows 認証情報は Vault 内にのみ保存** — チャットメッセージに記載しない
+2. **マスターパスワードも LLM に送信しない** — Vault 解錠時は LLM をバイパス
+3. **毎回マスターパスワードを要求** — セッション保持なし（One-Shot と一致）
+4. **Telegram ではマスターパスワードメッセージを即時削除** — チャット履歴に残さない
+
+#### ログイン操作フロー（Vault 有効時）
+
+![Diagram 4](picoclaw-lock-login-spec-rendered-4.svg)
+
+#### LLM バイパスの仕組み
+
+マスターパスワードの入力時にLLMを経由させない仕組みは以下のとおりです。
+
+| 段階 | メッセージ | LLM に送信 | チャット表示 | ログ記録 |
+|------|-----------|:----------:|-------------|:--------:|
+| ① ログイン要求 | 「ログインして」 | ✅ | そのまま表示 | ✅ |
+| ② マスターPW要求 | (システム応答) | — | 「🔐 マスターパスワードを入力してください」 | — |
+| ③ マスターPW入力 | 「mymaster123」 | ❌ 送信しない | Chat UI: 「🔐 ****」 / Telegram: 即時削除 | ❌ |
+| ④ ログイン実行 | (自動) | ❌ | 「✅ ログイン完了」 | ✅（PINなし） |
+
+**状態管理**: gateway（Telegram）/ manager.ts（Chat UI）に `vault_pending_unlock` フラグを追加。
+このフラグが `true` の間は、次のユーザー入力を agent spawn せず、直接 Vault API に渡します。
+
+#### Telegram メッセージ即時削除
+
+Telegram Bot API の `deleteMessage` を使用して、マスターパスワードを含むメッセージを受信直後に削除します。
+
+```
+POST https://api.telegram.org/bot<token>/deleteMessage
+{
+  "chat_id": <chat_id>,
+  "message_id": <password_message_id>
+}
+```
+
+- 削除はサーバー側で行われるため、全端末のチャット履歴から消える
+- 削除後、ボットから「🔐 認証を受け付けました」と返信
+- 一瞬表示されるが、履歴には残らない
+
+#### ストレージ設計
+
+```
+~/.picoclaw/vault.enc    ← AES-256-GCM 暗号化済みクレデンシャル
+~/.picoclaw/vault.salt   ← PBKDF2 用ソルト（32バイト）
+```
+
+| 項目 | 方式 | 理由 |
+|------|------|------|
+| **暗号化** | AES-256-GCM | Node.js crypto 標準、認証付き暗号化（改竄検知付き） |
+| **鍵導出** | PBKDF2-SHA256 (100,000 イテレーション) | マスターパスワードから 256bit 暗号化キーを導出 |
+| **ソルト** | crypto.randomBytes(32) | 初回セットアップ時に生成、以後固定 |
+| **マスターPW検証** | GCM 認証タグ | 復号失敗 = パスワード不一致（専用ハッシュ不要） |
+
+保存データ構造（暗号化前の平文 JSON）:
+
+```json
+{
+  "pin": "1234",
+  "username": "",
+  "description": "Windows PC"
+}
+```
+
+> **Note**: プロファイルは1つのみ。複数 PC を操作する場合は Settings UI から切り替えます。
+
+#### コンポーネント変更一覧
+
+| コンポーネント | ファイル | 変更内容 |
+|--------------|---------|---------|
+| **Vault Manager** | `src/main/vault/manager.ts` (新規) | AES-256-GCM 暗号化ストレージ管理 |
+| **IPC Events** | `src/common/ipc-events.ts` | `VAULT_SETUP`, `VAULT_UNLOCK`, `VAULT_SAVE`, `VAULT_STATUS` 追加 |
+| **API Server** | `src/main/api/server.ts` | `POST /api/vault/unlock`, `GET /api/vault/credential` 追加 |
+| **API Server (login)** | `src/main/api/server.ts` | `password: "@vault"` の場合に Vault から自動取得 |
+| **Settings UI** | `src/renderer/src/components/menu/settings/picoclaw.tsx` | 「🔐 ログイン認証情報」セクション追加 |
+| **manager.ts** | `src/main/picoclaw/manager.ts` | `vault_pending_unlock` 状態管理、LLM バイパス |
+| **picoclaw (Go)** | gateway 側 | `vault_pending_unlock` 状態管理、`deleteMessage` 呼び出し |
+
+#### Settings UI（設定画面）
+
+```
+┌─────────────────────────────────────────────┐
+│ 🔐 ログイン認証情報                            │
+│                                             │
+│ ステータス: ✅ 設定済み                        │
+│                                             │
+│ ── 保存済みクレデンシャル ──                    │
+│   認証方式: [PIN ▼]                           │
+│   PIN:    [••••] [👁] [保存]                  │
+│   説明:   Windows PC (自宅)                   │
+│                                             │
+│ ── マスターパスワード ──                       │
+│   [現在のパスワード] [新しいパスワード] [変更]   │
+│                                             │
+│ ⚠️ マスターパスワードを忘れると保存済みの       │
+│   認証情報を復元できません。                    │
+└─────────────────────────────────────────────┘
+```
+
+#### セキュリティ比較
+
+| 脅威 | 現行 | Vault 導入後 |
+|------|:----:|:------------:|
+| チャット履歴に Windows PIN が露出 | ❌ 丸見え | ✅ 一切表示されない |
+| LLM プロバイダに PIN が送信される | ❌ 送信される | ✅ 送信されない |
+| LLM プロバイダにマスター PW が送信される | — | ✅ 送信されない（LLM バイパス） |
+| ログファイルに PIN が記録される | ❌ 記録される可能性 | ✅ `@vault` のみ記録 |
+| Telegram 履歴にマスター PW が残る | — | ✅ 即時削除（deleteMessage） |
+| NanoKVM アプリへの不正アクセス | ❌ PIN なしでログイン可能 | ✅ マスター PW が必要 |
+| ディスク上の保存データ | — | ✅ AES-256-GCM で暗号化 |
+
+#### 後方互換性
+
+Vault 未設定時は従来どおり `「PIN xxxx でログインして」` でのログインも引き続き動作します。
+Vault が設定されている場合のみ、PIN/パスワードなしの `「ログインして」` で Vault 経由のフローが有効になります。
+
+| 状態 | 「ログインして」 | 「PIN 1234 でログインして」 |
+|------|-----------------|---------------------------|
+| Vault 未設定 | LLM が PIN を質問 | そのまま実行（従来動作） |
+| Vault 設定済み・未解錠 | マスター PW を要求 | Vault を優先（メッセージ中の PIN は無視） |
+| Vault 設定済み・解錠済み | Vault から PIN 取得して実行 | Vault を優先 |
+
+---
+
 ## ffmpeg バンドルとクロスプラットフォーム対応
 
 画面キャプチャ機能（macOS ロック中のフォールバック）で使用する ffmpeg は、`ffmpeg-static` npm パッケージを通じてアプリにバンドルされます。
@@ -262,7 +407,7 @@ ffmpeg -f dshow -video_size 1920x1080 -i "video=USB3 Video" -frames:v 1 -f image
 
 画面キャプチャは **Renderer IPC（高速パス）** と **ffmpeg ネイティブキャプチャ（フォールバック）** の2段階で動作します。
 
-![Diagram 4](picoclaw-lock-login-spec-rendered-4.svg)
+![Diagram 5](picoclaw-lock-login-spec-rendered-5.svg)
 
 ### 通常利用時（ロック解除状態）とロック時の動作
 
@@ -440,7 +585,7 @@ GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.a
 GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと認証が必要です。
 アプリ内の「🔑 GitHub 認証を開始」ボタンから以下のフローで認証できます:
 
-![Diagram 5](picoclaw-lock-login-spec-rendered-5.svg)
+![Diagram 6](picoclaw-lock-login-spec-rendered-6.svg)
 
 **前提条件**:
 - [GitHub CLI (`gh`)](https://cli.github.com) がインストール済み
@@ -505,7 +650,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 更新フロー
 
-![Diagram 6](picoclaw-lock-login-spec-rendered-6.svg)
+![Diagram 7](picoclaw-lock-login-spec-rendered-7.svg)
 
 ### 手動更新
 
@@ -543,7 +688,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 設計思想: チャット用 LLM と Vision LLM の分離
 
-![Diagram 7](picoclaw-lock-login-spec-rendered-7.svg)
+![Diagram 8](picoclaw-lock-login-spec-rendered-8.svg)
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
 例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
@@ -552,7 +697,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 検証フロー
 
-![Diagram 8](picoclaw-lock-login-spec-rendered-8.svg)
+![Diagram 9](picoclaw-lock-login-spec-rendered-9.svg)
 
 ### Vision プロンプト
 
@@ -725,3 +870,7 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 |
 | **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |
 | **全体アーキテクチャ図更新** | picoclaw・ffmpeg をアプリ内蔵バンドルとして Electron サブグラフ内に移動。Main Process / CaptureEngine ブロック追加。バンドル済みコンポーネント表とサイズ情報を追加 |
+| **Telegram シーケンス図修正** | Vision LLM の記述を特定モデル名（Llama 4 Scout）から汎用的な「Vision LLM」に変更 |
+| **ChatUI シーケンス図追加** | アプリ内蔵 ChatUI からのロック操作シーケンス図を追加。Telegram との比較表付き |
+| **Mermaid 日本語フォント修正** | SVG/PDF の Mermaid 図で日本語が文字化けする問題を修正。`mermaid.css` + `mermaid-config.json` で Hiragino Sans 等の日本語フォントを指定 |
+| **Credential Vault 設計書追加** | セキュリティセクション新設。AES-256-GCM 暗号化 Vault による PIN/パスワード保管、マスターパスワードの LLM バイパス、Telegram メッセージ即時削除、Chat UI マスク表示の設計を文書化 |
