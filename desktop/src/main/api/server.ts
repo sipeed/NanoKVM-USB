@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'http'
 import { BrowserWindow, ipcMain } from 'electron'
 import { IpcEvents } from '@common/ipc-events'
 import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision } from '../picoclaw/vision'
+import { isFfmpegCaptureAvailable, captureFrameNative } from '../device/capture'
 
 export interface ApiServerConfig {
   port: number
@@ -728,9 +729,43 @@ export class ApiServer {
 
   /**
    * Request screen capture from renderer process via IPC.
+   * Falls back to ffmpeg native capture if the renderer IPC fails
+   * (e.g. when macOS is locked or the display is off).
+   */
+  private async requestScreenCapture(): Promise<{ dataUrl: string | null; rejectReason?: string }> {
+    // Step 1: Try renderer IPC capture (fast path — works when app is in foreground)
+    const ipcResult = await this.requestScreenCaptureViaIpc()
+
+    if (ipcResult.dataUrl) {
+      return ipcResult
+    }
+
+    // Step 2: Renderer failed — try ffmpeg native capture as fallback
+    // This works even when macOS is locked or display is off
+    if (isFfmpegCaptureAvailable()) {
+      console.log(`[API Server] Renderer capture failed (${ipcResult.rejectReason}), trying ffmpeg native capture...`)
+      const nativeResult = await captureFrameNative()
+      if (nativeResult.dataUrl) {
+        console.log(`[API Server] ffmpeg native capture succeeded`)
+        return nativeResult
+      }
+      console.warn(`[API Server] ffmpeg native capture also failed: ${nativeResult.rejectReason}`)
+      // Return the native error since it's more specific
+      return {
+        dataUrl: null,
+        rejectReason: `renderer: ${ipcResult.rejectReason}; ffmpeg: ${nativeResult.rejectReason}`
+      }
+    }
+
+    // No fallback available
+    return ipcResult
+  }
+
+  /**
+   * Request screen capture from renderer process via IPC only.
    * Returns a Promise that resolves with the base64 data URL.
    */
-  private requestScreenCapture(): Promise<{ dataUrl: string | null; rejectReason?: string }> {
+  private requestScreenCaptureViaIpc(): Promise<{ dataUrl: string | null; rejectReason?: string }> {
     return new Promise((resolve) => {
       if (!this.mainWindow) {
         console.warn('[API Server] requestScreenCapture: no mainWindow')

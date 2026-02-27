@@ -179,7 +179,7 @@ export function translateApiError(errorText: string): TranslatedError {
     return {
       isError: true,
       message:
-        `🚫 無料枠の制限に達しました ${limitInfo}\n\n` +
+        `🚫 APIレート制限に達しました ${limitInfo}\n\n` +
         `${waitText}後に自動的に使えるようになります。\n` +
         `復帰予定: ${rateLimit?.resetAt ? new Date(rateLimit.resetAt).toLocaleTimeString('ja-JP') : '約1分後'}\n\n` +
         `💡 ヒント:\n` +

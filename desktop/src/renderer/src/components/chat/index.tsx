@@ -49,7 +49,7 @@ function RateLimitPopup({
     ? `${data.limitValue.toLocaleString()} トークン/分`
     : data.limitType === 'requests' && data.limitValue
       ? `${data.limitValue.toLocaleString()} リクエスト/分`
-      : '無料枠'
+      : 'レート制限'
 
   const resetTime = data.resetAt
     ? new Date(data.resetAt).toLocaleTimeString('ja-JP')
@@ -64,7 +64,7 @@ function RateLimitPopup({
             <AlertTriangle size={24} className="text-amber-400" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">無料枠の制限に到達</h3>
+            <h3 className="text-lg font-bold text-white">APIレート制限に到達</h3>
             <p className="text-sm text-neutral-400">{limitDesc}</p>
           </div>
         </div>
