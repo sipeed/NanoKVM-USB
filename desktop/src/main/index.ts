@@ -10,6 +10,9 @@ import { PicoclawManager } from './picoclaw/manager'
 import { ModelUpdater } from './picoclaw/model-updater'
 import { ApiServer } from './api/server'
 
+// Redirect all console methods to electron-log so they appear in main.log
+console.log = log.log
+console.warn = log.warn
 console.error = log.error
 
 let mainWindow: BrowserWindow

@@ -18,17 +18,23 @@ const FRAME_STALE_THRESHOLD_MS = 3000
 /**
  * Start (or restart) frame delivery monitoring on the given <video> element.
  * Uses requestVideoFrameCallback to track when new frames are actually composed.
+ *
+ * IMPORTANT: When monitoring the same element, we must NOT re-seed
+ * lastVideoFrameTime. During macOS lock, requestVideoFrameCallback stops
+ * firing but the renderer can still handle IPC. Re-seeding would make stale
+ * frames appear fresh and prevent the ffmpeg fallback from activating.
  */
 function startFrameMonitor(video: HTMLVideoElement): void {
-  const now = performance.now()
-  // Already monitoring this element and receiving recent frames
-  if (frameMonitorVideoElement === video && lastVideoFrameTime > 0 &&
-      now - lastVideoFrameTime < FRAME_STALE_THRESHOLD_MS) {
+  // Already monitoring this exact element — don't re-seed timestamp.
+  // The requestVideoFrameCallback chain updates it when real frames arrive.
+  // If the video is stale, lastVideoFrameTime stays old → isVideoFresh() = false.
+  if (frameMonitorVideoElement === video) {
     return
   }
 
+  // New video element — start fresh
   frameMonitorVideoElement = video
-  lastVideoFrameTime = now // seed with current time to avoid immediate stale detection
+  lastVideoFrameTime = performance.now() // seed only for NEW element
 
   if (typeof video.requestVideoFrameCallback !== 'function') {
     console.warn('[API Handler] requestVideoFrameCallback not available — frame freshness check disabled')
@@ -40,7 +46,8 @@ function startFrameMonitor(video: HTMLVideoElement): void {
     try {
       video.requestVideoFrameCallback(onFrame)
     } catch {
-      // callback chain broken (e.g. video source changed)
+      // callback chain broken (e.g. video source changed) —
+      // clear element ref so next call re-initializes and restarts the chain
       frameMonitorVideoElement = null
     }
   }
