@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-26
+> **最終更新**: 2026-02-27 (v2026.02.27)
 
 ## 概要
 
@@ -16,11 +16,11 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 
 ### 全体アーキテクチャ
 
-![diagram](./picoclaw-lock-login-spec-rendered-1.svg)
+![Diagram 1](picoclaw-lock-login-spec-rendered-1.svg)
 
 ### Telegram ロック操作のシーケンス図
 
-![diagram](./picoclaw-lock-login-spec-rendered-2.svg)
+![Diagram 2](picoclaw-lock-login-spec-rendered-2.svg)
 
 **データフローの要点**:
 
@@ -55,13 +55,15 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 
 | ステップ | 操作 | 目的 | 待機時間 |
 |----------|------|------|----------|
-| 0 | `Escape` キー押下 | 前回のPINエラーダイアログが残っている場合に閉じる | 300ms |
+| 0 | `Escape` キー押下 | 前回のPINエラーダイアログが残っている場合に閉じる | 200ms |
 | 1 | `Space` キー押下 | ロック画面からサインイン画面を呼び起こす | 500ms |
 | 1b | `Space` キー再押下 | バックアップの起動操作 | - |
-| 2 | 待機 | Windows がPIN入力欄を描画・フォーカスするのを待つ | 3,000ms |
-| 3 | `Backspace` × 20回 | 入力欄の既存文字をクリア（Ctrl+A はPIN欄で無効のため） | 各30ms間隔 |
-| 4 | PIN を1文字ずつ入力 | HID キーボードレポートで各文字を送信 | 各150ms間隔 |
+| 2 | 待機 | Windows がPIN入力欄を描画・フォーカスするのを待つ | 1,500ms |
+| 3 | `Backspace` × 10回 | 入力欄の既存文字をクリア（Ctrl+A はPIN欄で無効のため） | 各30ms間隔 |
+| 4 | PIN を1文字ずつ入力 | HID キーボードレポートで各文字を送信 | 各80ms間隔 |
 | 5 | `Enter` キー押下 | PIN を送信してログイン | - |
+
+> **skipWake 最適化**: picoclaw 経由のログインでは、画面確認（screen_check）で既に PC が起動済みと確認されているため、S3 スリープ復帰シーケンス（5秒のマウス＋キーボードウェイク）をスキップします。これにより、ログイン所要時間が約14秒から約5秒に短縮されました。
 
 #### ログインシーケンス（ユーザー名 + パスワード）
 
@@ -185,6 +187,139 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 - **ログイン待機**: PIN 入力後 15 秒の固定待機（デスクトップ描画完了まで）
 - **NanoKVM 操作回数**: 1メッセージあたり最大 4 回（不要な反復を防止）
 - **ユーザー名バリデーション**: "windows", "linux", "ubuntu" 等の OS 名は自動除外
+
+---
+
+## ffmpeg バンドルとクロスプラットフォーム対応
+
+画面キャプチャ機能（macOS ロック中のフォールバック）で使用する ffmpeg は、`ffmpeg-static` npm パッケージを通じてアプリにバンドルされます。
+
+### バンドル方式
+
+| 項目 | 内容 |
+|------|------|
+| **パッケージ** | `ffmpeg-static` v5.3.0（静的リンク済みバイナリ） |
+| **配置場所** | `electron-builder.yml` の `extraResources` で `<app>/Contents/Resources/bin/ffmpeg` にコピー |
+| **バイナリサイズ** | 約 70〜80MB（プラットフォームにより異なる） |
+| **検索優先順位** | ① バンドル済み → ② `/usr/local/bin/ffmpeg` → ③ `/opt/homebrew/bin/ffmpeg` → ④ `/usr/bin/ffmpeg` |
+
+### プラットフォーム対応
+
+| プラットフォーム | キャプチャ方式 | デバイス検出 | 状態 |
+|----------------|-------------|------------|------|
+| **macOS (Intel)** | AVFoundation | `[index] Device Name` | ✅ 動作確認済み |
+| **macOS (Apple Silicon)** | AVFoundation | 同上 | ✅ 対応（ffmpeg-static が arm64 バイナリを提供） |
+| **Windows** | DirectShow | `"Device Name"` | 🔧 実装済み（未テスト） |
+| **Linux** | — | — | ❌ 未対応 |
+
+### Windows 対応の実装詳細
+
+Windows では ffmpeg の DirectShow 入力を使用して USB キャプチャカードから映像を取得します:
+
+```
+ffmpeg -f dshow -video_size 1920x1080 -i "video=USB3 Video" -frames:v 1 -f image2pipe -vcodec mjpeg -q:v 5 -
+```
+
+- デバイス検出: `ffmpeg -f dshow -list_devices true -i dummy` でデバイス名を取得
+- 入力指定: `video=<デバイス名>` 形式（AVFoundation のインデックス指定とは異なる）
+- バイナリ名: `ffmpeg.exe`（`ffmpeg-static` がビルドプラットフォームに応じて自動選択）
+
+> **Note**: Windows では macOS ロック時のような Renderer スロットリング問題は通常発生しませんが、リモートデスクトップ切断時等に同様の状況が起こる可能性があるため、ffmpeg フォールバックを共通基盤として実装しています。
+
+---
+
+## ffmpeg キャプチャ実装アーキテクチャ
+
+### 2段階フォールバック設計
+
+画面キャプチャは **Renderer IPC（高速パス）** と **ffmpeg ネイティブキャプチャ（フォールバック）** の2段階で動作します。
+
+![Diagram 3](picoclaw-lock-login-spec-rendered-3.svg)
+
+### 通常利用時（ロック解除状態）とロック時の動作
+
+| 状態 | 映像表示 | キャプチャ方式 | ffmpeg の関与 |
+|------|---------|-------------|-------------|
+| **通常利用（ロック解除）** | `getUserMedia()` WebRTC | Renderer IPC（canvas → base64 JPEG） | **呼ばれない** |
+| **macOS ロック中** | `getUserMedia()` はスロットリングで凍結 | Renderer IPC タイムアウト → ffmpeg フォールバック | **単一フレーム取得** |
+| **リモートデスクトップ切断** | 同上の可能性 | 同上 | **単一フレーム取得** |
+
+> **重要**: ffmpeg は**連続ストリーミングには使用しません**。`-frames:v 1` オプションにより1フレームだけ取得して即座にプロセス終了します。通常の映像表示（`<video>` タグ + WebRTC）には一切影響しません。
+
+### 同時アクセスの安全性
+
+| 懸念 | 実態 | 理由 |
+|------|------|------|
+| ffmpeg が映像品質を劣化させる？ | **影響なし** | 通常時は ffmpeg が呼ばれないため |
+| ロック中に同時アクセスで問題？ | **影響なし** | macOS AVFoundation は複数プロセスからの同時読み取りを許容 |
+| ffmpeg プロセスがリソースを占有？ | **極めて軽微** | 1フレーム < 1秒で完了、5秒のセーフティタイムアウトあり |
+| Windows で getUserMedia と ffmpeg が競合？ | **可能性あり** | DirectShow は排他的ロックの場合あり。ただし「Resource busy」エラーで graceful に処理 |
+
+### ffmpeg キャプチャパイプライン
+
+`capture.ts` の実装詳細:
+
+```
+captureFrameNative(width, height, quality)
+  │
+  ├── findFfmpeg()                       … バンドル済み → システムパスの優先順位で検索
+  │     └── getBundledFfmpegPath()       … Packaged: Resources/bin/ffmpeg, Dev: require('ffmpeg-static')
+  │
+  ├── detectCaptureDevice()              … プラットフォーム別のデバイス検出
+  │     ├── [macOS]  detectCaptureDeviceMac()    … AVFoundation デバイス一覧 → インデックス返却
+  │     └── [Windows] detectCaptureDeviceWin()   … DirectShow デバイス一覧 → デバイス名返却
+  │
+  ├── ffmpeg spawn                       … プラットフォーム別の引数でプロセス起動
+  │     ├── [macOS]  -f avfoundation -framerate 30 -video_size WxH -i <index>
+  │     └── [Windows] -f dshow -video_size WxH -i "video=<name>"
+  │     └── 共通: -frames:v 1 -f image2pipe -vcodec mjpeg -q:v <quality> -
+  │
+  ├── stdout → Buffer[] → Buffer.concat  … JPEG バイナリを収集
+  │
+  ├── base64 変換 → data:image/jpeg;base64,...  … data URL 生成
+  │
+  └── 黒画面検出                          … JPEG < 2KB の場合に警告ログ（呼び出し元に判断委任）
+```
+
+### デバイス検出パターン
+
+USB キャプチャカードの自動検出に使用するデバイス名パターン:
+
+| パターン | 対象デバイス | 除外条件 |
+|---------|------------|---------|
+| `USB3 Video` | NanoKVM-USB 標準 | — |
+| `USB2.0 HD UVC` | 汎用UVCキャプチャカード | — |
+| `nanokvm` (大文字小文字不問) | NanoKVM ブランド全般 | — |
+| `capture` (大文字小文字不問) | 汎用キャプチャデバイス | `screen` を含む場合は除外 |
+
+### キャッシュ機構
+
+| キャッシュ対象 | 変数名 | 初期値 | クリア条件 |
+|-------------|--------|-------|-----------|
+| ffmpeg バイナリパス | `cachedFfmpegPath` | `null` | アプリ再起動時のみ |
+| AVFoundation デバイスインデックス | `cachedDeviceIndex` | `null` | `resetCaptureCache()` またはデバイス未検出エラー時 |
+| DirectShow デバイス名 | `cachedDshowDeviceName` | `null` | `resetCaptureCache()` またはデバイス未検出エラー時 |
+
+### エラーハンドリング
+
+| エラー | 発生条件 | 対応 |
+|--------|---------|------|
+| `ffmpeg not available` | ffmpeg バイナリが見つからない | フォールバック不可、Renderer IPC のみに依存 |
+| `no USB capture device detected` | USB キャプチャカード未接続 | `null` 返却、呼び出し元で NO_VIDEO 処理 |
+| `capture device not found` | 検出済みデバイスが切断された | キャッシュクリア → 次回再検出 |
+| `capture device busy` | 他プロセスが排他的に使用中 | `null` 返却（Windows DirectShow で発生可能性） |
+| `ffmpeg capture timed out (5s)` | ffmpeg が5秒以内に完了しない | `SIGKILL` で強制終了 |
+| `ffmpeg output too small` | 出力が100バイト未満 | 不正な出力として拒否 |
+
+### 実装ファイル
+
+| ファイル | 役割 |
+|---------|------|
+| `src/main/device/capture.ts` | ffmpeg ネイティブキャプチャの全実装（findFfmpeg, detectCaptureDevice, captureFrameNative, resetCaptureCache） |
+| `src/main/api/server.ts` → `requestScreenCapture()` | 2段階フォールバック制御（Renderer IPC → ffmpeg） |
+| `src/main/api/server.ts` → `requestScreenCaptureViaIpc()` | Renderer IPC キャプチャ（5秒タイムアウト） |
+| `src/renderer/src/libs/media/camera.ts` | Renderer 側 getUserMedia() → `<video>` → `<canvas>` → base64 |
+
 ---
 
 ## 画面状態確認機能（Screen Check）
@@ -204,13 +339,13 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 1. picoclaw エージェントが `nanokvm_screen_check` ツールを呼び出し
 2. Go 側が `POST /api/screen/verify` に `{"action": "status"}` を送信
 3. Electron API Server が HDMI キャプチャを実行
-4. **黒画面（brightness < 3）の場合**: マウスジグル（1px右+1px左）を HID 送信してスリープ復帰を試行 → 2秒待機 → 再キャプチャ
+4. **黒画面（brightness < 3）の場合**: マウス左クリック＋キーボード Space キーを HID 送信してスリープ復帰を試行 → 4秒待機 → 再キャプチャ（最大2回リトライ）
 5. 映像取得成功なら Vision LLM に汎用プロンプトで画面内容を記述させる
 6. ステータス分類（`DESKTOP` / `LOCK_SCREEN` / `LOGIN_SCREEN` / `DESCRIBED`）と詳細説明を返却
-7. リトライ後も黒画面の場合は `BLACK_SCREEN` ステータスを返却（「マウスジグルでの復帰を試みましたが画面が変わりませんでした」）
+7. リトライ後も黒画面の場合は `BLACK_SCREEN` ステータスを返却（「マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした」）
 8. 早期終了で即座にユーザーに結果を表示
 
-> **ウェイクジグルの安全性**: ネットの移動量は ±0px（1px右移動+1px左移動）。ユーザーが PC を操作中でも知覚不能。クリックやキー入力と異なり、アプリケーション操作に一切影響しない。
+> **ウェイク操作の設計**: マウス左クリック（press+release）とキーボード Space キー（press+release）の両入力を送信。S3 スリープからの復帰はキーボード入力のみに応答する PC もあるため、両方を併用。4秒の待機時間は S3 レジューム + HDMI 信号安定に必要な時間を考慮。最大2回までリトライ。
 
 ### レスポンス例
 
@@ -221,7 +356,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | `LOGIN_SCREEN` | 🔑 | サインイン画面です。PIN 入力フィールドが表示されています。 |
 | `DESCRIBED` | 🔍 | 画面状態: （Vision LLM の記述） |
 | `NO_VIDEO` | 📹 | 映像がありません。PCが接続されていてストリーミングが開始されていることを確認してください。 |
-| `BLACK_SCREEN` | 🖥️ | 画面が真っ黒です。マウスジグルでの復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。 |
+| `BLACK_SCREEN` | 🖥️ | 画面が真っ黒です。マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認してください。 |
 | `NO_SIGNAL` | 📡 | 信号がありません。黒い画面またはブランク画面が検出されました。 |
 
 ### エラーハンドリング
@@ -231,7 +366,7 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 | **映像なし（screen_check）** | PC 未接続 / ストリーミング未開始 | `success=false`, `status="NO_VIDEO"` | 📹 映像がありません。PCがNanoKVM-USBに接続されていて… |
 | **映像なし（lock）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ Win+Lを送信しましたが、映像がないため結果を確認できません… |
 | **映像なし（login）** | 同上 | `v.Status == "NO_VIDEO"` | ⚠️ ログイン操作を送信しましたが、映像がないため結果を確認できません… |
-| **黒画面（screen_check）** | PC スリープ / HDMI 信号未安定 | `success=false`, `status="BLACK_SCREEN"` | 🖥️ 画面が真っ黒です。PCがスリープ中か、HDMI信号が安定していない… |
+| **黒画面（screen_check）** | PC スリープ / HDMI 信号未安定 | `success=false`, `status="BLACK_SCREEN"` | 🖥️ 画面が真っ黒です。マウスクリック+キーボード入力で復帰試行済み… |
 | **黒画面（lock）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ Win+Lを送信しましたが、画面が真っ黒です。PCがスリープ中か… |
 | **黒画面（login）** | 同上 | `v.Status == "BLACK_SCREEN"` | ⚠️ ログイン操作を送信しましたが、画面が真っ黒です… |
 | **アプリ未起動** | API Server に接続不可 | `result == nil` | NanoKVM-USB デスクトップアプリに接続できませんでした… |
@@ -277,7 +412,7 @@ GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.a
 GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと認証が必要です。
 アプリ内の「🔑 GitHub 認証を開始」ボタンから以下のフローで認証できます:
 
-![diagram](./picoclaw-lock-login-spec-rendered-3.svg)
+![Diagram 4](picoclaw-lock-login-spec-rendered-4.svg)
 
 **前提条件**:
 - [GitHub CLI (`gh`)](https://cli.github.com) がインストール済み
@@ -342,7 +477,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 更新フロー
 
-![diagram](./picoclaw-lock-login-spec-rendered-4.svg)
+![Diagram 5](picoclaw-lock-login-spec-rendered-5.svg)
 
 ### 手動更新
 
@@ -380,7 +515,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 設計思想: チャット用 LLM と Vision LLM の分離
 
-![diagram](./picoclaw-lock-login-spec-rendered-5.svg)
+![Diagram 6](picoclaw-lock-login-spec-rendered-6.svg)
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
 例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
@@ -389,7 +524,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 検証フロー
 
-![diagram](./picoclaw-lock-login-spec-rendered-6.svg)
+![Diagram 7](picoclaw-lock-login-spec-rendered-7.svg)
 
 ### Vision プロンプト
 
@@ -398,6 +533,8 @@ Vision LLM には画面内容に応じた専用プロンプトを使用:
 - **ロック検証**: "Is this a Windows lock screen or a desktop?" → `LOCK_SCREEN` / `DESKTOP`
 - **ログイン検証**: "What is the Windows login status?" → `LOGIN_SUCCESS` / `LOGIN_FAILED` / `LOCK_SCREEN`
   - タスクバーの有無を重視（タスクバーが見える = デスクトップ = LOGIN_SUCCESS）
+
+> **多言語レスポンス対応**: Vision LLM のプロンプトには、picoclaw 設定の `language` フィールドに応じた言語指示が自動付加されます。例: `language: "ja"` の場合「日本語で回答してください」が追加され、画面状態の説明が日本語で返されます。対応言語: ja, zh, ko, de ほか。
 
 ### NanoKVM 操作の早期終了条件
 
@@ -529,6 +666,32 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **CaptureResult IPC 拡張** | renderer → main の IPC に `rejectReason` を追加。キャプチャ失敗の理由をメインプロセスのログに記録 |
 | **ロック画面誤認修正** | Vision LLM が「no taskbar」と否定文で記述した場合のキーワード誤検出を修正。`hasPositive()` ヘルパーによる否定表現フィルタと `LOCK_SCREEN` 優先順位変更 |
 | **track.muted 除去** | HDMI 信号再取得中に一時的に muted=true になる問題で NO_VIDEO 誤判定が発生していたため除去 |
-| **自動ウェイクジグル** | BLACK_SCREEN 検出時にマウスジグル（1px右+1px左）を HID 送信してスリープ復帰を試行 → 2秒待機 → 再キャプチャ。ネット移動量±0pxで操作中でも安全 |
+| **自動ウェイク** | BLACK_SCREEN 検出時にマウスクリック＋キーボード Space キーを HID 送信してスリープ復帰を試行 → 4秒待機 → 再キャプチャ（最大2回リトライ）。S3 スリープからの復帰にはキーボード入力が必要な PC にも対応 |
 | **セッション履歴自動修復** | `GetHistory()` で `sanitizeToolCallHistory()` を呼び出し、assistant の `tool_calls` に対応する tool レスポンスが欠落している場合、その手前で履歴をトランケート。並列ツール呼び出し後のセッション破損による LLM API 400 エラーを自動防止 |
 | **並列 tool_calls プロバイダサニタイザ修正** | `sanitizeHistoryForProvider()` が連続する tool レスポンス（並列 tool_calls 由来）の 2 件目以降を誤って削除していた問題を修正。predecessor チェックを `role=="assistant"` のみから `role=="tool"` も許容するよう拡張。10 件のユニットテスト追加 |
+
+### picoclaw (upstream 44コミットマージ v2026.02.26)
+
+| 変更 | 内容 |
+|------|------|
+| **正規表現プリコンパイル** | ツール出力パーサ等でのランタイム `regexp.MustCompile` をパッケージレベル変数に移行。hot path でのアロケーション削減 (mattn) |
+| **システムプロンプトキャッシュ** | `BuildSystemPromptWithCache()` 追加。ワークスペースファイル変更時のみ再構築（mtime チェック）。issue #607 修正 |
+| **動的コンテキスト分離** | 時刻・Runtime・ツールリスト・言語設定を `buildDynamicContext()` に移動。キャッシュ可能な静的部分（Identity・Skills・Memory）と分離 |
+| **per-model `request_timeout`** | プロバイダ設定に `request_timeout` フィールド追加。モデルごとの API タイムアウト設定が可能に |
+| **`dm_scope` デフォルト変更** | `global` → `per-channel-peer` に変更。DM スコープがチャネル+ピアごとに分離 |
+| **Cobra CLI リファクタ** | upstream が `spf13/cobra` ベースに移行。フォーク側は既存 switch/case CLI を維持（`cmd_*.go` 復元） |
+| **後方探索サニタイザー** | `sanitizeHistoryForProvider()` の tool レスポンス検証を後方探索に変更。並列 tool_calls の複数レスポンスをより堅牢に処理 |
+| **golangci-lint ルール追加** | `errorlint`, `gocritic`, `revive` 等 10+ ルール追加。コード品質向上 |
+| **冗長ツール説明削除** | システムプロンプトからツール定義の重複記述を除去。トークン消費削減 |
+| **HTTP リトライユーティリティ** | `pkg/utils/http_retry.go` 追加。HTTP リクエストの自動リトライ（指数バックオフ） |
+| **`connect_mode` 設定** | プロバイダ設定に `connect_mode` フィールド追加 |
+| **ウェイク方式改善** | 黒画面検出時のウェイク操作をマウスジグル（±1px）からマウスクリック＋キーボード Space に変更。S3 スリープ対応、待機時間 2秒→4秒、最大2回リトライ |
+
+### NanoKVM-USB Desktop (v2026.02.27)
+
+| 変更 | 内容 |
+|------|------|
+| **ログイン速度最適化 (skipWake)** | picoclaw 経由のログインで S3 ウェイクシーケンスをスキップ。PIN 待機 3000→1500ms、Backspace 20→10回、文字入力遅延 150→80ms に短縮。結果: 14秒 → 5秒 |
+| **Vision 言語対応** | `~/.picoclaw/config.json` の `language` フィールドを読み取り、Vision LLM プロンプトに言語指示を付加。日本語・中国語・韓国語・ドイツ語等に対応 |
+| **ffmpeg バンドル** | `ffmpeg-static` npm パッケージを導入し、アプリ内にffmpegバイナリをバンドル。別のマシンへのコピーでもffmpegなしでロック中キャプチャが動作 |
+| **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 || **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |

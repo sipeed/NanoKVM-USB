@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-26 (v2026.02.26)
+> **最終更新**: 2026-02-27 (v2026.02.27)
 
 ## 概要
 
@@ -193,13 +193,15 @@ sequenceDiagram
 
 | ステップ | 操作 | 目的 | 待機時間 |
 |----------|------|------|----------|
-| 0 | `Escape` キー押下 | 前回のPINエラーダイアログが残っている場合に閉じる | 300ms |
+| 0 | `Escape` キー押下 | 前回のPINエラーダイアログが残っている場合に閉じる | 200ms |
 | 1 | `Space` キー押下 | ロック画面からサインイン画面を呼び起こす | 500ms |
 | 1b | `Space` キー再押下 | バックアップの起動操作 | - |
-| 2 | 待機 | Windows がPIN入力欄を描画・フォーカスするのを待つ | 3,000ms |
-| 3 | `Backspace` × 20回 | 入力欄の既存文字をクリア（Ctrl+A はPIN欄で無効のため） | 各30ms間隔 |
-| 4 | PIN を1文字ずつ入力 | HID キーボードレポートで各文字を送信 | 各150ms間隔 |
+| 2 | 待機 | Windows がPIN入力欄を描画・フォーカスするのを待つ | 1,500ms |
+| 3 | `Backspace` × 10回 | 入力欄の既存文字をクリア（Ctrl+A はPIN欄で無効のため） | 各30ms間隔 |
+| 4 | PIN を1文字ずつ入力 | HID キーボードレポートで各文字を送信 | 各80ms間隔 |
 | 5 | `Enter` キー押下 | PIN を送信してログイン | - |
+
+> **skipWake 最適化**: picoclaw 経由のログインでは、画面確認（screen_check）で既に PC が起動済みと確認されているため、S3 スリープ復帰シーケンス（5秒のマウス＋キーボードウェイク）をスキップします。これにより、ログイン所要時間が約14秒から約5秒に短縮されました。
 
 #### ログインシーケンス（ユーザー名 + パスワード）
 
@@ -323,6 +325,161 @@ HTTP API サーバー（`127.0.0.1:18792`）が提供するエンドポイント
 - **ログイン待機**: PIN 入力後 15 秒の固定待機（デスクトップ描画完了まで）
 - **NanoKVM 操作回数**: 1メッセージあたり最大 4 回（不要な反復を防止）
 - **ユーザー名バリデーション**: "windows", "linux", "ubuntu" 等の OS 名は自動除外
+
+---
+
+## ffmpeg バンドルとクロスプラットフォーム対応
+
+画面キャプチャ機能（macOS ロック中のフォールバック）で使用する ffmpeg は、`ffmpeg-static` npm パッケージを通じてアプリにバンドルされます。
+
+### バンドル方式
+
+| 項目 | 内容 |
+|------|------|
+| **パッケージ** | `ffmpeg-static` v5.3.0（静的リンク済みバイナリ） |
+| **配置場所** | `electron-builder.yml` の `extraResources` で `<app>/Contents/Resources/bin/ffmpeg` にコピー |
+| **バイナリサイズ** | 約 70〜80MB（プラットフォームにより異なる） |
+| **検索優先順位** | ① バンドル済み → ② `/usr/local/bin/ffmpeg` → ③ `/opt/homebrew/bin/ffmpeg` → ④ `/usr/bin/ffmpeg` |
+
+### プラットフォーム対応
+
+| プラットフォーム | キャプチャ方式 | デバイス検出 | 状態 |
+|----------------|-------------|------------|------|
+| **macOS (Intel)** | AVFoundation | `[index] Device Name` | ✅ 動作確認済み |
+| **macOS (Apple Silicon)** | AVFoundation | 同上 | ✅ 対応（ffmpeg-static が arm64 バイナリを提供） |
+| **Windows** | DirectShow | `"Device Name"` | 🔧 実装済み（未テスト） |
+| **Linux** | — | — | ❌ 未対応 |
+
+### Windows 対応の実装詳細
+
+Windows では ffmpeg の DirectShow 入力を使用して USB キャプチャカードから映像を取得します:
+
+```
+ffmpeg -f dshow -video_size 1920x1080 -i "video=USB3 Video" -frames:v 1 -f image2pipe -vcodec mjpeg -q:v 5 -
+```
+
+- デバイス検出: `ffmpeg -f dshow -list_devices true -i dummy` でデバイス名を取得
+- 入力指定: `video=<デバイス名>` 形式（AVFoundation のインデックス指定とは異なる）
+- バイナリ名: `ffmpeg.exe`（`ffmpeg-static` がビルドプラットフォームに応じて自動選択）
+
+> **Note**: Windows では macOS ロック時のような Renderer スロットリング問題は通常発生しませんが、リモートデスクトップ切断時等に同様の状況が起こる可能性があるため、ffmpeg フォールバックを共通基盤として実装しています。
+
+---
+
+## ffmpeg キャプチャ実装アーキテクチャ
+
+### 2段階フォールバック設計
+
+画面キャプチャは **Renderer IPC（高速パス）** と **ffmpeg ネイティブキャプチャ（フォールバック）** の2段階で動作します。
+
+```mermaid
+flowchart TD
+    Request["📡 API Server\nrequestScreenCapture()"] --> Step1["① Renderer IPC\ngetUserMedia() → canvas → base64"]
+
+    Step1 --> Check1{"成功？"}
+    Check1 -- "✅ dataUrl あり" --> Return1["📸 キャプチャ結果を返却"]
+    Check1 -- "❌ null / timeout" --> CheckFfmpeg{"ffmpeg\n利用可能？"}
+
+    CheckFfmpeg -- "✅ isFfmpegCaptureAvailable()" --> Step2["② ffmpeg ネイティブ\ncaptureFrameNative()"]
+    CheckFfmpeg -- "❌ 未インストール" --> ReturnFail["❌ キャプチャ失敗"]
+
+    Step2 --> Check2{"成功？"}
+    Check2 -- "✅ dataUrl あり" --> Return2["📸 キャプチャ結果を返却"]
+    Check2 -- "❌ エラー" --> ReturnBoth["❌ 両方失敗\nrenderer: 理由; ffmpeg: 理由"]
+
+    style Request fill:#fff3e0,stroke:#ff9800
+    style Step1 fill:#e8f4fd,stroke:#4a90d9
+    style Step2 fill:#f0f9e8,stroke:#7cb342
+    style Return1 fill:#e8f5e9,stroke:#4caf50
+    style Return2 fill:#e8f5e9,stroke:#4caf50
+    style ReturnFail fill:#ffebee,stroke:#f44336
+    style ReturnBoth fill:#ffebee,stroke:#f44336
+```
+
+### 通常利用時（ロック解除状態）とロック時の動作
+
+| 状態 | 映像表示 | キャプチャ方式 | ffmpeg の関与 |
+|------|---------|-------------|-------------|
+| **通常利用（ロック解除）** | `getUserMedia()` WebRTC | Renderer IPC（canvas → base64 JPEG） | **呼ばれない** |
+| **macOS ロック中** | `getUserMedia()` はスロットリングで凍結 | Renderer IPC タイムアウト → ffmpeg フォールバック | **単一フレーム取得** |
+| **リモートデスクトップ切断** | 同上の可能性 | 同上 | **単一フレーム取得** |
+
+> **重要**: ffmpeg は**連続ストリーミングには使用しません**。`-frames:v 1` オプションにより1フレームだけ取得して即座にプロセス終了します。通常の映像表示（`<video>` タグ + WebRTC）には一切影響しません。
+
+### 同時アクセスの安全性
+
+| 懸念 | 実態 | 理由 |
+|------|------|------|
+| ffmpeg が映像品質を劣化させる？ | **影響なし** | 通常時は ffmpeg が呼ばれないため |
+| ロック中に同時アクセスで問題？ | **影響なし** | macOS AVFoundation は複数プロセスからの同時読み取りを許容 |
+| ffmpeg プロセスがリソースを占有？ | **極めて軽微** | 1フレーム < 1秒で完了、5秒のセーフティタイムアウトあり |
+| Windows で getUserMedia と ffmpeg が競合？ | **可能性あり** | DirectShow は排他的ロックの場合あり。ただし「Resource busy」エラーで graceful に処理 |
+
+### ffmpeg キャプチャパイプライン
+
+`capture.ts` の実装詳細:
+
+```
+captureFrameNative(width, height, quality)
+  │
+  ├── findFfmpeg()                       … バンドル済み → システムパスの優先順位で検索
+  │     └── getBundledFfmpegPath()       … Packaged: Resources/bin/ffmpeg, Dev: require('ffmpeg-static')
+  │
+  ├── detectCaptureDevice()              … プラットフォーム別のデバイス検出
+  │     ├── [macOS]  detectCaptureDeviceMac()    … AVFoundation デバイス一覧 → インデックス返却
+  │     └── [Windows] detectCaptureDeviceWin()   … DirectShow デバイス一覧 → デバイス名返却
+  │
+  ├── ffmpeg spawn                       … プラットフォーム別の引数でプロセス起動
+  │     ├── [macOS]  -f avfoundation -framerate 30 -video_size WxH -i <index>
+  │     └── [Windows] -f dshow -video_size WxH -i "video=<name>"
+  │     └── 共通: -frames:v 1 -f image2pipe -vcodec mjpeg -q:v <quality> -
+  │
+  ├── stdout → Buffer[] → Buffer.concat  … JPEG バイナリを収集
+  │
+  ├── base64 変換 → data:image/jpeg;base64,...  … data URL 生成
+  │
+  └── 黒画面検出                          … JPEG < 2KB の場合に警告ログ（呼び出し元に判断委任）
+```
+
+### デバイス検出パターン
+
+USB キャプチャカードの自動検出に使用するデバイス名パターン:
+
+| パターン | 対象デバイス | 除外条件 |
+|---------|------------|---------|
+| `USB3 Video` | NanoKVM-USB 標準 | — |
+| `USB2.0 HD UVC` | 汎用UVCキャプチャカード | — |
+| `nanokvm` (大文字小文字不問) | NanoKVM ブランド全般 | — |
+| `capture` (大文字小文字不問) | 汎用キャプチャデバイス | `screen` を含む場合は除外 |
+
+### キャッシュ機構
+
+| キャッシュ対象 | 変数名 | 初期値 | クリア条件 |
+|-------------|--------|-------|-----------|
+| ffmpeg バイナリパス | `cachedFfmpegPath` | `null` | アプリ再起動時のみ |
+| AVFoundation デバイスインデックス | `cachedDeviceIndex` | `null` | `resetCaptureCache()` またはデバイス未検出エラー時 |
+| DirectShow デバイス名 | `cachedDshowDeviceName` | `null` | `resetCaptureCache()` またはデバイス未検出エラー時 |
+
+### エラーハンドリング
+
+| エラー | 発生条件 | 対応 |
+|--------|---------|------|
+| `ffmpeg not available` | ffmpeg バイナリが見つからない | フォールバック不可、Renderer IPC のみに依存 |
+| `no USB capture device detected` | USB キャプチャカード未接続 | `null` 返却、呼び出し元で NO_VIDEO 処理 |
+| `capture device not found` | 検出済みデバイスが切断された | キャッシュクリア → 次回再検出 |
+| `capture device busy` | 他プロセスが排他的に使用中 | `null` 返却（Windows DirectShow で発生可能性） |
+| `ffmpeg capture timed out (5s)` | ffmpeg が5秒以内に完了しない | `SIGKILL` で強制終了 |
+| `ffmpeg output too small` | 出力が100バイト未満 | 不正な出力として拒否 |
+
+### 実装ファイル
+
+| ファイル | 役割 |
+|---------|------|
+| `src/main/device/capture.ts` | ffmpeg ネイティブキャプチャの全実装（findFfmpeg, detectCaptureDevice, captureFrameNative, resetCaptureCache） |
+| `src/main/api/server.ts` → `requestScreenCapture()` | 2段階フォールバック制御（Renderer IPC → ffmpeg） |
+| `src/main/api/server.ts` → `requestScreenCaptureViaIpc()` | Renderer IPC キャプチャ（5秒タイムアウト） |
+| `src/renderer/src/libs/media/camera.ts` | Renderer 側 getUserMedia() → `<video>` → `<canvas>` → base64 |
+
 ---
 
 ## 画面状態確認機能（Screen Check）
@@ -662,6 +819,8 @@ Vision LLM には画面内容に応じた専用プロンプトを使用:
 - **ログイン検証**: "What is the Windows login status?" → `LOGIN_SUCCESS` / `LOGIN_FAILED` / `LOCK_SCREEN`
   - タスクバーの有無を重視（タスクバーが見える = デスクトップ = LOGIN_SUCCESS）
 
+> **多言語レスポンス対応**: Vision LLM のプロンプトには、picoclaw 設定の `language` フィールドに応じた言語指示が自動付加されます。例: `language: "ja"` の場合「日本語で回答してください」が追加され、画面状態の説明が日本語で返されます。対応言語: ja, zh, ko, de ほか。
+
 ### NanoKVM 操作の早期終了条件
 
 Vision 検証の結果が以下のいずれかを含むとき、picoclaw は追加の LLM 呼び出しを行わず即座にユーザーに結果を返します:
@@ -812,3 +971,12 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **HTTP リトライユーティリティ** | `pkg/utils/http_retry.go` 追加。HTTP リクエストの自動リトライ（指数バックオフ） |
 | **`connect_mode` 設定** | プロバイダ設定に `connect_mode` フィールド追加 |
 | **ウェイク方式改善** | 黒画面検出時のウェイク操作をマウスジグル（±1px）からマウスクリック＋キーボード Space に変更。S3 スリープ対応、待機時間 2秒→4秒、最大2回リトライ |
+
+### NanoKVM-USB Desktop (v2026.02.27)
+
+| 変更 | 内容 |
+|------|------|
+| **ログイン速度最適化 (skipWake)** | picoclaw 経由のログインで S3 ウェイクシーケンスをスキップ。PIN 待機 3000→1500ms、Backspace 20→10回、文字入力遅延 150→80ms に短縮。結果: 14秒 → 5秒 |
+| **Vision 言語対応** | `~/.picoclaw/config.json` の `language` フィールドを読み取り、Vision LLM プロンプトに言語指示を付加。日本語・中国語・韓国語・ドイツ語等に対応 |
+| **ffmpeg バンドル** | `ffmpeg-static` npm パッケージを導入し、アプリ内にffmpegバイナリをバンドル。別のマシンへのコピーでもffmpegなしでロック中キャプチャが動作 |
+| **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 || **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |
