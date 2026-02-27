@@ -1,7 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http'
 import { BrowserWindow, ipcMain } from 'electron'
 import { IpcEvents } from '@common/ipc-events'
-import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision } from '../picoclaw/vision'
+import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision, getVisionLanguage } from '../picoclaw/vision'
 import { isFfmpegCaptureAvailable, captureFrameNative } from '../device/capture'
 import { loginToWindows } from '../device/login'
 
@@ -276,8 +276,10 @@ export class ApiServer {
       }
 
       // Run login sequence in main process (Node.js timers are NOT frozen by macOS lock)
-      console.log('[API Server] Starting login sequence in main process...')
-      await loginToWindows(password, username || undefined)
+      // skipWake=true: picoclaw already confirmed LOCK_SCREEN via screen_check,
+      // meaning the PC is awake — skip the 5s S3 wake delay.
+      console.log('[API Server] Starting login sequence in main process (skipWake=true)...')
+      await loginToWindows(password, username || undefined, true)
       console.log('[API Server] Login sequence completed')
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -543,14 +545,21 @@ export class ApiServer {
       }
 
       // Build prompt based on action type
-      // NOTE: Use simple English prompts - moondream is a small English-only model
+      // Language-aware prompts: use user's configured language for response text
+      const lang = getVisionLanguage()
+      const langInstruction = lang === 'ja' ? '\n\n日本語で回答してください。' 
+        : lang === 'zh' ? '\n\n请用中文回答。'
+        : lang === 'ko' ? '\n\n한국어로 답변해 주세요.'
+        : lang === 'de' ? '\n\nBitte antworten Sie auf Deutsch.'
+        : lang ? `\n\nRespond in the user's language (${lang}).`
+        : ''
       let prompt: string
       if (action === 'lock') {
         prompt =
           'Is this a Windows lock screen or a desktop?\n' +
           'Lock screen: shows clock, date, user avatar, background image, no taskbar.\n' +
           'Desktop: shows taskbar at bottom, application windows, desktop icons.\n\n' +
-          'Answer with ONLY one word: LOCK_SCREEN or DESKTOP'
+          'Answer with ONLY one word: LOCK_SCREEN or DESKTOP' + langInstruction
       } else if (action === 'login') {
         prompt =
           'After a Windows login attempt, what is currently shown on screen?\n' +
@@ -560,7 +569,7 @@ export class ApiServer {
           '- "PIN is incorrect" or "password is incorrect" error text = LOGIN_FAILED\n' +
           '- Large clock display, user avatar circle, or PIN input field = LOCK_SCREEN\n\n' +
           'IMPORTANT: If you see a taskbar at the bottom, it is LOGIN_SUCCESS even if the wallpaper looks similar to a lock screen.\n\n' +
-          'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN'
+          'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
       } else {
         // action === 'status': general screen description
         prompt =
@@ -569,7 +578,7 @@ export class ApiServer {
           '- What type of screen it is (desktop, lock screen, login screen, application window, etc.)\n' +
           '- What applications or windows are visible (if any)\n' +
           '- Any notable UI elements (taskbar, dialog boxes, error messages, etc.)\n\n' +
-          'Be specific and factual about what you see.'
+          'Be specific and factual about what you see.' + langInstruction
       }
 
       // Analyze with Vision LLM

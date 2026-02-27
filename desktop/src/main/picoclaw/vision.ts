@@ -114,6 +114,7 @@ function readVisionConfig(): {
   model: string
   apiKey: string
   apiBase: string
+  language: string
 } {
   const configPath = path.join(os.homedir(), '.picoclaw', 'config.json')
   try {
@@ -121,15 +122,24 @@ function readVisionConfig(): {
     const config = JSON.parse(content)
     const provider = config.agents?.defaults?.vision_provider || ''
     const model = config.agents?.defaults?.vision_model || ''
+    const language = config.language || ''
     if (!provider || !model) {
-      return { provider: '', model: '', apiKey: '', apiBase: '' }
+      return { provider: '', model: '', apiKey: '', apiBase: '', language }
     }
     const apiKey = config.providers?.[provider]?.api_key || ''
     const apiBase = config.providers?.[provider]?.api_base || ''
-    return { provider, model, apiKey, apiBase }
+    return { provider, model, apiKey, apiBase, language }
   } catch {
-    return { provider: '', model: '', apiKey: '', apiBase: '' }
+    return { provider: '', model: '', apiKey: '', apiBase: '', language: '' }
   }
+}
+
+/**
+ * Get the user's preferred language from picoclaw config.
+ * Returns ISO 639-1 code (e.g., 'ja', 'en', 'zh') or empty string.
+ */
+export function getVisionLanguage(): string {
+  return readVisionConfig().language
 }
 
 /**

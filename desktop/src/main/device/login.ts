@@ -141,80 +141,89 @@ async function typeText(text: string, charDelay = 150): Promise<void> {
  * Runs entirely in the main process so macOS lock-screen
  * cannot freeze the timers.
  *
- * Sequence:
+ * @param password  - PIN or password string
+ * @param username  - If provided, uses username+Tab+password flow
+ * @param skipWake  - If true, skip S3 wake sequence (screen already confirmed awake)
+ *
+ * Sequence (full):
  *   0. Escape         → dismiss leftover error dialog
- *   1. Mouse click + Space → wake from S3 sleep
- *   1b. Wait 5 s      → HDMI signal stabilisation
+ *   1. Mouse click + Space → wake from S3 sleep   (skipped if skipWake)
+ *   1b. Wait 5 s      → HDMI signal stabilisation (skipped if skipWake)
  *   2. Space ×2        → transition lock-screen → PIN entry
- *   2b. Wait 3 s      → let Windows render the PIN input
- *   3. Backspace ×20   → clear leftover characters
+ *   2b. Wait 1.5 s    → let Windows render the PIN input
+ *   3. Backspace ×10   → clear leftover characters
  *   4. Type PIN / username+Tab+password
  *   5. Enter           → submit
  */
 export async function loginToWindows(
   password: string,
-  username?: string
+  username?: string,
+  skipWake = false
 ): Promise<void> {
   // ── Step 0: Dismiss leftover error dialog ──
   console.log('[Login] Step 0: Escape to dismiss error dialog')
   await pressKey('Escape')
-  await sleep(300)
+  await sleep(200)
 
-  // ── Step 1: Wake from S3 sleep ──
-  console.log('[Login] Step 1: Mouse click + Space to wake')
-  try {
-    // Relative-mode mouse left-click press
-    await sendMs([0x01, 0x01, 0x00, 0x00, 0x00])
-    await sleep(50)
-    // Release
-    await sendMs([0x01, 0x00, 0x00, 0x00, 0x00])
-    await sleep(100)
-  } catch (err) {
-    console.warn('[Login] Mouse wake failed (non-fatal):', err)
+  if (!skipWake) {
+    // ── Step 1: Wake from S3 sleep ──
+    console.log('[Login] Step 1: Mouse click + Space to wake')
+    try {
+      // Relative-mode mouse left-click press
+      await sendMs([0x01, 0x01, 0x00, 0x00, 0x00])
+      await sleep(50)
+      // Release
+      await sendMs([0x01, 0x00, 0x00, 0x00, 0x00])
+      await sleep(100)
+    } catch (err) {
+      console.warn('[Login] Mouse wake failed (non-fatal):', err)
+    }
+    await pressKey('Space')
+
+    console.log('[Login] Step 1b: Waiting 5 s for S3 wake + HDMI sync')
+    await sleep(5000)
+  } else {
+    console.log('[Login] Step 1: Skipped wake (screen already confirmed awake)')
   }
-  await pressKey('Space')
-
-  console.log('[Login] Step 1b: Waiting 5 s for S3 wake + HDMI sync')
-  await sleep(5000)
 
   // ── Step 2: Lock-screen → PIN entry ──
   console.log('[Login] Step 2: Space ×2 to show PIN entry')
   await pressKey('Space')
-  await sleep(500)
+  await sleep(400)
   await pressKey('Space')
 
-  console.log('[Login] Step 2b: Waiting 3 s for PIN entry field')
-  await sleep(3000)
+  console.log('[Login] Step 2b: Waiting 1.5 s for PIN entry field')
+  await sleep(1500)
 
   // ── Step 3: Clear any leftover content ──
-  console.log('[Login] Step 3: Backspace ×20 to clear field')
-  for (let i = 0; i < 20; i++) {
+  console.log('[Login] Step 3: Backspace ×10 to clear field')
+  for (let i = 0; i < 10; i++) {
     await pressKey('Backspace', 30)
-    await sleep(30)
+    await sleep(20)
   }
-  await sleep(300)
+  await sleep(200)
 
   if (username) {
     // Full login: username → Tab → password → Enter
     console.log('[Login] Step 4: Typing username')
-    await typeText(username)
-    await sleep(300)
+    await typeText(username, 80)
+    await sleep(200)
 
     console.log('[Login] Step 5: Tab')
     await pressKey('Tab')
-    await sleep(300)
+    await sleep(200)
 
     console.log('[Login] Step 6: Typing password')
-    await typeText(password)
-    await sleep(300)
+    await typeText(password, 80)
+    await sleep(200)
 
     console.log('[Login] Step 7: Enter')
     await pressKey('Enter')
   } else {
     // PIN-only login
     console.log(`[Login] Step 4: Typing PIN (${password.length} chars)`)
-    await typeText(password, 150)
-    await sleep(300)
+    await typeText(password, 80)
+    await sleep(200)
 
     console.log('[Login] Step 5: Enter')
     await pressKey('Enter')
