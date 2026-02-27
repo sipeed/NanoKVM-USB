@@ -4,6 +4,8 @@ set -e
 
 DOCS_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC="$DOCS_DIR/picoclaw-lock-login-spec.md"
+MERMAID_CSS="$DOCS_DIR/mermaid.css"
+MERMAID_CFG="$DOCS_DIR/mermaid-config.json"
 TMPDIR="$(mktemp -d)"
 RENDERED_MD="$TMPDIR/rendered.md"
 
@@ -28,7 +30,7 @@ for mmd in "$TMPDIR"/mermaid_*.mmd; do
   png="${mmd%.mmd}.png"
   base=$(basename "$png")
   echo "  Rendering $base ..."
-  mmdc -i "$mmd" -o "$png" -b white -w 1200 2>&1 | grep -v "Generating single" || true
+  mmdc -i "$mmd" -o "$png" -b white -w 1200 -C "$MERMAID_CSS" -c "$MERMAID_CFG" 2>&1 | grep -v "Generating single" || true
 done
 
 echo "=== Generating PDF ==="

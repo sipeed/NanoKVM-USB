@@ -1,0 +1,4 @@
+/* Japanese font support for Mermaid diagrams */
+* {
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", sans-serif !important;
+}

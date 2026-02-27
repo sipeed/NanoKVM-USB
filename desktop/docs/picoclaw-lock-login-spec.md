@@ -163,7 +163,7 @@ sequenceDiagram
         KVM-->>Render: USB UVC 映像
         Render-->>API: IPC (base64 JPEG)
         API->>ChatLLM: HTTPS (Vision LLM)
-        Note right of ChatLLM: Llama 4 Scout<br>画面を解析
+        Note right of ChatLLM: Vision LLM が<br>画面を解析
         ChatLLM-->>API: "LOCK_SCREEN"
         API-->>Agent: 検証結果
     end
@@ -173,6 +173,77 @@ sequenceDiagram
     GW->>TG: 返信送信
     TG->>User: "✅ ロック完了"
 ```
+
+### ChatUI ロック操作のシーケンス図
+
+> アプリ内蔵の ChatUI から同じロック操作を行う場合のシーケンスです。
+> Telegram 経由とは異なり、gateway を介さず Renderer → Main Process 間の IPC で直接 picoclaw を呼び出します。
+
+```mermaid
+sequenceDiagram
+    actor User as 👤 ユーザー
+    participant ChatUI as 💬 Chat UI<br>(Renderer)
+    participant Main as 🖥️ Main Process
+    participant Agent as 🐾 agent -m<br>(子プロセス)
+    participant ChatLLM as ☁️ Chat LLM
+    participant API as ⚡ API Server<br>:18792
+    participant Render as 🖥️ Renderer
+    participant KVM as 🔧 NanoKVM
+    participant WinPC as 🪟 Windows PC
+
+    User->>ChatUI: 「ロックして」と入力
+    ChatUI->>Main: IPC: PICOCLAW_SEND_MESSAGE<br>(message, language, sessionId)
+    Main->>Agent: spawn picoclaw agent -m<br>"ロックして" -l ja -s chatId
+
+    rect rgb(232, 244, 253)
+        Note over Agent,ChatLLM: Chat LLM にユーザー意図を問い合わせ
+        Agent->>ChatLLM: HTTPS (メッセージ送信)
+        ChatLLM-->>Agent: Tool Call: nanokvm_lock
+    end
+
+    rect rgb(255, 243, 224)
+        Note over Agent,WinPC: Win+L キー送信
+        Agent->>API: POST /keyboard/type
+        API->>Render: IPC (HID encode)
+        Render->>KVM: Serial Port (USB)
+        KVM->>WinPC: USB HID (Win+L)
+        Note over WinPC: ロック画面に遷移
+    end
+
+    Note over Agent: ⏱️ 3秒待機
+
+    rect rgb(252, 228, 236)
+        Note over Agent,ChatLLM: 画面検証（Vision LLM）
+        Agent->>API: POST /screen/verify
+        API->>Render: IPC (キャプチャ要求)
+        Note over Render: drawImage() → base64 JPEG
+        WinPC-->>KVM: HDMI 映像
+        KVM-->>Render: USB UVC 映像
+        Render-->>API: IPC (base64 JPEG)
+        API->>ChatLLM: HTTPS (Vision LLM)
+        Note right of ChatLLM: Vision LLM が<br>画面を解析
+        ChatLLM-->>API: "LOCK_SCREEN"
+        API-->>Agent: 検証結果
+    end
+
+    Agent-->>Main: stdout: "✅ ロック完了"
+    Note over Agent: プロセス終了
+    Main->>Main: stripActionTags(output)
+    Main-->>ChatUI: IPC 応答: { success, response }
+    ChatUI->>User: 💬 "✅ ロック完了"
+```
+
+**Telegram と ChatUI の比較**:
+
+| 項目 | Telegram | ChatUI |
+|------|----------|--------|
+| **入口** | Telegram Bot API → gateway (常駐) | Renderer IPC → Main Process |
+| **プロセス管理** | gateway が spawn・監視 | manager.ts が spawn・監視 |
+| **セッション** | Telegram Chat ID | `chat-{timestamp}` |
+| **レスポンス** | Bot API で返信 | IPC で ChatUI に直接返却 |
+| **言語設定** | picoclaw config | i18n.language を引数で渡す |
+| **Tool Call 後処理** | gateway が interceptToolCallText | manager.ts が interceptToolCallText |
+| **エラー表示** | Telegram メッセージ | ChatUI 赤バブル + レート制限ポップアップ |
 
 **データフローの要点**:
 
@@ -1005,3 +1076,6 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 |
 | **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |
 | **全体アーキテクチャ図更新** | picoclaw・ffmpeg をアプリ内蔵バンドルとして Electron サブグラフ内に移動。Main Process / CaptureEngine ブロック追加。バンドル済みコンポーネント表とサイズ情報を追加 |
+| **Telegram シーケンス図修正** | Vision LLM の記述を特定モデル名（Llama 4 Scout）から汎用的な「Vision LLM」に変更 |
+| **ChatUI シーケンス図追加** | アプリ内蔵 ChatUI からのロック操作シーケンス図を追加。Telegram との比較表付き |
+| **Mermaid 日本語フォント修正** | SVG/PDF の Mermaid 図で日本語が文字化けする問題を修正。`mermaid.css` + `mermaid-config.json` で Hiragino Sans 等の日本語フォントを指定 |

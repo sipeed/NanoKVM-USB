@@ -22,6 +22,25 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 
 ![Diagram 2](picoclaw-lock-login-spec-rendered-2.svg)
 
+### ChatUI ロック操作のシーケンス図
+
+> アプリ内蔵の ChatUI から同じロック操作を行う場合のシーケンスです。
+> Telegram 経由とは異なり、gateway を介さず Renderer → Main Process 間の IPC で直接 picoclaw を呼び出します。
+
+![Diagram 3](picoclaw-lock-login-spec-rendered-3.svg)
+
+**Telegram と ChatUI の比較**:
+
+| 項目 | Telegram | ChatUI |
+|------|----------|--------|
+| **入口** | Telegram Bot API → gateway (常駐) | Renderer IPC → Main Process |
+| **プロセス管理** | gateway が spawn・監視 | manager.ts が spawn・監視 |
+| **セッション** | Telegram Chat ID | `chat-{timestamp}` |
+| **レスポンス** | Bot API で返信 | IPC で ChatUI に直接返却 |
+| **言語設定** | picoclaw config | i18n.language を引数で渡す |
+| **Tool Call 後処理** | gateway が interceptToolCallText | manager.ts が interceptToolCallText |
+| **エラー表示** | Telegram メッセージ | ChatUI 赤バブル + レート制限ポップアップ |
+
 **データフローの要点**:
 
 | 方向 | フロー | 説明 |
@@ -243,7 +262,7 @@ ffmpeg -f dshow -video_size 1920x1080 -i "video=USB3 Video" -frames:v 1 -f image
 
 画面キャプチャは **Renderer IPC（高速パス）** と **ffmpeg ネイティブキャプチャ（フォールバック）** の2段階で動作します。
 
-![Diagram 3](picoclaw-lock-login-spec-rendered-3.svg)
+![Diagram 4](picoclaw-lock-login-spec-rendered-4.svg)
 
 ### 通常利用時（ロック解除状態）とロック時の動作
 
@@ -421,7 +440,7 @@ GitHub Copilot プロバイダは [GitHub Models API](https://models.inference.a
 GitHub Copilot を使用するには GitHub CLI (`gh`) のインストールと認証が必要です。
 アプリ内の「🔑 GitHub 認証を開始」ボタンから以下のフローで認証できます:
 
-![Diagram 4](picoclaw-lock-login-spec-rendered-4.svg)
+![Diagram 5](picoclaw-lock-login-spec-rendered-5.svg)
 
 **前提条件**:
 - [GitHub CLI (`gh`)](https://cli.github.com) がインストール済み
@@ -486,7 +505,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 更新フロー
 
-![Diagram 5](picoclaw-lock-login-spec-rendered-5.svg)
+![Diagram 6](picoclaw-lock-login-spec-rendered-6.svg)
 
 ### 手動更新
 
@@ -524,7 +543,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 設計思想: チャット用 LLM と Vision LLM の分離
 
-![Diagram 6](picoclaw-lock-login-spec-rendered-6.svg)
+![Diagram 7](picoclaw-lock-login-spec-rendered-7.svg)
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
 例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
@@ -533,7 +552,7 @@ picoclaw のモデルリストは、プロバイダが新モデルを追加し�
 
 ### 検証フロー
 
-![Diagram 7](picoclaw-lock-login-spec-rendered-7.svg)
+![Diagram 8](picoclaw-lock-login-spec-rendered-8.svg)
 
 ### Vision プロンプト
 
