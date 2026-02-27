@@ -28,7 +28,16 @@ NanoKVM-USB デスクトップアプリに組み込まれた AI エージェン�
 |------|--------|------|
 | **➡️ 操作** | Chat/Telegram → picoclaw agent -m → Chat LLM → Tool Call → API Server → Renderer → Serial Port → NanoKVM → Windows PC | キー・マウス操作の送信 |
 | **⬅️ 映像** | Windows PC → HDMI → NanoKVM → USB (UVC) → Renderer `<video>` (getUserMedia) | HDMI 映像のリアルタイム表示 |
-| **🔄 検証** | API Server → Renderer canvas キャプチャ → base64 JPEG → Vision LLM (Groq) → 判定結果 | 画面キャプチャ + Vision 解析 |
+| **🔄 検証（通常）** | API Server → capture.ts → ① Renderer IPC canvas キャプチャ → base64 JPEG → Vision LLM → 判定結果 | 高速パス（~50ms） |
+| **🔄 検証（ロック時）** | API Server → capture.ts → ② ffmpeg spawn → AVFoundation → base64 JPEG → Vision LLM → 判定結果 | フォールバック（~500ms） |
+
+**バンドル済みコンポーネント（アプリ内蔵）**:
+
+| コンポーネント | 配置パス | サイズ | 役割 |
+|-------------|---------|-------|------|
+| **picoclaw** | `resources/bin/picoclaw` | ~18MB | AI エージェント（Go 静的バイナリ） |
+| **ffmpeg** | `Resources/bin/ffmpeg` | ~80MB | ロック時キャプチャ（ffmpeg-static） |
+| **Electron/Chromium** | `Frameworks/` | ~254MB | アプリ基盤・Renderer・WebRTC |
 
 ---
 
@@ -694,4 +703,6 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **ログイン速度最適化 (skipWake)** | picoclaw 経由のログインで S3 ウェイクシーケンスをスキップ。PIN 待機 3000→1500ms、Backspace 20→10回、文字入力遅延 150→80ms に短縮。結果: 14秒 → 5秒 |
 | **Vision 言語対応** | `~/.picoclaw/config.json` の `language` フィールドを読み取り、Vision LLM プロンプトに言語指示を付加。日本語・中国語・韓国語・ドイツ語等に対応 |
 | **ffmpeg バンドル** | `ffmpeg-static` npm パッケージを導入し、アプリ内にffmpegバイナリをバンドル。別のマシンへのコピーでもffmpegなしでロック中キャプチャが動作 |
-| **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 || **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |
+| **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 |
+| **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |
+| **全体アーキテクチャ図更新** | picoclaw・ffmpeg をアプリ内蔵バンドルとして Electron サブグラフ内に移動。Main Process / CaptureEngine ブロック追加。バンドル済みコンポーネント表とサイズ情報を追加 |

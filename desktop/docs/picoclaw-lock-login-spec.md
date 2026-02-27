@@ -25,12 +25,20 @@ graph TB
         VisionLLM["Vision LLM\ngpt-4.1"]
     end
 
-    %% ===== macOS ホストマシン =====
-    subgraph Mac["🖥️ macOS ホストマシン"]
+    %% ===== NanoKVM-USB Desktop アプリ =====
+    subgraph Electron["⚡ NanoKVM-USB Desktop（Electron アプリ）"]
 
-        ChatUI["💬 Chat UI"]
+        subgraph MainProcess["Main Process（Node.js）"]
+            Manager["manager.ts\nsendMessage()"]
+            subgraph APIServer["API Server :18792"]
+                KeyboardAPI["/keyboard/*"]
+                ScreenAPI["/screen/verify"]
+            end
+            SerialPort["🔌 Serial Port\nUSB HID 出力"]
+            CaptureEngine["📸 capture.ts\n2段階フォールバック"]
+        end
 
-        subgraph picoclaw["🐾 picoclaw（Go バイナリ）"]
+        subgraph picoclaw["🐾 picoclaw（バンドル済み Go バイナリ）\nresources/bin/picoclaw"]
             subgraph gateway["gateway（常駐プロセス）"]
                 TelegramBot["Telegram Bot 受信"]
                 Cron["Cron スケジューラ"]
@@ -39,18 +47,13 @@ graph TB
             Agent["agent -m\n（毎回新規の子プロセス）"]
         end
 
-        subgraph Electron["⚡ NanoKVM-USB Desktop（Electron）"]
-            Manager["manager.ts\nsendMessage()"]
-            subgraph APIServer["API Server :18792"]
-                KeyboardAPI["/keyboard/*"]
-                ScreenAPI["/screen/verify"]
-            end
-            subgraph RendererBox["Renderer（React）"]
-                Video["📺 &lt;video&gt;\ngetUserMedia() ← UVC"]
-                Canvas["🖼️ &lt;canvas&gt;\n→ base64 JPEG"]
-                HIDEncode["⌨️ HID encode\napi-handler.ts"]
-            end
-            SerialPort["🔌 Serial Port\nUSB HID 出力"]
+        FfmpegBin["🎬 ffmpeg（バンドル済み）\nResources/bin/ffmpeg\n80MB 静的バイナリ"]
+
+        subgraph RendererBox["Renderer（React）"]
+            ChatUI["💬 Chat UI"]
+            Video["📺 &lt;video&gt;\ngetUserMedia() ← UVC"]
+            Canvas["🖼️ &lt;canvas&gt;\n→ base64 JPEG"]
+            HIDEncode["⌨️ HID encode\napi-handler.ts"]
         end
     end
 
@@ -66,7 +69,7 @@ graph TB
     Dispatcher -- "spawn\n（メッセージごと）" --> Agent
 
     %% Chat UI 経路
-    ChatUI --> Manager
+    ChatUI -- "IPC" --> Manager
     Manager -- "spawn\nagent -m" --> Agent
 
     %% agent → LLM
@@ -80,10 +83,17 @@ graph TB
     KeyboardAPI -- "IPC" --> HIDEncode
     HIDEncode -- "IPC" --> SerialPort
 
-    %% API Server → Renderer（映像キャプチャ系）
-    ScreenAPI -- "IPC\nキャプチャ要求" --> Canvas
+    %% API Server → Renderer（映像キャプチャ系: ① 通常パス）
+    ScreenAPI --> CaptureEngine
+    CaptureEngine -- "① IPC\n通常パス" --> Canvas
     Video -- "drawImage()" --> Canvas
-    Canvas -- "IPC\nbase64 JPEG" --> ScreenAPI
+    Canvas -- "IPC\nbase64 JPEG" --> CaptureEngine
+
+    %% API Server → ffmpeg（映像キャプチャ系: ② フォールバック）
+    CaptureEngine -- "② spawn\nロック時フォールバック" --> FfmpegBin
+    FfmpegBin -- "base64\nJPEG" --> CaptureEngine
+
+    CaptureEngine -- "base64 JPEG" --> ScreenAPI
     ScreenAPI -- "HTTPS\nbase64 JPEG 送信" --> VisionLLM
 
     %% ハードウェア接続
@@ -91,14 +101,18 @@ graph TB
     NanoKVM -- "USB HID\n操作転送 ➡️" --> WindowsPC
     WindowsPC -- "HDMI\n映像出力 ⬅️" --> NanoKVM
     NanoKVM -- "USB UVC\n映像転送 ⬅️" --> Video
+    NanoKVM -. "USB UVC\n（AVFoundation経由）" .-> FfmpegBin
 
     %% スタイル
     style Cloud fill:#e8f4fd,stroke:#4a90d9
-    style picoclaw fill:#f0f9e8,stroke:#7cb342
     style Electron fill:#fff3e0,stroke:#ff9800
+    style MainProcess fill:#fff8e1,stroke:#ffc107
+    style picoclaw fill:#f0f9e8,stroke:#7cb342
     style gateway fill:#e8f5e9,stroke:#66bb6a
     style RendererBox fill:#fce4ec,stroke:#e91e63
-    style APIServer fill:#fff8e1,stroke:#ffc107
+    style APIServer fill:#e8f4fd,stroke:#4a90d9
+    style FfmpegBin fill:#e8eaf6,stroke:#5c6bc0
+    style CaptureEngine fill:#f3e5f5,stroke:#9c27b0
     style NanoKVM fill:#f3e5f5,stroke:#9c27b0
     style WindowsPC fill:#e3f2fd,stroke:#2196f3
 ```
@@ -166,7 +180,16 @@ sequenceDiagram
 |------|--------|------|
 | **➡️ 操作** | Chat/Telegram → picoclaw agent -m → Chat LLM → Tool Call → API Server → Renderer → Serial Port → NanoKVM → Windows PC | キー・マウス操作の送信 |
 | **⬅️ 映像** | Windows PC → HDMI → NanoKVM → USB (UVC) → Renderer `<video>` (getUserMedia) | HDMI 映像のリアルタイム表示 |
-| **🔄 検証** | API Server → Renderer canvas キャプチャ → base64 JPEG → Vision LLM (Groq) → 判定結果 | 画面キャプチャ + Vision 解析 |
+| **🔄 検証（通常）** | API Server → capture.ts → ① Renderer IPC canvas キャプチャ → base64 JPEG → Vision LLM → 判定結果 | 高速パス（~50ms） |
+| **🔄 検証（ロック時）** | API Server → capture.ts → ② ffmpeg spawn → AVFoundation → base64 JPEG → Vision LLM → 判定結果 | フォールバック（~500ms） |
+
+**バンドル済みコンポーネント（アプリ内蔵）**:
+
+| コンポーネント | 配置パス | サイズ | 役割 |
+|-------------|---------|-------|------|
+| **picoclaw** | `resources/bin/picoclaw` | ~18MB | AI エージェント（Go 静的バイナリ） |
+| **ffmpeg** | `Resources/bin/ffmpeg` | ~80MB | ロック時キャプチャ（ffmpeg-static） |
+| **Electron/Chromium** | `Frameworks/` | ~254MB | アプリ基盤・Renderer・WebRTC |
 
 ---
 
@@ -979,4 +1002,6 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **ログイン速度最適化 (skipWake)** | picoclaw 経由のログインで S3 ウェイクシーケンスをスキップ。PIN 待機 3000→1500ms、Backspace 20→10回、文字入力遅延 150→80ms に短縮。結果: 14秒 → 5秒 |
 | **Vision 言語対応** | `~/.picoclaw/config.json` の `language` フィールドを読み取り、Vision LLM プロンプトに言語指示を付加。日本語・中国語・韓国語・ドイツ語等に対応 |
 | **ffmpeg バンドル** | `ffmpeg-static` npm パッケージを導入し、アプリ内にffmpegバイナリをバンドル。別のマシンへのコピーでもffmpegなしでロック中キャプチャが動作 |
-| **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 || **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |
+| **Windows ffmpeg 対応** | `capture.ts` を macOS AVFoundation + Windows DirectShow のクロスプラットフォーム設計にリファクタ。デバイス検出・キャプチャの両方を抽象化 |
+| **ffmpeg キャプチャ仕様書追加** | 2段階フォールバック設計（Renderer IPC → ffmpeg）、キャプチャパイプライン、デバイス検出パターン、キャッシュ機構、エラーハンドリング、同時アクセス安全性の全仕様を文書化 |
+| **全体アーキテクチャ図更新** | picoclaw・ffmpeg をアプリ内蔵バンドルとして Electron サブグラフ内に移動。Main Process / CaptureEngine ブロック追加。バンドル済みコンポーネント表とサイズ情報を追加 |
