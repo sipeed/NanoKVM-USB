@@ -3,6 +3,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { IpcEvents } from '@common/ipc-events'
 import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision } from '../picoclaw/vision'
 import { isFfmpegCaptureAvailable, captureFrameNative } from '../device/capture'
+import { loginToWindows } from '../device/login'
 
 export interface ApiServerConfig {
   port: number
@@ -274,20 +275,16 @@ export class ApiServer {
         username = ''
       }
 
-      if (!this.mainWindow) {
-        res.writeHead(503, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'Main window not available' }))
-        return
-      }
-
-      // Send to renderer process
-      this.mainWindow.webContents.send('api:keyboard:login', { password, username })
+      // Run login sequence in main process (Node.js timers are NOT frozen by macOS lock)
+      console.log('[API Server] Starting login sequence in main process...')
+      await loginToWindows(password, username || undefined)
+      console.log('[API Server] Login sequence completed')
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true }))
     } catch (err) {
       console.error('[API Server] Error in keyboard/login:', err)
-      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: String(err) }))
     }
   }
