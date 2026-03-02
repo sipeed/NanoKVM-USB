@@ -378,9 +378,12 @@ function makeHttpRequest(
     }
 
     const req = transport.request(options, (res) => {
-      let data = ''
-      res.on('data', (chunk) => { data += chunk })
+      // Collect response as Buffer chunks to avoid UTF-8 multi-byte split issues
+      const chunks: Buffer[] = []
+      res.on('data', (chunk: Buffer) => { chunks.push(chunk) })
       res.on('end', () => {
+        // Concatenate all chunks, then decode as UTF-8 at once
+        const data = Buffer.concat(chunks).toString('utf-8')
         try {
           const parsed = JSON.parse(data)
 
