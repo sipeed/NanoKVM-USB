@@ -5,6 +5,7 @@ import fs from 'fs'
 import os from 'os'
 import http from 'http'
 import { translateApiError, RateLimitInfo } from '@common/error-messages'
+import { ensureProtocolPrefix } from '@common/known-protocols'
 import { vaultManager } from '../vault/manager'
 
 export interface ModelListEntry {
@@ -616,11 +617,33 @@ export class PicoclawManager {
   }
 
   /**
-   * Update picoclaw config
+   * Update picoclaw config.
+   * Uses deep merge for nested objects (agents, channels, providers) to prevent
+   * data loss — e.g. agents.list or non-telegram channel configs.
    */
   updateConfig(updates: Partial<PicoclawConfig>): void {
     const config = this.getConfig()
-    const newConfig = { ...config, ...updates }
+
+    // Deep merge: for each key in updates, merge nested objects instead of replacing
+    const newConfig = { ...config }
+    for (const [key, value] of Object.entries(updates)) {
+      if (value && typeof value === 'object' && !Array.isArray(value) &&
+          config[key] && typeof config[key] === 'object' && !Array.isArray(config[key])) {
+        // Merge objects one level deep (sufficient for agents, channels, providers)
+        newConfig[key] = { ...config[key], ...value }
+      } else {
+        newConfig[key] = value
+      }
+    }
+
+    // Remove undefined values from agents.defaults (e.g. max_tokens reset)
+    if (newConfig.agents?.defaults) {
+      for (const [k, v] of Object.entries(newConfig.agents.defaults)) {
+        if (v === undefined) {
+          delete newConfig.agents.defaults[k]
+        }
+      }
+    }
 
     // Sync model_list from agents.defaults + providers
     this.syncModelList(newConfig)
@@ -651,28 +674,16 @@ export class PicoclawManager {
     const upsertModel = (modelName: string, provider: string): void => {
       const providerConfig = providers[provider] || {}
 
-      // If modelName already contains a provider prefix (e.g. "github-copilot/gpt-4o-mini"),
-      // use it as-is for the model field instead of double-prefixing.
-      const hasPrefix = modelName.includes('/')
-      const canonicalProvider =
-        provider === 'github_copilot' || provider === 'copilot'
-          ? 'github-copilot'
-          : provider
-      const fullModel = hasPrefix ? modelName : `${canonicalProvider}/${modelName}`
+      // Use knownProtocols check instead of naive '/' presence.
+      // HuggingFace-style names like "meta-llama/llama-4-scout" contain '/' but
+      // "meta-llama" is NOT a known protocol — must prepend "groq/".
+      const fullModel = ensureProtocolPrefix(modelName, provider)
 
       const entry: ModelListEntry = {
         model_name: modelName,
         model: fullModel,
         api_key: providerConfig.api_key || '',
         api_base: providerConfig.api_base || ''
-      }
-
-      // Normalize protocol prefix for GitHub Copilot
-      if (
-        !hasPrefix &&
-        (provider === 'github-copilot' || provider === 'github_copilot' || provider === 'copilot')
-      ) {
-        entry.model = `github-copilot/${modelName}`
       }
 
       const existingIdx = modelList.findIndex((m) => m.model_name === modelName)

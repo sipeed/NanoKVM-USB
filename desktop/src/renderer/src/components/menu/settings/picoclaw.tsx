@@ -4,6 +4,7 @@ import { ClipboardIcon, ExternalLinkIcon, Eye, EyeOff, Shield, ShieldCheck, Tras
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
+import { stripProtocolPrefix, ensureProtocolPrefix } from '@common/known-protocols'
 import { ModelUpdateSettings, ModelUpdateSettingsRef } from './model-update'
 
 interface PicoclawConfig {
@@ -11,10 +12,18 @@ interface PicoclawConfig {
     defaults?: {
       provider?: string
       model?: string
+      model_name?: string
+      model_fallbacks?: string[]
       vision_provider?: string
       vision_model?: string
       max_tokens?: number
+      temperature?: number
+      max_tool_iterations?: number
+      workspace?: string
+      restrict_to_workspace?: boolean
     }
+    // Go's AgentsConfig has a list field for multi-agent definitions
+    list?: unknown[]
   }
   providers?: {
     [key: string]: {
@@ -29,6 +38,7 @@ interface PicoclawConfig {
       proxy?: string
       allow_from?: string[]
     }
+    [key: string]: unknown
   }
   model_update?: {
     cached_models?: Record<string, string[]>
@@ -147,10 +157,15 @@ function buildProviderOptions(
     const meta = PROVIDER_UI_META[dp.name]
     const addedIds = new Set<string>()
 
-    // Build model options: start with models from Go, enrich with UI metadata
+    // Build model options: start with models from Go, enrich with UI metadata.
+    // Go returns fully prefixed IDs (e.g., "groq/meta-llama/llama-4-scout-..."),
+    // but PROVIDER_UI_META uses bare keys (e.g., "meta-llama/llama-4-scout-...").
+    // Strip the known protocol prefix for enrichment lookup, track both forms for dedup.
     const modelOptions = dp.models.map((modelId) => {
       addedIds.add(modelId)
-      const modelMeta = meta?.models?.[modelId]
+      const bareId = stripProtocolPrefix(modelId)
+      addedIds.add(bareId) // prevent PROVIDER_UI_META from adding a duplicate
+      const modelMeta = meta?.models?.[bareId] || meta?.models?.[modelId]
       return {
         value: modelId,
         label: modelMeta?.label || modelId,
@@ -159,13 +174,16 @@ function buildProviderOptions(
       }
     })
 
-    // Also add any models from UI meta that aren't in Go's list (e.g., manually curated)
+    // Also add any models from UI meta that aren't in Go's list (e.g., manually curated).
+    // Always use provider-prefixed value so Go's ExtractProtocol() works correctly.
     if (meta?.models) {
       for (const [modelId, modelMeta] of Object.entries(meta.models)) {
-        if (!addedIds.has(modelId)) {
+        const prefixed = ensureProtocolPrefix(modelId, dp.name)
+        if (!addedIds.has(modelId) && !addedIds.has(prefixed)) {
           addedIds.add(modelId)
+          addedIds.add(prefixed)
           modelOptions.push({
-            value: modelId,
+            value: prefixed, // Always prefix for Go compatibility
             label: modelMeta.label || modelId,
             description: modelMeta.description,
             vision: modelMeta.vision || false
@@ -174,15 +192,18 @@ function buildProviderOptions(
       }
     }
 
-    // Merge API-fetched models (from model-updater cached_models)
+    // Merge API-fetched models (from model-updater cached_models).
+    // Always prefix with provider name to ensure Go's ExtractProtocol() resolves correctly.
     const apiModels = cachedModels?.[dp.name] || []
     for (const modelId of apiModels) {
-      if (!addedIds.has(modelId)) {
+      const fullId = ensureProtocolPrefix(modelId, dp.name)
+      if (!addedIds.has(modelId) && !addedIds.has(fullId)) {
         addedIds.add(modelId)
+        addedIds.add(fullId)
         const modelMeta = meta?.models?.[modelId]
         const vision = modelMeta?.vision || isLikelyVisionModel(modelId)
         modelOptions.push({
-          value: modelId,
+          value: fullId,
           label: modelMeta?.label || (vision ? `${modelId} 👁️` : modelId),
           description: modelMeta?.description || '(API検出)',
           vision
@@ -620,7 +641,11 @@ export const PicoclawSettings = (): ReactElement => {
         // Load current values
         const currentProvider = result.config.agents?.defaults?.provider || 'openrouter'
         setProvider(currentProvider)
-        setModel(result.config.agents?.defaults?.model || '')
+        // Go's GetModelName() prioritises model_name over model — read both.
+        // Normalize: ensure model has provider prefix (e.g. "groq/meta-llama/...")
+        // to match dropdown values.  Old configs may lack the prefix.
+        const rawModel = result.config.agents?.defaults?.model_name || result.config.agents?.defaults?.model || ''
+        setModel(ensureProtocolPrefix(rawModel, currentProvider))
         
         // Load API key for current provider
         if (result.config.providers?.[currentProvider]?.api_key) {
@@ -731,25 +756,44 @@ export const PicoclawSettings = (): ReactElement => {
         }
       }
 
+      // Groq free tier has very low TPM (6000); reduce max_tokens.
+      // For other providers, remove max_tokens so Go uses its default (8192).
+      const maxTokensUpdate: { max_tokens?: number } = provider === 'groq'
+        ? { max_tokens: 1024 }
+        : { max_tokens: undefined }
+
+      // Ensure model has protocol prefix before writing to config.
+      // Dropdown values should already be prefixed after buildProviderOptions fix,
+      // but normalize as a safety net for edge cases (manual input, old state).
+      const normalizedModel = ensureProtocolPrefix(
+        model || providers.find((p) => p.value === provider)?.defaultModel || '',
+        provider
+      )
+
       const updates: PicoclawConfig = {
         agents: {
+          // Preserve agents.list and other keys (deep merge)
+          ...config.agents,
           defaults: {
             ...config.agents?.defaults,
             provider,
-            model: model || providers.find((p) => p.value === provider)?.defaultModel || '',
-            // Groq free tier has very low TPM (6000); reduce max_tokens to avoid hitting limit
-            ...(provider === 'groq' && { max_tokens: 1024 }),
+            model: normalizedModel,
+            // Keep model_name in sync — Go's GetModelName() prioritises model_name
+            // over model, so stale model_name causes provider mismatch.
+            model_name: normalizedModel,
+            ...maxTokensUpdate,
             vision_provider: visionProvider || undefined,
             vision_model: visionModel || undefined
           }
         },
         providers: providersUpdate,
         channels: {
+          // Preserve other channel configs (e.g. discord) — deep merge
           ...config.channels,
           telegram: {
             enabled: telegramEnabled,
             token: telegramToken,
-            proxy: '',
+            proxy: config.channels?.telegram?.proxy || '',
             allow_from: telegramUserId ? [telegramUserId] : []
           }
         }

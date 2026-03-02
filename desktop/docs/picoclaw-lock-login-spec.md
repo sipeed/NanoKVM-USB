@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-03-02 (v2026.03.02)
+> **最終更新**: 2026-03-02 (v2026.03.02a)
 
 ## 概要
 
@@ -1475,17 +1475,97 @@ Vision LLM が設定されていない場合:
 > **Note**: 設定フィールド `model` は `model_name` にリネームされました（v2026.02.25〜）。
 > 旧 `model` フィールドは後方互換で引き続き読み込まれますが、新規設定では `model_name` を推奨します。
 
+### 設定保存時の同期ルール
+
+Go 側の `GetModelName()` は `model_name` → `model` の優先順で読み取るため、
+UI の設定保存時には **両フィールドを同一の値で書き込む** 必要があります。
+
+| フィールド | 保存時の動作 | 読み込み時の動作 |
+|-----------|------------|----------------|
+| `model` | 選択したモデルID を書き込み | `model_name` が空の場合のフォールバック |
+| `model_name` | 同一の値で同時に書き込み | Go が **最優先** で読み取る |
+| `max_tokens` | groq の場合 `1024`、**それ以外は削除** | Go デフォルト `8192` を使用 |
+
+> **max_tokens リセット**: v2026.03.02 以前は groq → 他プロバイダに切替後も `max_tokens: 1024` が
+> 残留し、GPT-4.1 等の高性能モデルが 1024 トークンに制限される問題がありました。
+> 現在はプロバイダ切替時に `max_tokens` フィールドを config.json から削除し、Go のデフォルト値（8192）を使用します。
+
+### 設定更新の深層マージ
+
+`updateConfig()` は **1段階の深層マージ** を行います。トップレベルのオブジェクト
+（`agents`, `channels`, `providers` 等）は展開されるため、以下のデータが保護されます:
+
+| 保護対象 | 説明 |
+|---------|------|
+| `agents.list` | Go の複数エージェント定義（UI は `defaults` のみ操作） |
+| `channels.discord`, `channels.slack` 等 | UI は Telegram のみ操作するが、他チャンネル設定を消さない |
+| `tools`, `heartbeat`, `devices` 等 | UI が操作しないトップレベル設定 |
+
+`agents.defaults` 内で値が `undefined` のフィールド（例: `max_tokens` リセット時）は
+JSON シリアライズ前に削除され、Go 側のデフォルト値が使用されます。
+
 ### レートリミット対策
 
-Groq 無料枠（TPM 6000）での運用を前提とした対策:
+Groq 無料枠（TPM 6000）および GitHub Models API（100回/日/モデル）での運用を前提とした対策:
 
-| 対策 | 説明 |
-|------|------|
-| One-Shot 方式 | セッション蓄積なし → トークン消費を最小化 |
-| 早期終了 | ✅/❌/⚠️ で即座に返却 → 追加 LLM 呼び出し不要 |
-| NanoKVM 回数制限 | 1メッセージあたり最大 4 回 |
-| REDACTED 拒否 | LLM がパスワードを *** にマスクした場合は実行拒否 |
-| 429 ポップアップ | レートリミット時にリトライ待ち時間を UI に表示 |
+| 対策 | 対象 | 説明 |
+|------|------|------|
+| One-Shot 方式 | 全プロバイダ | セッション蓄積なし → トークン消費を最小化 |
+| 早期終了 | 全プロバイダ | ✅/❌/⚠️ で即座に返却 → 追加 LLM 呼び出し不要 |
+| NanoKVM 回数制限 | 全プロバイダ | 1メッセージあたり最大 4 回 |
+| REDACTED 拒否 | 全プロバイダ | LLM がパスワードを *** にマスクした場合は実行拒否 |
+| 429 ポップアップ | 全プロバイダ | レートリミット時にリトライ待ち時間を UI に表示 |
+| Heartbeat 429 バックオフ | 全プロバイダ | heartbeat が 429 を受信した場合、最低30分間 heartbeat を一時停止 |
+| max_tokens 制限 | Groq | Groq 選択時に `max_tokens: 1024` を自動設定（TPM 6000 制限対策） |
+| prompt_cache_key 制限 | 非OpenAI系 | OpenAI / GitHub Models のみ送信。Groq 等は未対応フィールドを拒否するため除外 |
+
+### Heartbeat サービス
+
+picoclaw gateway は定期的に **heartbeat**（LLM による環境チェック呼び出し）を実行します。
+デフォルト間隔は30分で、LLM の API 消費を伴います。
+
+#### 429 レートリミットバックオフ
+
+heartbeat が HTTP 429 (Rate Limit) を受信した場合:
+
+1. エラーメッセージから `Retry-After` または `Please wait N seconds` パターンで待機時間を抽出
+2. 最低30分のバックオフを適用（日次制限の場合に短すぎるリトライを防止）
+3. バックオフ期間中の heartbeat はスキップ（ログに記録）
+4. バックオフ満了後に自動的に heartbeat を再開
+
+> **背景**: GitHub Models API の無料枠は 100回/日/モデル。heartbeat 30分間隔（48回/日）+
+> ユーザーメッセージで100回を超えると全リクエストが 429 になります。
+> バックオフにより heartbeat 分の消費を抑制し、ユーザーメッセージの枠を確保します。
+
+### prompt_cache_key 対応プロバイダ
+
+OpenAI の [Prompt Caching](https://platform.openai.com/docs/guides/prompt-caching) 機能
+（`prompt_cache_key` フィールド）は、以下のエンドポイントでのみ送信されます:
+
+| エンドポイント | 送信 | 理由 |
+|-------------|------|------|
+| `api.openai.com` | ✅ | OpenAI ネイティブ対応 |
+| `models.inference.ai.azure.com` | ✅ | GitHub Models API（OpenAI互換） |
+| `models.github.ai` | ✅ | GitHub Models 新エンドポイント |
+| その他（Groq, Gemini, OpenRouter 等） | ❌ | 未知フィールドを HTTP 400 で拒否 |
+
+> **v2026.03.02 変更**: 以前はブラックリスト方式（Gemini のみ除外）でしたが、
+> Groq が `prompt_cache_key` を拒否する問題が発覚し、ホワイトリスト方式に変更しました。
+
+### GitHub Models API のレート制限
+
+| 項目 | 値 |
+|------|----|
+| **エンドポイント** | `https://models.inference.ai.azure.com/chat/completions` |
+| **認証** | GitHub PAT / `gh auth token` を Bearer トークンとして送信 |
+| **無料枠** | 100回/日/モデル |
+| **有料枠** | [GitHub Models Marketplace](https://github.com/marketplace/models) で拡張可能 |
+
+> **VS Code Copilot との違い**: VS Code の Copilot 拡張機能は非公開の `api.githubcopilot.com`
+> エンドポイントと短命トークン交換（`copilot_internal/v2/token`）を使用しており、
+> Copilot サブスクリプションのレート制限が適用されます（実質無制限）。
+> picoclaw は GitHub **Models** API を使用するため、異なるレート制限が適用されます。
+> `copilot_internal` は非公開 API のため、picoclaw では使用していません。
 
 ---
 
@@ -1539,6 +1619,86 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **`connect_mode` 設定** | プロバイダ設定に `connect_mode` フィールド追加 |
 | **ウェイク方式改善** | 黒画面検出時のウェイク操作をマウスジグル（±1px）からマウスクリック＋キーボード Space に変更。S3 スリープ対応、待機時間 2秒→4秒、最大2回リトライ |
 
+### picoclaw (upstream 140コミットマージ v0.2.0 — v2026.03.02)
+
+#### Channel System 全面リファクタ（~40コミット）
+
+upstream の最大の変更。チャンネルシステムが全面的にリアーキテクチャされました。
+
+| 変更 | 内容 |
+|------|------|
+| **ファクトリレジストリ** | チャンネルの直接コンストラクタを `init()` ベースのファクトリレジストリに置換。`manager.go` が `NewTelegram()` 等を直接呼ばず、レジストリから動的にインスタンス化 |
+| **サブパッケージ化** | `pkg/channels/` 直下のモノリシック構造を `telegram/`, `whatsapp/`, `discord/` 等のサブパッケージに分離。各チャンネルが独立してコンパイル可能に |
+| **BaseChannel 抽象化** | 共通ロジック（Start/Stop ライフサイクル、running 状態の `atomic.Bool` 管理）を `BaseChannel` 構造体に集約。ゴルーチン/コンテキストリークを根本的に修正 |
+| **統一 Start/Stop** | チャンネルのライフサイクル管理を統一。コンテキストキャンセルの伝播、グレースフルシャットダウンを全チャンネルで標準化 |
+| **レート制限・リトライ** | チャンネルごとのレート制限とセンドリトライ機構を追加。`SentinelError` 型によるエラー分類（Transient/Permanent）で再送判定 |
+| **ワーカーキュー** | チャンネルごとのワーカーキューによるメッセージ分割・逐次送信。大きいメッセージの自動分割は `pkg/channels` パッケージに移動 |
+| **MediaSender インターフェース** | メディア送信をオプショナルなケイパビリティインターフェースとして抽出。実装チャンネルのみがメディア送信に対応 |
+| **Typing/Placeholder 自動化** | `StartTyping()` / `PlaceholderRecorder` をケイパビリティインターフェースとして導入。LLM 応答生成中のタイピングインジケータを自動管理 |
+| **グループチャットトリガー** | グループ内での応答トリガー（メンション、キーワード等）のフィルタリングロジックを標準化 |
+| **音声文字起こし移動** | チャンネル側での音声文字起こし処理を削除。上位レイヤーで統一的に処理 |
+| **共有 HTTP サーバー** | 複数チャンネルがそれぞれ HTTP サーバーを立てていた構造を、Manager が管理する共有サーバーに統合 |
+| **WhatsApp Native 再実装** | 新チャンネルインターフェースに準拠して WhatsApp Native チャンネルを全面再実装。リソースリーク・競合状態を修正 |
+| **Pico Protocol チャンネル** | 新規チャンネルタイプとして追加 |
+
+#### MessageBus 改善
+
+| 変更 | 内容 |
+|------|------|
+| **バッファ拡大** | メッセージバスのバッファサイズを 16 → 64 に拡大。高負荷時のメッセージドロップを軽減 |
+| **デッドロック修正** | `MessageBus` のデッドロック・並行性問題を修正。ドレイン処理とコンテキストタイムアウトの改善 |
+| **構造化フィールド** | `peer` と `messageID` をメタデータ（`map[string]string`）から `OutboundMessage` の構造化フィールドに昇格 |
+| **`PublishOutbound` ctx 引数** | `PublishOutbound()` に `context.Context` 第1引数を追加。全チャンネルのアウトバウンドメッセージ送信でコンテキスト伝播が必須に。**フォーク側の `cmd_gateway.go`（vault_pending_unlock）も対応修正済み** |
+
+#### MediaStore
+
+| 変更 | 内容 |
+|------|------|
+| **FileMediaStore** | メディアファイルのライフサイクル管理を統一する `FileMediaStore` を新設。TTL ベースの自動クリーンアップ（`Interval <= 0` パニックガード付き、2フェーズ `ReleaseAll`） |
+| **NewManager 引数変更** | `pkg/channels.NewManager()` に `mediaStore` 引数追加。**フォーク側のマネージャ初期化コードも対応修正済み** |
+
+#### その他の主要変更
+
+| 変更 | 内容 |
+|------|------|
+| **reasoning_channel_id** | 通信プラットフォーム設定に `reasoning_channel_id` フィールド追加。LLM の推論出力（思考過程）を専用チャンネルにルーティング可能に |
+| **LLM Reasoning フィールド** | LLM レスポンスに推論フィールドを導入。DeepSeek-R1 等の推論モデル出力を適切にキャプチャ |
+| **picoclaw-launcher** | Web UI ベースの設定・ゲートウェイプロセス管理ツール `picoclaw-launcher` を新規追加（TUI 版 + Web UI 版） |
+| **環境変数設定** | `feat(config): env var configuration` — 設定ファイルの代替として環境変数での設定をサポート |
+| **Unified User Identity** | `platform:id` 形式の正規化されたユーザー ID 体系を導入 |
+| **migrate API 更新** | `SourceHome`/`TargetHome` 分離、`NewMigrateInstance` API に変更。**フォーク側 `cmd_migrate.go` も対応修正済み** |
+| **Skills レジストリ** | スキル検出をレジストリベースの検索に変更。`search_skills` ツールが新しいレジストリ API を使用 |
+| **AGENTS.md リネーム** | `AGENT.md` → `AGENTS.md`。オンボードテンプレートも対応 |
+| **アトミックファイル書込** | 専用 `fileutil` パッケージに移動。`fsync` + リネームによる耐久性保証強化 |
+| **modernize リファクタ** | Go 1.22+ の安全なモダン化（`any` alias、range simplification 等）を適用 |
+| **GitHub Copilot エラー処理** | HTTP API 版の GitHub Copilot プロバイダのエラーハンドリング改善 |
+| **web_fetch 修正** | フェッチしたコンテンツが LLM に正しく返されない問題を修正 |
+| **http.Client キャッシュ** | ツール内の `http.Client` インスタンスをキャッシュ。リトライキャンセル時の `resp.Body` クローズ漏れを修正 |
+| **Shell ツールセキュリティ** | 不正な deny パターンでの fail-close 処理を改善 |
+| **CronTool エラー戻り値** | `CronTool` がエラーを返却するように変更。**フォーク側も対応修正済み** |
+| **推論ゴルーチンリーク防止** | バスが満杯の場合に推論ゴルーチンが蓄積する問題を修正 |
+
+#### フォーク側コンフリクト解決（4ファイル）
+
+| ファイル | 解決方針 |
+|----------|----------|
+| **`helpers.go`** | フォーク側の utils + voice インポートと upstream の新インポートをマージ |
+| **`loop.go`** | upstream のクロージャパターンを採用しつつ、フォーク側の `formatUserFriendlyError` を保持 |
+| **`github_copilot_provider.go`** | upstream の SDK/gRPC 版ではなくフォーク側の HTTP ベース `openai_compat` 実装を維持（SDK 版は依存関係が非互換） |
+| **`go.sum`** | `go mod tidy` で再生成 |
+
+#### フォーク側コンパイルエラー修正（15箇所以上）
+
+| API 変更 | 修正内容 |
+|----------|----------|
+| **`PublishOutbound(ctx, ...)`** | 全ての `PublishOutbound` 呼び出しに `context.Context` 第1引数を追加 |
+| **`NewManager(mediaStore)`** | `channels.NewManager()` に `FileMediaStore` インスタンスを渡すよう修正 |
+| **`CronTool` エラー** | `CronTool` の戻り値に error 型を追加対応 |
+| **voice 削除** | チャンネル側の音声文字起こしコード削除に伴う参照エラーを修正 |
+| **Skills レジストリ** | `search_skills` の呼び出しを新しいレジストリ API に合わせて修正 |
+| **`ConnectMode` 削除** | 設定構造体から `ConnectMode` フィールド削除に対応 |
+| **`AGENTS.md`** | `go generate` で `AGENT.md` → `AGENTS.md` の参照を更新 |
+
 ### NanoKVM-USB Desktop (v2026.02.27)
 
 | 変更 | 内容 |
@@ -1580,3 +1740,14 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **vault_pending_unlock 実装** | `cmd_gateway.go` に Vault 解錠フロー実装。`deleteMessage` で Telegram パスワードメッセージ即時削除、部分一致「マスターパスワード」検出 |
 | **vault_locked 403 レスポンス** | Login API が Vault 未解錠時に HTTP 403 + `vault_locked` エラーを返却。picoclaw agent がこれを受けてユーザーにマスターパスワードを要求 |
 | **BLACK_SCREEN キーワード修正** | Vision LLM 応答の「black screen」を `BLACK_SCREEN` に正しく分類（以前は `NO_SIGNAL` に混入） |
+| **Heartbeat 429 バックオフ** | `service.go` に `rateLimitUntil` フィールド追加。429 受信時に `Retry-After` / `Please wait N seconds` を解析し最低30分のバックオフを設定。バックオフ中は heartbeat をスキップ |
+| **prompt_cache_key ホワイトリスト** | `provider.go` の `prompt_cache_key` 送信判定をブラックリスト（Gemini除外）からホワイトリスト（OpenAI + GitHub Models のみ送信）に変更。Groq 等の非対応プロバイダでの HTTP 400 エラーを解消 |
+
+### NanoKVM-USB Desktop (v2026.03.02 追加修正)
+
+| 変更 | 内容 |
+|------|------|
+| **model_name 同期書き込み** | `picoclaw.tsx` の `handleSave()` で `model` と `model_name` を同一値で同時書き込み。`loadConfig()` で `model_name \|\| model` の優先順で読み込み。Go 側 `GetModelName()` との整合性を確保 |
+| **max_tokens プロバイダ切替リセット** | groq 以外のプロバイダ選択時に `max_tokens` を `undefined` に設定し config から削除。Go デフォルト 8192 が使用されるようリセット |
+| **updateConfig 深層マージ** | `manager.ts` の `updateConfig()` を浅いマージ（`{ ...config, ...updates }`）から1段階の深層マージに変更。`agents.list`、他チャンネル設定（discord, slack 等10件）の消失を防止 |
+| **PicoclawConfig 型定義補完** | `agents.defaults` に `model_fallbacks`, `temperature`, `max_tool_iterations`, `workspace`, `restrict_to_workspace` を追加。`agents.list` と `channels` の index signature を追加 |
