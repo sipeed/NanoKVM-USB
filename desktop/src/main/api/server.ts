@@ -566,7 +566,7 @@ export class ApiServer {
       // and HDMI signal re-sync can take several seconds.
       const MAX_WAKE_ATTEMPTS = 2
       const isSleepScreen = (reason?: string): boolean =>
-        !!(reason?.includes('black/no-signal') || reason?.includes('solid-color/sleep'))
+        !!(reason?.includes('black/no-signal') || reason?.includes('solid-color/sleep') || reason?.includes('zero bytes'))
       for (let attempt = 1; attempt <= MAX_WAKE_ATTEMPTS && !dataUrl && isSleepScreen(captureResult.rejectReason); attempt++) {
         console.log(`[API Server] Screen verify: sleep/black screen detected, wake attempt ${attempt}/${MAX_WAKE_ATTEMPTS}...`)
         this.mainWindow!.webContents.send('api:mouse:wake')

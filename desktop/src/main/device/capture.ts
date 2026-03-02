@@ -357,8 +357,17 @@ export async function captureFrameNative(
 
       console.log(`[Capture] Native capture OK: ${buffer.length} bytes (${Math.round(buffer.length / 1024)}KB) in ${elapsed}ms`)
 
-      // ── Black screen detection (same logic as renderer) ──
-      // Check JPEG file size — solid black frames compress very small
+      // ── Black screen detection ──
+      // Check zero-byte ratio — a real image has diverse byte values,
+      // but a black frame from USB capture is almost entirely zero bytes.
+      // Also check JPEG file size — solid black frames compress very small.
+      const zeroCount = buffer.reduce((count, byte) => count + (byte === 0 ? 1 : 0), 0)
+      const zeroRatio = zeroCount / buffer.length
+      if (zeroRatio > 0.90) {
+        console.warn(`[Capture] Frame is ${(zeroRatio * 100).toFixed(1)}% zero bytes — black/no-signal screen`)
+        resolve({ dataUrl: null, rejectReason: `black/no-signal screen (${(zeroRatio * 100).toFixed(0)}% zero bytes)` })
+        return
+      }
       if (buffer.length < 2000) {
         console.warn(`[Capture] Frame suspiciously small (${buffer.length} bytes), may be black/no-signal`)
         // Still return the frame — let the caller/Vision decide
