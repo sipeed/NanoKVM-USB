@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-03-02 (v2026.03.02b)
+> **最終更新**: 2026-03-02 (v2026.03.02c)
 
 ## 概要
 
@@ -1501,11 +1501,12 @@ UI の設定保存時には **両フィールドを同一の値で書き込む**
 |-----------|------------|----------------|
 | `model` | `ensureProtocolPrefix()` 正規化後のモデルID を書き込み | `model_name` が空の場合のフォールバック |
 | `model_name` | 同一の正規化済み値で同時に書き込み | Go が **最優先** で読み取る |
-| `max_tokens` | groq の場合 `1024`、**それ以外は削除** | Go デフォルト `8192` を使用 |
+| `max_tokens` | プロバイダ別に明示設定: groq=`1024`, github-copilot=`16384`, その他=`16384` | Go デフォルト `32768`（upstream v0.2.0）は一部モデルの上限を超えるため、UI 側で常に安全な値を書き込む |
 
-> **max_tokens リセット**: v2026.03.02 以前は groq → 他プロバイダに切替後も `max_tokens: 1024` が
-> 残留し、GPT-4.1 等の高性能モデルが 1024 トークンに制限される問題がありました。
-> 現在はプロバイダ切替時に `max_tokens` フィールドを config.json から削除し、Go のデフォルト値（8192）を使用します。
+> **max_tokens プロバイダ別設定**: v2026.03.02c 以前は groq 以外で `max_tokens` を config から削除し
+> Go デフォルトに委ねていましたが、upstream v0.2.0 でデフォルトが 8192→32768 に変更されたため、
+> GitHub Copilot の gpt-4o-mini（上限 16384）等で HTTP 400 エラーが発生していました。
+> 現在はプロバイダ切替時に `max_tokens` を常に明示設定し、API 制限を超えないようにしています。
 
 ### 設定更新の深層マージ
 
@@ -1519,8 +1520,9 @@ UI の設定保存時には **両フィールドを同一の値で書き込む**
 | `channels.telegram.proxy` | UI は `proxy` を操作しないため、既存値を `config.channels?.telegram?.proxy \|\| ''` で保持 |
 | `tools`, `heartbeat`, `devices` 等 | UI が操作しないトップレベル設定 |
 
-`agents.defaults` 内で値が `undefined` のフィールド（例: `max_tokens` リセット時）は
+`agents.defaults` 内で値が `undefined` のフィールドは
 JSON シリアライズ前に削除され、Go 側のデフォルト値が使用されます。
+> ⚠️ `max_tokens` は常に明示設定されるため、`undefined` にはなりません。
 
 ### レートリミット対策
 
@@ -1534,7 +1536,7 @@ Groq 無料枠（TPM 6000）および GitHub Models API（100回/日/モデル�
 | REDACTED 拒否 | 全プロバイダ | LLM がパスワードを *** にマスクした場合は実行拒否 |
 | 429 ポップアップ | 全プロバイダ | レートリミット時にリトライ待ち時間を UI に表示 |
 | Heartbeat 429 バックオフ | 全プロバイダ | heartbeat が 429 を受信した場合、最低30分間 heartbeat を一時停止 |
-| max_tokens 制限 | Groq | Groq 選択時に `max_tokens: 1024` を自動設定（TPM 6000 制限対策） |
+| max_tokens 制限 | 全プロバイダ | プロバイダ別に `max_tokens` を自動設定: groq=1024（TPM制限）、github-copilot=16384（API上限）、他=16384（安全値）|
 | prompt_cache_key 制限 | 非OpenAI系 | OpenAI / GitHub Models のみ送信。Groq 等は未対応フィールドを拒否するため除外 |
 
 ### Heartbeat サービス
@@ -1766,7 +1768,7 @@ upstream の最大の変更。チャンネルシステムが全面的にリア�
 | 変更 | 内容 |
 |------|------|
 | **model_name 同期書き込み** | `picoclaw.tsx` の `handleSave()` で `model` と `model_name` を同一値で同時書き込み。`loadConfig()` で `model_name \|\| model` の優先順で読み込み。Go 側 `GetModelName()` との整合性を確保 |
-| **max_tokens プロバイダ切替リセット** | groq 以外のプロバイダ選択時に `max_tokens` を `undefined` に設定し config から削除。Go デフォルト 8192 が使用されるようリセット |
+| **max_tokens プロバイダ別設定** | プロバイダ切替時に `max_tokens` を明示設定（groq=1024, github-copilot=16384, 他=16384）。Go デフォルト 32768（upstream v0.2.0）は gpt-4o-mini 等の上限を超えるため、UI 側で常に安全値を書き込む |
 | **updateConfig 深層マージ** | `manager.ts` の `updateConfig()` を浅いマージ（`{ ...config, ...updates }`）から1段階の深層マージに変更。`agents.list`、他チャンネル設定（discord, slack 等10件）の消失を防止 |
 | **PicoclawConfig 型定義補完** | `agents.defaults` に `model_fallbacks`, `temperature`, `max_tool_iterations`, `workspace`, `restrict_to_workspace` を追加。`agents.list` と `channels` の index signature を追加 |
 
@@ -1786,3 +1788,15 @@ upstream の最大の変更。チャンネルシステムが全面的にリア�
 | 変更 | 内容 |
 |------|------|
 | **buildModelWithProtocol knownProtocols 修正** | `migration.go` の `buildModelWithProtocol()` でモデル名の `/` 判定を `knownProtocols` マップ（28エントリ）によるホワイトリスト方式に変更。HuggingFace 形式（`meta-llama/...`）にプロバイダプレフィックスを正しく付与。テスト3件追加（DifferentPrefix edge case 含む） |
+
+### picoclaw Go (v2026.03.02c deleteMessage修正)
+
+| 変更 | 内容 |
+|------|------|
+| **Telegram deleteMessage 修正** | `cmd_gateway.go` で vault_pending_unlock 時のパスワードメッセージ削除が `m.Metadata["message_id"]` を参照していたが、Telegram チャンネルは `message_id` を `InboundMessage.MessageID` フィールド（`BaseChannel.HandleMessage` が設定）に格納するため Metadata には存在せず、`deleteMessage` が一度も呼ばれていなかった。`m.MessageID` を直接参照するよう修正 |
+
+### NanoKVM-USB Desktop (v2026.03.02c max_tokens修正)
+
+| 変更 | 内容 |
+|------|------|
+| **max_tokens プロバイダ別設定** | `handleSave()` で `max_tokens` を `undefined`（削除）ではなくプロバイダ別に明示設定（groq=1024, github-copilot=16384, その他=16384）。upstream v0.2.0 で Go デフォルトが 8192→32768 に変更されたため、`undefined` では gpt-4o-mini 等の上限（16384）を超える HTTP 400 エラーが発生していた |

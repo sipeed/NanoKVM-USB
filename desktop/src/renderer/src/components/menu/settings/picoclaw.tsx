@@ -756,11 +756,18 @@ export const PicoclawSettings = (): ReactElement => {
         }
       }
 
-      // Groq free tier has very low TPM (6000); reduce max_tokens.
-      // For other providers, remove max_tokens so Go uses its default (8192).
-      const maxTokensUpdate: { max_tokens?: number } = provider === 'groq'
-        ? { max_tokens: 1024 }
-        : { max_tokens: undefined }
+      // Set max_tokens per provider to avoid exceeding API limits.
+      // Go default is 32768 (upstream v0.2.0), but some providers have lower limits:
+      //   - groq free tier: very low TPM (6000) → 1024
+      //   - github-copilot (GitHub Models API): gpt-4o-mini caps at 16384
+      //   - others: 16384 is a safe default that works across most models
+      const providerMaxTokens: Record<string, number> = {
+        groq: 1024,
+        'github-copilot': 16384,
+      }
+      const maxTokensUpdate: { max_tokens: number } = {
+        max_tokens: providerMaxTokens[provider] ?? 16384,
+      }
 
       // Ensure model has protocol prefix before writing to config.
       // Dropdown values should already be prefixed after buildProviderOptions fix,
