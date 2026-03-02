@@ -635,6 +635,11 @@ export class ApiServer {
           '- What type of screen it is (desktop, lock screen, login screen, application window, etc.)\n' +
           '- What applications or windows are visible (if any)\n' +
           '- Any notable UI elements (taskbar, dialog boxes, error messages, etc.)\n\n' +
+          'IMPORTANT classification rules:\n' +
+          '- DESKTOP: Must have a TASKBAR visible at the bottom (or top/side). Without a taskbar, it is NOT a desktop.\n' +
+          '- LOCK SCREEN: Shows a clock/time display, wallpaper background, but NO taskbar. May show user avatar.\n' +
+          '- LOGIN SCREEN: Shows a user name/avatar with a PIN or password input field, but NO taskbar.\n' +
+          '- If you see NO taskbar and NO applications, it is almost certainly a lock screen or login screen, NOT a desktop.\n\n' +
           'Be specific and factual about what you see.' + langInstruction
       }
 
