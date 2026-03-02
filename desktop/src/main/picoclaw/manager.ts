@@ -247,27 +247,26 @@ export class PicoclawManager {
   }
 
   /**
-   * Detect error patterns in gateway stdout and send a Japanese follow-up
-   * message to Telegram via stdin. picoclaw sends the raw English error first;
-   * this adds a user-friendly Japanese explanation as a follow-up message.
+   * Detect error patterns in gateway stdout/stderr for diagnostic logging.
    *
-   * If the Go side already formatted the error (detected by emoji markers),
-   * skip the follow-up to avoid duplicate messages.
+   * NOTE: Previously this method attempted to send Japanese error follow-ups
+   * to Telegram via stdin, but the Go gateway process does not read from stdin.
+   * Error formatting is now handled entirely on the Go side:
+   * - FormatUserFriendlyError() in pkg/agent/loop.go produces Japanese messages
+   * - cmd_agent.go outputs formatted errors to stdout for the one-shot dispatcher
+   * - The dispatcher publishes the formatted message to Telegram via outbound bus
+   *
+   * This method now only logs detected errors for diagnostic purposes.
    */
   private sendGatewayErrorFollowUp(text: string): void {
-    if (!this.process?.stdin?.writable) return
-
-    // Skip if Go's formatUserFriendlyError already produced a user-friendly message
-    // These emoji markers indicate the error was already formatted at the source
-    if (text.includes('🚫') || text.includes('🔑') || text.includes('🌐')) {
-      console.log('[Picoclaw] Error already formatted by Go, skipping follow-up')
+    // Skip if Go's FormatUserFriendlyError already produced a user-friendly message
+    if (text.includes('🚫') || text.includes('🔑') || text.includes('🌐') || text.includes('⚙') || text.includes('📦') || text.includes('⚠')) {
       return
     }
 
-    const { isError, message } = translateApiError(text)
+    const { isError } = translateApiError(text)
     if (isError) {
-      console.log('[Picoclaw] Sending Japanese error follow-up to gateway stdin')
-      this.process.stdin.write(message + '\n')
+      console.log('[Picoclaw] Error detected in gateway output (handled by Go side)')
     }
   }
 
@@ -831,7 +830,28 @@ export class PicoclawManager {
 
           resolve(cleanResponse)
         } else {
-          // Translate error to Japanese before rejecting
+          // Parse structured JSON error from Go's BuildUserFriendlyError (unified processing).
+          // Both ChatUI and Telegram consume the same JSON from "picoclaw agent -m" subprocess.
+          const trimmedOutput = output.trim()
+          try {
+            const parsed = JSON.parse(trimmedOutput)
+            if (parsed.type && parsed.message) {
+              const err = new Error(parsed.message) as Error & { rateLimit?: RateLimitInfo }
+              if (parsed.type === 'rate_limit') {
+                err.rateLimit = {
+                  waitSeconds: parsed.wait_seconds || 60,
+                  waitTimeText: parsed.wait_time_text || '1分',
+                  resetAt: parsed.reset_at
+                }
+              }
+              reject(err)
+              return
+            }
+          } catch {
+            // Not JSON — fall through to stderr-based translation (backward compat)
+          }
+
+          // Fallback: use stderr with translateApiError (for older picoclaw binaries)
           const translated = translateApiError(errorOutput)
           const err = new Error(translated.message) as Error & { rateLimit?: RateLimitInfo }
           if (translated.rateLimit) {

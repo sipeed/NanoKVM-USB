@@ -63,6 +63,21 @@ export function ensureProtocolPrefix(modelId: string, provider: string): string 
 }
 
 /**
+ * Extract the known protocol prefix from a model ID, if present.
+ * e.g., "groq/llama-3.1-8b-instant" → "groq"
+ *       "openai/gpt-oss-120b" → "openai"
+ *       "meta-llama/llama-4-scout" → null (meta-llama is NOT a protocol)
+ */
+export function getProtocolPrefix(modelId: string): string | null {
+  const slashIdx = modelId.indexOf('/')
+  if (slashIdx > 0) {
+    const prefix = modelId.slice(0, slashIdx)
+    if (KNOWN_PROTOCOLS.has(prefix)) return prefix
+  }
+  return null
+}
+
+/**
  * Strip a known protocol prefix from a model ID.
  * e.g., "groq/llama-3.1-8b-instant" → "llama-3.1-8b-instant"
  *       "groq/meta-llama/llama-4-scout" → "meta-llama/llama-4-scout"

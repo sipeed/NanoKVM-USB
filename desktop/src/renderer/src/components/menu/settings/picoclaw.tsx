@@ -4,7 +4,7 @@ import { ClipboardIcon, ExternalLinkIcon, Eye, EyeOff, Shield, ShieldCheck, Tras
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
-import { stripProtocolPrefix, ensureProtocolPrefix } from '@common/known-protocols'
+import { stripProtocolPrefix, ensureProtocolPrefix, getProtocolPrefix } from '@common/known-protocols'
 import { ModelUpdateSettings, ModelUpdateSettingsRef } from './model-update'
 
 interface PicoclawConfig {
@@ -143,6 +143,26 @@ function isLikelyVisionModel(modelId: string): boolean {
 }
 
 /**
+ * Heuristic to filter out non-chat models returned by provider APIs.
+ * These models don't support the chat completions endpoint and would
+ * cause 400 errors like "whisper-large-v3-turbo does not support chat completions".
+ *
+ * Filters out:
+ * - Speech-to-text (whisper, etc.)
+ * - Text-to-speech / audio generation (orpheus, etc.)
+ * - Safety/moderation models (llama-guard, prompt-guard, safeguard, etc.)
+ * - Embedding models
+ * - Image generation models
+ * - Compound AI / orchestration models (not standard chat completions)
+ * - Non-LLM utility models (allam, etc.)
+ */
+const NON_CHAT_MODEL_PATTERNS = /whisper|orpheus|guard|safeguard|embed|tts|speech|distil-whisper|stable-diffusion|dall-e|imagen|\bcompound\b|\ballam\b/i
+
+function isNonChatModel(modelId: string): boolean {
+  return NON_CHAT_MODEL_PATTERNS.test(modelId)
+}
+
+/**
  * Convert dynamic providers from picoclaw CLI to UI-ready format.
  * Merges three sources:
  *   1. Go static model list (picoclaw providers command)
@@ -193,10 +213,28 @@ function buildProviderOptions(
     }
 
     // Merge API-fetched models (from model-updater cached_models).
-    // Always prefix with provider name to ensure Go's ExtractProtocol() resolves correctly.
+    // Prefix with hosting provider name to ensure Go's ExtractProtocol() routes
+    // to the correct provider endpoint.
+    //
+    // Cross-provider models (e.g., Groq hosting "openai/gpt-oss-120b") are valid —
+    // the provider offers them through their API. We force-prefix with the hosting
+    // provider: "groq/openai/gpt-oss-120b" → Go ExtractProtocol sees "groq",
+    // normalizeModel strips it, API receives "openai/gpt-oss-120b".
     const apiModels = cachedModels?.[dp.name] || []
     for (const modelId of apiModels) {
-      const fullId = ensureProtocolPrefix(modelId, dp.name)
+      // Skip non-chat models (whisper, guard, orpheus, embeddings, etc.)
+      // These don't support chat completions and would cause API errors.
+      if (isNonChatModel(modelId)) {
+        continue
+      }
+      // For cross-provider models (e.g., "openai/gpt-oss-120b" under groq),
+      // force-prefix with hosting provider: "groq/openai/gpt-oss-120b".
+      // ensureProtocolPrefix won't add groq/ because openai/ is already a known
+      // protocol, so we must prepend directly.
+      const existingPrefix = getProtocolPrefix(modelId)
+      const fullId = (existingPrefix && existingPrefix !== dp.name)
+        ? `${dp.name}/${modelId}`  // Force hosting provider prefix
+        : ensureProtocolPrefix(modelId, dp.name)
       if (!addedIds.has(modelId) && !addedIds.has(fullId)) {
         addedIds.add(modelId)
         addedIds.add(fullId)
@@ -205,7 +243,7 @@ function buildProviderOptions(
         modelOptions.push({
           value: fullId,
           label: modelMeta?.label || (vision ? `${modelId} 👁️` : modelId),
-          description: modelMeta?.description || '(API検出)',
+          description: modelMeta?.description || `(${dp.label}提供)`,
           vision
         })
       }
@@ -772,10 +810,23 @@ export const PicoclawSettings = (): ReactElement => {
       // Ensure model has protocol prefix before writing to config.
       // Dropdown values should already be prefixed after buildProviderOptions fix,
       // but normalize as a safety net for edge cases (manual input, old state).
-      const normalizedModel = ensureProtocolPrefix(
-        model || providers.find((p) => p.value === provider)?.defaultModel || '',
-        provider
-      )
+      const rawModel = model || providers.find((p) => p.value === provider)?.defaultModel || ''
+
+      // Ensure correct provider routing for cross-provider models.
+      // If model has a known-protocol prefix different from the selected provider
+      // (e.g., "openai/gpt-oss-120b" under groq), force the hosting provider prefix:
+      // "groq/openai/gpt-oss-120b" → Go ExtractProtocol sees "groq" → correct routing.
+      const modelPrefix = getProtocolPrefix(rawModel)
+      let normalizedModel: string
+      if (modelPrefix && modelPrefix !== provider) {
+        // Cross-provider model: force hosting provider prefix
+        normalizedModel = `${provider}/${rawModel}`
+        console.info(
+          `[picoclaw] Cross-provider model: "${rawModel}" → "${normalizedModel}" (routed via ${provider})`
+        )
+      } else {
+        normalizedModel = ensureProtocolPrefix(rawModel, provider)
+      }
 
       const updates: PicoclawConfig = {
         agents: {
