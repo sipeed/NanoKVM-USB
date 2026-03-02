@@ -757,16 +757,16 @@ export const PicoclawSettings = (): ReactElement => {
       }
 
       // Set max_tokens per provider to avoid exceeding API limits.
-      // Go default is 32768 (upstream v0.2.0), but some providers have lower limits:
-      //   - groq free tier: very low TPM (6000) → 1024
-      //   - github-copilot (GitHub Models API): gpt-4o-mini caps at 16384
-      //   - others: 16384 is a safe default that works across most models
+      // max_tokens controls the maximum OUTPUT length (not context window).
+      // Go upstream default is 32768, but for picoclaw chat/tool-use, 4096 is
+      // more than sufficient and avoids 413/402 errors with limited-credit or
+      // free-tier providers.
       const providerMaxTokens: Record<string, number> = {
         groq: 1024,
-        'github-copilot': 16384,
+        'github-copilot': 4096,
       }
       const maxTokensUpdate: { max_tokens: number } = {
-        max_tokens: providerMaxTokens[provider] ?? 16384,
+        max_tokens: providerMaxTokens[provider] ?? 4096,
       }
 
       // Ensure model has protocol prefix before writing to config.
