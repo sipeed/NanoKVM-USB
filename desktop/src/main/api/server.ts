@@ -464,6 +464,7 @@ export class ApiServer {
       }
 
       // Analyze with Vision LLM
+      const lang = getVisionLanguage()
       const prompt = 
         'この画像はWindows PCの画面キャプチャです。以下の3つのうちどの状態か判定してください:\n\n' +
         '1. LOGIN_SUCCESS: デスクトップ画面が表示されている（タスクバー、アイコン等が見える）\n' +
@@ -472,7 +473,7 @@ export class ApiServer {
         '回答は以下のJSON形式のみで返してください（他のテキストは不要）:\n' +
         '{"status": "LOGIN_SUCCESS" or "LOGIN_FAILED" or "LOCK_SCREEN", "detail": "判定理由を1文で"}'
 
-      const analysis = await analyzeScreenWithVision(dataUrl, prompt)
+      const analysis = await analyzeScreenWithVision(dataUrl, prompt, lang)
       console.log('[API Server] Vision analysis result:', analysis)
 
       // Parse the Vision response
@@ -640,7 +641,7 @@ export class ApiServer {
       // Analyze with Vision LLM
       console.log('[API Server] Screen verify: calling Vision LLM...')
       const visionStart = Date.now()
-      const analysis = await analyzeScreenWithVision(dataUrl, prompt)
+      const analysis = await analyzeScreenWithVision(dataUrl, prompt, lang)
       console.log('[API Server] Screen verify: Vision LLM took ' + (Date.now() - visionStart) + 'ms')
       console.log('[API Server] Screen verify analysis:', analysis)
 
@@ -761,7 +762,7 @@ export class ApiServer {
         const retryCapture = await this.requestScreenCapture()
         if (retryCapture.dataUrl) {
           console.log('[API Server] Screen verify: wake succeeded, re-analyzing with Vision LLM...')
-          const retryAnalysis = await analyzeScreenWithVision(retryCapture.dataUrl, prompt)
+          const retryAnalysis = await analyzeScreenWithVision(retryCapture.dataUrl, prompt, lang)
           console.log('[API Server] Screen verify: retry analysis:', retryAnalysis)
           // Re-parse the retry analysis
           const retryUpper = retryAnalysis.toUpperCase()

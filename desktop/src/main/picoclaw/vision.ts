@@ -81,7 +81,8 @@ const VISION_SETUP_MESSAGE =
   '設定後、ロック・ログイン操作の結果を自動判定します。'
 
 /**
- * Check if a model supports Vision.
+ * Check if a model is in the known Vision-capable list.
+ * Used for UI recommendations/indicators only.
  */
 export function isVisionCapable(provider: string, model: string): boolean {
   const models = VISION_MODELS[provider]
@@ -91,10 +92,13 @@ export function isVisionCapable(provider: string, model: string): boolean {
 
 /**
  * Check if Vision LLM is configured (separate from chat LLM).
+ * Trusts the user's explicit configuration — if vision_provider and vision_model
+ * are set, Vision is considered configured regardless of the VISION_MODELS list.
+ * The hardcoded VISION_MODELS set is for UI recommendations only.
  */
 export function isVisionConfigured(): boolean {
   const { provider, model } = readVisionConfig()
-  return provider !== '' && model !== '' && isVisionCapable(provider, model)
+  return provider !== '' && model !== ''
 }
 
 /**
@@ -187,31 +191,55 @@ function getApiBase(provider: string, configApiBase: string): string {
 }
 
 /**
+ * Build a system prompt for enforcing response language.
+ * Uses both English instruction and native-language instruction for maximum compliance.
+ */
+function buildLanguageSystemPrompt(lang: string): string {
+  switch (lang) {
+    case 'ja': return 'You MUST respond entirely in Japanese (日本語). 必ず日本語で回答してください。'
+    case 'zh': return 'You MUST respond entirely in Chinese (中文). 请务必用中文回答。'
+    case 'ko': return 'You MUST respond entirely in Korean (한국어). 반드시 한국어로 답변해 주세요.'
+    case 'de': return 'You MUST respond entirely in German (Deutsch). Bitte antworten Sie ausschließlich auf Deutsch.'
+    case 'ru': return 'You MUST respond entirely in Russian (русский). Обязательно отвечайте на русском языке.'
+    case 'pt_br': return 'You MUST respond entirely in Portuguese (Português). Responda inteiramente em português.'
+    case 'pl': return 'You MUST respond entirely in Polish (Polski). Odpowiadaj wyłącznie po polsku.'
+    case 'nl': return 'You MUST respond entirely in Dutch (Nederlands). Antwoord volledig in het Nederlands.'
+    case 'be': return 'You MUST respond entirely in Belarusian (Беларуская). Абавязкова адказвайце на беларускай мове.'
+    case 'zh_tw': return 'You MUST respond entirely in Traditional Chinese (繁體中文). 請務必用繁體中文回答。'
+    case 'en': return '' // No system prompt needed for English
+    default: return lang ? `You MUST respond entirely in the language with code '${lang}'.` : ''
+  }
+}
+
+/**
  * Call Vision LLM to analyze a screen capture.
  * 
  * @param base64Image - JPEG image as base64 data URL
  * @param prompt - What to analyze in the image
+ * @param language - ISO language code from NanoKVM app settings (e.g., 'ja', 'en')
  * @returns The LLM's text response
  */
 export async function analyzeScreenWithVision(
   base64Image: string,
-  prompt: string
+  prompt: string,
+  language?: string
 ): Promise<string> {
   const { provider, model, apiKey, apiBase } = readVisionConfig()
 
-  if (!provider || !model || !isVisionCapable(provider, model)) {
+  if (!provider || !model) {
     throw new Error('VISION_NOT_CONFIGURED')
   }
 
   const baseUrl = getApiBase(provider, apiBase)
+  const langSystemPrompt = buildLanguageSystemPrompt(language || '')
 
   // Use Anthropic-specific API format
   if (provider === 'anthropic') {
-    return callAnthropicVision(baseUrl, apiKey, model, base64Image, prompt, getApiTimeout(provider))
+    return callAnthropicVision(baseUrl, apiKey, model, base64Image, prompt, getApiTimeout(provider), langSystemPrompt)
   }
 
   // OpenAI-compatible format (OpenRouter, OpenAI, Ollama, Groq, etc.)
-  return callOpenAIVision(baseUrl, apiKey, model, base64Image, prompt, getApiTimeout(provider))
+  return callOpenAIVision(baseUrl, apiKey, model, base64Image, prompt, getApiTimeout(provider), langSystemPrompt)
 }
 
 /**
@@ -223,31 +251,42 @@ async function callOpenAIVision(
   model: string,
   base64Image: string,
   prompt: string,
-  timeout: number
+  timeout: number,
+  langSystemPrompt: string
 ): Promise<string> {
   // Strip data URL prefix if present
   const imageData = base64Image.replace(/^data:image\/\w+;base64,/, '')
 
+  const messages: Array<Record<string, unknown>> = []
+
+  // Add system message for language enforcement (most authoritative level)
+  if (langSystemPrompt) {
+    messages.push({
+      role: 'system',
+      content: langSystemPrompt
+    })
+  }
+
+  messages.push({
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text: prompt
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: `data:image/jpeg;base64,${imageData}`,
+          detail: 'low' // Save tokens; low detail is sufficient for login screen detection
+        }
+      }
+    ]
+  })
+
   const body = JSON.stringify({
     model,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: prompt
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:image/jpeg;base64,${imageData}`,
-              detail: 'low' // Save tokens; low detail is sufficient for login screen detection
-            }
-          }
-        ]
-      }
-    ],
+    messages,
     max_tokens: 300,
     temperature: 0.1 // Low temperature for deterministic analysis
   })
@@ -264,11 +303,12 @@ async function callAnthropicVision(
   model: string,
   base64Image: string,
   prompt: string,
-  timeout: number
+  timeout: number,
+  langSystemPrompt: string
 ): Promise<string> {
   const imageData = base64Image.replace(/^data:image\/\w+;base64,/, '')
 
-  const body = JSON.stringify({
+  const requestBody: Record<string, unknown> = {
     model,
     max_tokens: 300,
     messages: [
@@ -290,7 +330,14 @@ async function callAnthropicVision(
         ]
       }
     ]
-  })
+  }
+
+  // Anthropic uses a top-level 'system' field, not a system message
+  if (langSystemPrompt) {
+    requestBody.system = langSystemPrompt
+  }
+
+  const body = JSON.stringify(requestBody)
 
   return makeHttpRequest(baseUrl + '/v1/messages', apiKey, body, 'anthropic', timeout)
 }
