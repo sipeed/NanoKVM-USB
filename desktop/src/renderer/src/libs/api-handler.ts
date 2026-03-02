@@ -427,8 +427,17 @@ export async function loginToWindows(password: string, username?: string): Promi
   console.log('[API Handler] Login sequence completed')
 }
 
-async function sendMouse(buttons: number, deltaX: number, deltaY: number): Promise<void> {
-  const data = [buttons, deltaX, deltaY]
+/**
+ * Send a relative mouse HID report.
+ *
+ * The NanoKVM-USB protocol expects 5 bytes for relative mouse:
+ *   [0x01, buttons, deltaX, deltaY, scroll]
+ *
+ * Byte 0 = 0x01 is the relative-mode prefix (not a button bit).
+ * See relative.tsx handleMouseEvent() for the canonical format.
+ */
+async function sendMouse(buttons: number, deltaX: number, deltaY: number, scroll: number = 0): Promise<void> {
+  const data = [0x01, buttons, deltaX & 0xff, deltaY & 0xff, scroll & 0xff]
   await window.electron.ipcRenderer.invoke(IpcEvents.SEND_MOUSE, data)
 }
 
