@@ -279,21 +279,20 @@ export class ModelUpdater {
     const config = this.readConfig()
     const results: Array<{ provider: string; modelCount: number; error?: string }> = []
 
-    // Determine which providers to check
+    // Determine which providers to check — always include ALL providers with API keys
     const chatProvider = config.agents?.defaults?.provider
     const visionProvider = config.agents?.defaults?.vision_provider
     const providersToCheck = new Set<string>()
-    if (chatProvider) providersToCheck.add(chatProvider)
-    if (visionProvider) providersToCheck.add(visionProvider)
 
-    // If no providers configured, check all that have API keys
-    if (providersToCheck.size === 0) {
-      for (const [provider] of Object.entries(config.providers || {})) {
-        if (PROVIDER_API_ENDPOINTS[provider]) {
-          providersToCheck.add(provider)
-        }
+    // Always check all configured providers that have API keys and supported endpoints
+    for (const [provider, providerConfig] of Object.entries(config.providers || {})) {
+      if (PROVIDER_API_ENDPOINTS[provider] && (providerConfig as Record<string, string>)?.api_key) {
+        providersToCheck.add(provider)
       }
     }
+    // Also ensure current chat/vision providers are included (even if no API key, e.g. ollama)
+    if (chatProvider && PROVIDER_API_ENDPOINTS[chatProvider]) providersToCheck.add(chatProvider)
+    if (visionProvider && PROVIDER_API_ENDPOINTS[visionProvider]) providersToCheck.add(visionProvider)
 
     // Fetch models for each provider
     const fetchedModels: Record<string, string[]> = {}

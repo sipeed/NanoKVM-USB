@@ -156,6 +156,7 @@ app.whenReady().then(() => {
 
   events.registerApp()
   events.registerSerialPort()
+  events.registerVaultHandlers()
 
   // Initialize picoclaw manager
   picoclawManager = new PicoclawManager()

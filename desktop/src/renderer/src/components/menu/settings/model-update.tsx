@@ -26,7 +26,13 @@ export interface ModelUpdateSettingsRef {
   save: () => Promise<boolean>
 }
 
-export const ModelUpdateSettings = forwardRef<ModelUpdateSettingsRef>((_props, ref) => {
+interface ModelUpdateSettingsProps {
+  /** Called after a successful model list update so the parent can refresh UI */
+  onModelsUpdated?: () => void
+}
+
+export const ModelUpdateSettings = forwardRef<ModelUpdateSettingsRef, ModelUpdateSettingsProps>(
+  ({ onModelsUpdated }, ref) => {
   const { t } = useTranslation()
 
   const [updating, setUpdating] = useState(false)
@@ -127,6 +133,8 @@ export const ModelUpdateSettings = forwardRef<ModelUpdateSettingsRef>((_props, r
           )
         }
         await loadStatus()
+        // Notify parent to refresh provider list with new cached_models
+        onModelsUpdated?.()
       } else {
         message.error(result.error || t('settings.picoclaw.modelUpdate.updateFailed'))
       }

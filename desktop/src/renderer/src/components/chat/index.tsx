@@ -122,6 +122,16 @@ export const Chat = (): ReactElement => {
   const [rateLimitPopup, setRateLimitPopup] = useState<RateLimitPopupData | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  /**
+   * Check whether the last assistant message is requesting master password.
+   * When true, the input field becomes a password field and the user's
+   * message is masked to "🔐 ****" in chat history.
+   */
+  const isVaultPasswordMode = (() => {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+    return lastAssistant?.content?.includes('マスターパスワードを入力してください') ?? false
+  })()
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -167,10 +177,13 @@ export const Chat = (): ReactElement => {
   async function handleSend(): Promise<void> {
     if (!input.trim() || loading) return
 
+    // If in vault password mode, mask the displayed message
+    const displayContent = isVaultPasswordMode ? '🔐 ****' : input.trim()
+
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: displayContent,
       timestamp: Date.now()
     }
 
@@ -351,11 +364,11 @@ export const Chat = (): ReactElement => {
       <div className="border-t border-neutral-800 p-3">
         <div className="flex space-x-2">
           <input
-            type="text"
+            type={isVaultPasswordMode ? 'password' : 'text'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={t('chat.placeholder')}
+            placeholder={isVaultPasswordMode ? '🔐 マスターパスワード' : t('chat.placeholder')}
             disabled={loading}
             className="flex-1 rounded-lg bg-neutral-800 px-3 py-2 text-sm text-white placeholder-neutral-500 outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
           />

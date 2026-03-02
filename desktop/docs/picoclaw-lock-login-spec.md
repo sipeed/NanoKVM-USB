@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-02-27 (v2026.02.27)
+> **最終更新**: 2026-03-02 (v2026.03.02)
 
 ## 概要
 
@@ -926,7 +926,8 @@ USB キャプチャカードの自動検出に使用するデバイス名パタ�
 1. picoclaw エージェントが `nanokvm_screen_check` ツールを呼び出し
 2. Go 側が `POST /api/screen/verify` に `{"action": "status"}` を送信
 3. Electron API Server が HDMI キャプチャを実行
-4. **黒画面（brightness < 3）の場合**: マウス左クリック＋キーボード Space キーを HID 送信してスリープ復帰を試行 → 4秒待機 → 再キャプチャ（最大2回リトライ）
+4. **黒画面（brightness < 15）の場合**: マウス左クリック＋キーボード Space キーを HID 送信してスリープ復帰を試行 → 4秒待機 → 再キャプチャ（最大2回リトライ）
+   > **閾値 15 の根拠**: HDMI キャプチャカードはソースディスプレイ OFF 時でも brightness 3〜12 のノイズフレームを生成する。閾値 8 ではこれらが Vision LLM に渡り「真っ黒」→ NO_SIGNAL（誤分類）となっていた。閾値 15 に引き上げることで、スリープ時のノイズフレームをウェイクアップパスに正しくルーティング
 5. 映像取得成功なら Vision LLM に汎用プロンプトで画面内容を記述させる
 6. ステータス分類（`DESKTOP` / `LOCK_SCREEN` / `LOGIN_SCREEN` / `DESCRIBED`）と詳細説明を返却
 7. リトライ後も黒画面の場合は `BLACK_SCREEN` ステータスを返却（「マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした」）
@@ -1087,12 +1088,128 @@ sequenceDiagram
 ## モデルリスト自動更新機能
 
 picoclaw のモデルリストは、プロバイダが新モデルを追加した際に自動更新されます。
+v2026.03.02 より **3ソースマージアーキテクチャ** と **Vision LLM 動的ドロップダウン** が導入されました。
 
 ### 概要
 
-- **更新対象**: 各プロバイダが提供するモデルの一覧（`~/.picoclaw/config.json` の `model_list`）
-- **更新元**: `picoclaw providers` コマンドで取得するデフォルトモデル + UI 上の追加定義
-- **表示**: 設定画面のモデル選択ドロップダウンに反映
+- **更新対象**: 各プロバイダが提供するモデルの一覧（`~/.picoclaw/config.json` の `cached_models`）
+- **更新元**: 3ソースからのマージ（後述）
+- **表示**: 設定画面の Chat LLM・Vision LLM 両方のモデル選択ドロップダウンに動的反映
+
+### 3ソースマージアーキテクチャ
+
+モデルドロップダウンに表示されるモデルは、以下の3つのソースをマージして生成されます:
+
+```mermaid
+flowchart LR
+    subgraph Source1["① Go 静的リスト"]
+        GoCmd["picoclaw providers<br>コマンド実行"]
+        GoModels["defaults.go 定義済み<br>モデルリスト"]
+        GoCmd --> GoModels
+    end
+
+    subgraph Source2["② UI メタデータ"]
+        UIMeta["PROVIDER_UI_META<br>（picoclaw.tsx）"]
+        UILabels["ラベル・説明・Vision フラグ<br>手動キュレーション"]
+        UIMeta --> UILabels
+    end
+
+    subgraph Source3["③ API 動的取得"]
+        APIFetch["model-updater.ts<br>各プロバイダ API"]
+        CachedModels["cached_models<br>（config.json 保存）"]
+        APIFetch --> CachedModels
+    end
+
+    GoModels --> Merge["buildProviderOptions()<br>3ソースマージ"]
+    UILabels --> Merge
+    CachedModels --> Merge
+
+    Merge --> Dedup["Set ベース重複排除"]
+    Dedup --> ChatDropdown["💬 Chat LLM<br>ドロップダウン"]
+    Dedup --> VisionFilter["vision フラグ<br>フィルタリング"]
+    VisionFilter --> VisionDropdown["👁️ Vision LLM<br>ドロップダウン"]
+
+    style Source1 fill:#e8f4fd,stroke:#4a90d9
+    style Source2 fill:#fff3e0,stroke:#ff9800
+    style Source3 fill:#e8f5e9,stroke:#4caf50
+    style Merge fill:#f3e5f5,stroke:#9c27b0
+    style ChatDropdown fill:#e8f4fd,stroke:#4a90d9
+    style VisionDropdown fill:#fce4ec,stroke:#e91e63
+```
+
+| ソース | データ元 | 更新タイミング | 内容 |
+|--------|---------|-------------|------|
+| ① Go 静的リスト | `picoclaw providers` CLI | picoclaw バイナリ更新時 | デフォルトモデル名のみ（ラベルなし） |
+| ② UI メタデータ | `PROVIDER_UI_META` (TypeScript) | アプリ更新時 | ラベル・説明文・Vision フラグ・emoji |
+| ③ API 動的取得 | 各プロバイダ REST API | スケジュール or 手動更新 | 最新のモデル一覧（ID のみ） |
+
+#### マージロジック
+
+```
+1. Go 静的リスト のモデルを起点にする
+2. 各モデルに UI メタデータ があれば、ラベル・説明・Vision フラグを付与
+3. UI メタデータ にあるが Go リストにないモデルを追加（手動キュレーション分）
+4. cached_models にあるが 1-3 にないモデルを追加（API 検出分）
+   └─ UI メタデータにない場合: isLikelyVisionModel() で Vision フラグを自動判定
+      └─ Vision 判定された場合: モデル名に 👁️ を自動付与
+5. Set ベースの重複排除（同一モデル ID は先勝ち）
+```
+
+#### Vision モデル自動検出ヒューリスティック
+
+API 経由で発見された新モデルに Vision 対応フラグを自動付与するための正規表現パターン:
+
+```typescript
+const VISION_MODEL_PATTERNS = /vision|llava|moondream|gpt-4o|gpt-4\.1|scout|maverick|multimodal|gemini|claude-3/i
+```
+
+このパターンにマッチするモデルは、UI メタデータに明示的な定義がなくても Vision 対応として扱われ、
+Vision LLM ドロップダウンに自動的に表示されます。
+
+### Vision LLM 動的ドロップダウン
+
+v2026.03.02 より、Vision LLM のプロバイダ・モデル選択は **ハードコードされた静的リストではなく、
+Chat LLM と同じ動的 `providers` ステートから Vision フラグでフィルタリング** して表示されます。
+
+| 項目 | 旧方式（〜v2026.02.27） | 新方式（v2026.03.02〜） |
+|------|------------------------|------------------------|
+| **プロバイダ一覧** | `VISION_PROVIDERS` 静的配列 | `providers` ステートを `model.vision` でフィルタ |
+| **モデル一覧** | 手動定義のみ | 3ソースマージ + Vision 自動検出 |
+| **新モデル追加** | コード変更が必要 | API 更新で自動反映 |
+| **設定画面の保存** | 更新前に保存が必要 | 保存不要（API キー設定済みなら即更新可能） |
+
+### モデル更新プロバイダ対応
+
+「今すぐ更新」ボタンまたはスケジュール実行時に、以下の全プロバイダの API からモデルリストを自動取得します:
+
+| プロバイダ | API エンドポイント | 認証方式 |
+|-----------|-------------------|---------|
+| **Groq** | `https://api.groq.com/openai/v1/models` | Bearer API Key |
+| **OpenAI** | `https://api.openai.com/v1/models` | Bearer API Key |
+| **OpenRouter** | `https://openrouter.ai/api/v1/models` | 認証不要 |
+| **Anthropic** | `https://api.anthropic.com/v1/models` | `x-api-key` ヘッダー |
+| **DeepSeek** | `https://api.deepseek.com/models` | Bearer API Key |
+| **Ollama** | `http://localhost:11434/api/tags` | 認証不要 |
+| **Mistral** | `https://api.mistral.ai/v1/models` | Bearer API Key |
+
+> **v2026.03.02 変更**: 以前は現在設定中の Chat/Vision プロバイダのみ更新していましたが、
+> **API キーが設定済みのすべてのプロバイダを常にチェック** するよう変更しました。
+> これにより、プロバイダを変更する前にモデルリストを事前に取得できます。
+
+### 自動フォールバック
+
+モデル更新後、現在設定中のモデルが新しいリストに存在しない場合、
+プロバイダごとの推奨フォールバックモデルに自動切替します:
+
+| プロバイダ | 推奨フォールバック | Vision フォールバック |
+|-----------|-------------------|---------------------|
+| **Groq** | llama-3.1-8b-instant, llama-3.3-70b-versatile | llama-4-scout, llama-4-maverick, llama-3.2-11b-vision |
+| **OpenAI** | gpt-4o-mini, gpt-4o | gpt-4o-mini, gpt-4o |
+| **OpenRouter** | llama-3.1-8b-instruct, gemini-2.0-flash | gemini-2.0-flash, claude-3.5-sonnet |
+| **Anthropic** | claude-3-5-haiku, claude-3-5-sonnet | claude-3-5-haiku, claude-3-5-sonnet |
+| **DeepSeek** | deepseek-chat, deepseek-coder | — |
+| **Ollama** | llama3.2:1b, llama3.2:latest | moondream2:latest, llava:latest |
+| **Mistral** | mistral-small-latest, mistral-large-latest | — |
 
 ### スケジュール設定
 
@@ -1112,21 +1229,26 @@ flowchart TD
 
     CheckSchedule["📅 スケジュール確認<br>config.json 読み込み"] --> CalcNext["⏰ 次回実行時刻を計算<br>setTimeout() 設定"]
 
-    CalcNext -- "時刻到達" --> RunProviders["🐾 picoclaw providers<br>コマンド実行"]
-    Manual["👤 手動: 🔄 今すぐ更新"] --> RunProviders
+    CalcNext -- "時刻到達" --> FindProviders["🔑 API Key 設定済み<br>全プロバイダを列挙"]
+    Manual["👤 手動: 🔄 今すぐ更新"] --> FindProviders
 
-    RunProviders --> UpdateConfig["📝 config.json の<br>model_list を更新"]
+    FindProviders --> FetchAPI["📡 各プロバイダ API<br>モデルリスト取得"]
+    FetchAPI --> SaveCache["💾 cached_models<br>config.json に保存"]
+    SaveCache --> Merge["🔄 3ソースマージ<br>buildProviderOptions()"]
+    Merge --> UpdateUI["📋 Chat LLM +<br>Vision LLM ドロップダウン更新"]
 
-    UpdateConfig --> CheckModel{"現在のモデルが<br>新リストに存在する？"}
+    SaveCache --> CheckModel{"現在のモデルが<br>新リストに存在する？"}
 
     CheckModel -- "✅ 存在する" --> NoChange["変更なし"]
-    CheckModel -- "❌ 存在しない" --> AutoSwitch["⚠️ デフォルトモデルに<br>自動切替 + 警告表示"]
+    CheckModel -- "❌ 存在しない" --> AutoSwitch["⚠️ フォールバックモデルに<br>自動切替 + 警告表示"]
 
     NoChange --> CalcNext
     AutoSwitch --> CalcNext
 
     style Start fill:#fff3e0,stroke:#ff9800
-    style RunProviders fill:#f0f9e8,stroke:#7cb342
+    style FindProviders fill:#e8f4fd,stroke:#4a90d9
+    style FetchAPI fill:#f0f9e8,stroke:#7cb342
+    style Merge fill:#f3e5f5,stroke:#9c27b0
     style CheckModel fill:#e8f4fd,stroke:#4a90d9
     style AutoSwitch fill:#fce4ec,stroke:#e91e63
     style Manual fill:#e8f5e9,stroke:#66bb6a
@@ -1135,6 +1257,8 @@ flowchart TD
 ### 手動更新
 
 設定画面の「🔄 今すぐ更新」ボタンで即時実行できます。
+更新完了後、`onModelsUpdated` コールバックにより `loadProviders()` が再実行され、
+Chat LLM・Vision LLM 両方のドロップダウンが即座にリフレッシュされます。
 
 ### Config 構造（自動更新関連）
 
@@ -1144,10 +1268,18 @@ flowchart TD
     "enabled": true,
     "frequency": "monthly",
     "hour": 0,
-    "dayOfMonth": 1
+    "dayOfMonth": 1,
+    "cached_models": {
+      "groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama-4-scout-17b-16e-instruct", "..."],
+      "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "o1", "o3", "..."],
+      "openrouter": ["google/gemini-2.0-flash-001", "anthropic/claude-3.5-sonnet", "..."]
+    }
   }
 }
 ```
+
+> **cached_models フィールド**: v2026.03.02 で追加。`updateNow()` 実行後にプロバイダごとのモデル ID 配列が保存され、
+> 次回の UI 表示時に `buildProviderOptions()` で3ソースマージに使用されます。
 
 ステータスは `~/.picoclaw/model-update-status.json` に保存:
 
@@ -1196,6 +1328,10 @@ block-beta
 例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
 
 > **推奨構成**: GitHub Copilot の `gpt-4.1` を Chat・Vision 両方に設定。無料で高品質かつプロンプト調整が最小限で済みます。
+
+> **動的ドロップダウン（v2026.03.02〜）**: Vision LLM のプロバイダ・モデル選択は、Chat LLM と同一の
+> 動的 `providers` ステート（3ソースマージ）から Vision 対応モデルのみをフィルタリングして表示されます。
+> 新しい Vision 対応モデルが API 経由で発見された場合も、自動更新後にドロップダウンに即反映されます。
 
 ### 検証フロー
 
@@ -1268,6 +1404,10 @@ Vision LLM が設定されていない場合:
 - 初回操作時に設定案内メッセージが表示される
 
 ### Vision LLM 対応モデル一覧
+
+> **Note（v2026.03.02〜）**: 以下のテーブルは参考情報です。実際の UI ドロップダウンは3ソースマージによる動的リストで表示され、
+> プロバイダ API の自動更新により新モデルが追加された場合も自動的に反映されます。
+> Vision 判定は `VISION_MODEL_PATTERNS` 正規表現 + `PROVIDER_UI_META` の `vision` フラグで決定されます。
 
 | プロバイダ | モデル | 料金 | 速度 | 備考 |
 |-----------|--------|------|------|------|
@@ -1413,3 +1553,30 @@ Groq 無料枠（TPM 6000）での運用を前提とした対策:
 | **ChatUI シーケンス図追加** | アプリ内蔵 ChatUI からのロック操作シーケンス図を追加。Telegram との比較表付き |
 | **Mermaid 日本語フォント修正** | SVG/PDF の Mermaid 図で日本語が文字化けする問題を修正。`mermaid.css` + `mermaid-config.json` で Hiragino Sans 等の日本語フォントを指定 |
 | **Credential Vault 設計書追加** | セキュリティセクション新設。AES-256-GCM 暗号化 Vault による PIN/パスワード保管、マスターパスワードの LLM バイパス、Telegram メッセージ即時削除、Chat UI マスク表示の設計を文書化 |
+
+### NanoKVM-USB Desktop (v2026.03.02)
+
+| 変更 | 内容 |
+|------|------|
+| **Credential Vault 実装** | `vault/manager.ts` 新規作成。AES-256-GCM + PBKDF2-SHA256（100K イテレーション）暗号化ストレージ。IPC イベント8個追加。Settings UI に「🔐 ログイン認証情報」セクション追加 |
+| **vault_pending_unlock フロー実装** | `manager.ts` に `vault_pending_unlock` 状態管理を実装。`vault_locked` HTTP 403 応答時またはLLMの「マスターパスワード」含む応答時にフラグ設定。次のユーザーメッセージは LLM をバイパスして直接 Vault API に渡す。永続化ファイル `~/.picoclaw/vault_pending.json`（5分で失効） |
+| **Vault パスワード検出拡張** | Vault 解錠要求の検出を完全一致「マスターパスワードを入力してください」から部分一致「マスターパスワード」に拡張。Go 側 `cmd_gateway.go` と TS 側 `manager.ts` の両方を修正 |
+| **黒画面誤検出修正** | 輝度閾値を `avgBrightness < 3` → `< 8` → `< 15` に段階的に引き上げ。HDMI キャプチャカードが OFF 時に生成するノイズフレーム（brightness 3〜12）を正しく黒画面として扱い、ウェイクアップパスにルーティング |
+| **Vision LLM BLACK_SCREEN 分類修正** | Vision LLM が「black screen」と応答した場合のキーワード分類を `NO_SIGNAL` → `BLACK_SCREEN` に変更。ウェイクアップ + 再分析リトライが正しくトリガーされるように修正 |
+| **Groq モデル追加** | `defaults.go` に4モデル追加: `llama-3.1-8b-instant`（Chat 推奨）、`llama-4-scout`、`llama-4-maverick`（Vision 対応）、`llama-3.2-11b-vision`。`PROVIDER_UI_META` にも対応エントリ追加 |
+| **3ソースマージ アーキテクチャ** | モデルドロップダウンを Go 静的リスト + UI メタデータ + API 取得 `cached_models` の3ソースからマージ生成する方式に変更。`buildProviderOptions()` 関数を全面刷新。`Set` ベースの重複排除 |
+| **Vision モデル自動検出** | `VISION_MODEL_PATTERNS` 正規表現 + `isLikelyVisionModel()` ヒューリスティック関数を追加。API 経由で発見された新モデルに Vision フラグを自動付与（👁️ 表示）。パターン: `vision\|llava\|moondream\|gpt-4o\|scout\|maverick\|gemini\|claude-3` |
+| **Vision LLM 動的ドロップダウン** | ハードコードされた `VISION_PROVIDERS` 静的配列（70行）を削除。Vision LLM のプロバイダ・モデル選択を Chat LLM と同じ動的 `providers` ステートから `model.vision` フラグでフィルタリングして表示する方式に変更 |
+| **model-updater 全プロバイダ更新** | `updateNow()` が Chat/Vision プロバイダのみチェック → **API キー設定済みの全プロバイダを常にチェック** に変更。設定画面の保存なしで「今すぐ更新」が全プロバイダに対して動作 |
+| **model-update コールバック** | `ModelUpdateSettings` コンポーネントに `onModelsUpdated` コールバック prop を追加。更新成功後に `loadProviders()` を自動再実行し、Chat LLM・Vision LLM 両方のドロップダウンを即座にリフレッシュ |
+| **Telegram E2E テスト 7修正** | 日本語キーワード対応、デフォルト `@vault`、フレッシュセッション ID、Vault 永続化、同期ログイン等の修正を Telegram E2E テストで検証 |
+| **レートリミット対策** | GitHub Models API の無料枠（100回/日/モデル）制限を確認。Chat LLM と Vision LLM が同一プロバイダ/モデルの場合にレート消費が加速する問題を認識し、Vision LLM を Groq に分離する構成を推奨 |
+
+### picoclaw Go (v2026.03.02)
+
+| 変更 | 内容 |
+|------|------|
+| **Groq モデル追加** | `defaults.go` に `llama-3.1-8b-instant`、`llama-4-scout`（Vision）、`llama-4-maverick`（Vision）、`llama-3.2-11b-vision`（Vision）を追加。計5モデルに拡充 |
+| **vault_pending_unlock 実装** | `cmd_gateway.go` に Vault 解錠フロー実装。`deleteMessage` で Telegram パスワードメッセージ即時削除、部分一致「マスターパスワード」検出 |
+| **vault_locked 403 レスポンス** | Login API が Vault 未解錠時に HTTP 403 + `vault_locked` エラーを返却。picoclaw agent がこれを受けてユーザーにマスターパスワードを要求 |
+| **BLACK_SCREEN キーワード修正** | Vision LLM 応答の「black screen」を `BLACK_SCREEN` に正しく分類（以前は `NO_SIGNAL` に混入） |

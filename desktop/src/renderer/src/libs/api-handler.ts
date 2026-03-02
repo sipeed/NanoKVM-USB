@@ -515,7 +515,12 @@ export async function captureScreen(): Promise<CaptureResult> {
     const avgB = totalB / numPixels
     const avgBrightness = (avgR + avgG + avgB) / 3
     console.log(`[API Handler] Screen check: avgBrightness=${avgBrightness.toFixed(1)}, avgRGB=(${avgR.toFixed(1)},${avgG.toFixed(1)},${avgB.toFixed(1)})`)
-    if (avgBrightness < 3) {
+    // Threshold 15: HDMI capture cards produce noise at brightness 3-12 even when
+    // the source display is off (power-saving after lock). Using < 8 let frames
+    // with brightness 8-12 through to Vision LLM, which classified them as
+    // "completely black" → NO_SIGNAL (wrong). Raising to 15 routes more
+    // sleep-mode frames through the server's wake-up path (mouse+Space → retry).
+    if (avgBrightness < 15) {
       return { dataUrl: null, rejectReason: `black/no-signal screen (brightness=${avgBrightness.toFixed(1)})` }
     }
 

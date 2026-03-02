@@ -108,6 +108,58 @@ const App = (): ReactElement => {
     console.log('[Retina Debug] Canvas height will be:', videoDimensions.height * devicePixelRatio)
   }, [videoDimensions, devicePixelRatio])
 
+  // ── Video stream freeze detection & auto-recovery ──
+  // Uses requestVideoFrameCallback to track real frame delivery.
+  // When no new frame arrives within the threshold, triggers camera.autoRecover().
+  useEffect(() => {
+    if (videoState !== 'connected') return
+
+    const video = document.getElementById('video') as HTMLVideoElement
+    if (!video) return
+    if (typeof video.requestVideoFrameCallback !== 'function') return
+
+    let lastFrameTime = performance.now()
+    let cancelled = false
+    let checkIntervalId: ReturnType<typeof setInterval> | null = null
+
+    const FREEZE_THRESHOLD_MS = 5000 // 5s without a new frame = frozen
+
+    // Track frame delivery
+    function onFrame(): void {
+      if (cancelled) return
+      lastFrameTime = performance.now()
+      try {
+        video.requestVideoFrameCallback(onFrame)
+      } catch {
+        // callback chain broken — will be restarted on recovery
+      }
+    }
+    video.requestVideoFrameCallback(onFrame)
+
+    // Periodic check: is the stream still delivering frames?
+    checkIntervalId = setInterval(() => {
+      if (cancelled) return
+      const elapsed = performance.now() - lastFrameTime
+      if (elapsed > FREEZE_THRESHOLD_MS && !camera.isRecovering()) {
+        console.warn(`[App] Video stream frozen for ${Math.round(elapsed)}ms — triggering auto-recovery`)
+        camera.autoRecover().then((ok) => {
+          if (ok) {
+            // Restart the frame callback chain on the (possibly new) stream
+            lastFrameTime = performance.now()
+            try {
+              video.requestVideoFrameCallback(onFrame)
+            } catch { /* ignore */ }
+          }
+        })
+      }
+    }, 2000)
+
+    return () => {
+      cancelled = true
+      if (checkIntervalId) clearInterval(checkIntervalId)
+    }
+  }, [videoState])
+
   useEffect(() => {
     const resolution = getVideoResolution()
     if (resolution) {

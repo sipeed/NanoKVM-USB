@@ -5,6 +5,7 @@ import fs from 'fs'
 import os from 'os'
 import http from 'http'
 import { translateApiError, RateLimitInfo } from '@common/error-messages'
+import { vaultManager } from '../vault/manager'
 
 export interface ModelListEntry {
   model_name: string
@@ -65,10 +66,23 @@ export class PicoclawManager {
   private configPath: string
   private picoclawBinary: string
   private recentApiCalls: Map<string, number> = new Map() // endpoint+body → timestamp for dedup
+  private vaultPendingFilePath: string // file path for vault_pending persistence
+
+  // --- Vault Pending Unlock state ---
+  // When vault is locked and login is attempted, the next user message
+  // is treated as a master password and sent directly to the Vault,
+  // bypassing the LLM entirely.
+  private vaultPendingUnlock = false
+  private pendingLoginMessage: string | null = null
+  private pendingLoginLanguage = 'en'
 
   constructor() {
     // picoclaw config path: ~/.picoclaw/config.json
     this.configPath = path.join(os.homedir(), '.picoclaw', 'config.json')
+    // vault_pending persistence file
+    this.vaultPendingFilePath = path.join(os.homedir(), '.picoclaw', 'vault_pending.json')
+    // Restore vault_pending state from file (survives process restart)
+    this.restoreVaultPendingState()
     
     // picoclaw binary path (in app resources)
     if (app.isPackaged) {
@@ -82,6 +96,57 @@ export class PicoclawManager {
     }
     
     console.log('[Picoclaw] Binary path:', this.picoclawBinary)
+  }
+
+  /**
+   * Persist vault_pending_unlock state to file so it survives process restarts.
+   */
+  private saveVaultPendingState(): void {
+    try {
+      if (this.vaultPendingUnlock) {
+        const state = {
+          vaultPendingUnlock: true,
+          pendingLoginMessage: this.pendingLoginMessage,
+          pendingLoginLanguage: this.pendingLoginLanguage,
+          timestamp: Date.now()
+        }
+        fs.writeFileSync(this.vaultPendingFilePath, JSON.stringify(state), 'utf-8')
+        console.log('[Picoclaw] Vault pending state saved to file')
+      } else {
+        // Clear the file when no longer pending
+        if (fs.existsSync(this.vaultPendingFilePath)) {
+          fs.unlinkSync(this.vaultPendingFilePath)
+          console.log('[Picoclaw] Vault pending state file removed')
+        }
+      }
+    } catch (err) {
+      console.error('[Picoclaw] Failed to save vault pending state:', err)
+    }
+  }
+
+  /**
+   * Restore vault_pending_unlock state from file on startup.
+   * State expires after 5 minutes to prevent stale prompts.
+   */
+  private restoreVaultPendingState(): void {
+    try {
+      if (fs.existsSync(this.vaultPendingFilePath)) {
+        const raw = fs.readFileSync(this.vaultPendingFilePath, 'utf-8')
+        const state = JSON.parse(raw)
+        // Expire state after 5 minutes
+        if (state.timestamp && Date.now() - state.timestamp < 5 * 60 * 1000) {
+          this.vaultPendingUnlock = state.vaultPendingUnlock ?? false
+          this.pendingLoginMessage = state.pendingLoginMessage ?? null
+          this.pendingLoginLanguage = state.pendingLoginLanguage ?? 'en'
+          console.log('[Picoclaw] Vault pending state restored from file')
+        } else {
+          console.log('[Picoclaw] Vault pending state expired, ignoring')
+          fs.unlinkSync(this.vaultPendingFilePath)
+        }
+      }
+    } catch (err) {
+      console.error('[Picoclaw] Failed to restore vault pending state:', err)
+    }
   }
 
   /**
@@ -163,6 +228,7 @@ export class PicoclawManager {
       // stderr is for Go process errors/logs only, NOT LLM output
       // Only translate errors for Telegram users, do NOT intercept tool calls
       this.sendGatewayErrorFollowUp(text)
+
     })
 
     this.process.on('close', (code) => {
@@ -635,9 +701,90 @@ export class PicoclawManager {
   }
 
   /**
-   * Send message to picoclaw agent
+   * Send message to picoclaw agent.
+   *
+   * If vault_pending_unlock is true, the message is treated as a master password
+   * and sent directly to the Vault — never to the LLM. After successful unlock,
+   * a login command is automatically re-dispatched through the agent.
    */
   async sendMessage(message: string, language: string = 'en', sessionId?: string): Promise<string> {
+    // --- Vault Pending Unlock: LLM bypass ---
+    // When this flag is true, the user's message is a master password.
+    // Send it directly to the Vault, never to the LLM.
+    if (this.vaultPendingUnlock) {
+      return this.handleVaultPendingUnlock(message, language, sessionId)
+    }
+
+    const response = await this.spawnAgent(message, language, sessionId)
+
+    // Check if the agent's response contains the vault unlock prompt.
+    // This means nanokvm_login returned vault_locked and the agent is
+    // asking the user for their master password. Set the flag so the
+    // NEXT message is treated as a master password (LLM bypass).
+    // NOTE: LLM responses vary — "マスターパスワードを入力してください",
+    // "マスターパスワードが必要です", etc. Match broadly on "マスターパスワード".
+    if (response.includes('マスターパスワード')) {
+      console.log('[Picoclaw] Agent response contains vault unlock prompt — setting vault_pending_unlock')
+      this.vaultPendingUnlock = true
+      this.pendingLoginMessage = message
+      this.pendingLoginLanguage = language
+      this.saveVaultPendingState()
+    }
+
+    return response
+  }
+
+  /**
+   * Handle vault pending unlock: treat the user's message as a master password,
+   * unlock the vault directly (bypassing LLM), then auto re-dispatch the
+   * original login command.
+   *
+   * On wrong password: keep vault_pending_unlock true so the user can retry.
+   */
+  private async handleVaultPendingUnlock(
+    masterPassword: string,
+    language: string,
+    _sessionId?: string
+  ): Promise<string> {
+    console.log('[Picoclaw] vault_pending_unlock: attempting vault unlock (LLM bypass)')
+
+    try {
+      await vaultManager.unlock(masterPassword)
+      console.log('[Picoclaw] Vault unlocked successfully')
+
+      // Clear the flag
+      this.vaultPendingUnlock = false
+      // Always re-dispatch as a login command — vault_pending_unlock is only
+      // triggered by nanokvm_login vault_locked, so the pending action is login.
+      const pendingLanguage = this.pendingLoginLanguage || language
+      this.pendingLoginMessage = null
+      this.saveVaultPendingState()
+
+      // Use a FRESH session ID for the re-dispatched login command.
+      // The original session contains the vault_locked failure context, which
+      // causes session accumulation — the LLM sees the failed attempt history
+      // and may stop calling tools or enter a retry loop.
+      const freshSession = `login-${Date.now()}`
+
+      // Auto re-dispatch login command through the agent
+      const loginCommand = pendingLanguage === 'ja' ? 'ログインして' : 'Login'
+      console.log(`[Picoclaw] Auto re-dispatching login: "${loginCommand}" (fresh session: ${freshSession})`)
+      return await this.spawnAgent(loginCommand, pendingLanguage, freshSession)
+    } catch (err) {
+      // Wrong password — keep vault_pending_unlock true for retry
+      console.log(`[Picoclaw] Vault unlock failed: ${err}`)
+      this.vaultPendingUnlock = true
+      this.saveVaultPendingState()
+      // The error message MUST contain "マスターパスワードを入力してください" so that
+      // ChatUI's isVaultPasswordMode stays active and the next input remains masked.
+      return '🔐 パスワードが正しくありません。マスターパスワードを入力してください。'
+    }
+  }
+
+  /**
+   * Spawn picoclaw agent subprocess.
+   */
+  private spawnAgent(message: string, language: string = 'en', sessionId?: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const args = ['agent', '-m', message, '-l', language]
       if (sessionId) {
@@ -901,12 +1048,24 @@ export class PicoclawManager {
         break
       }
       case 'login': {
-        const password = String(params.password || '')
+        // Default password to @vault (spec-compliant: vault handles credential retrieval)
+        const password = String(params.password || '@vault')
         const username = params.username && String(params.username) !== '' ? String(params.username) : undefined
-        if (password) {
-          const body: Record<string, string> = { password }
-          if (username) body.username = username
-          this.callApi(`${API_BASE}/api/keyboard/login`, body)
+        const body: Record<string, string> = { password }
+        if (username) body.username = username
+        // Login uses a synchronous HTTP call (unlike other tools) so we can
+        // detect vault_locked 403 responses and trigger vault_pending_unlock.
+        try {
+          const loginResult = await this.callApiSync(`${API_BASE}/api/keyboard/login`, body)
+          if (loginResult.statusCode === 403) {
+            // vault_locked — trigger vault_pending_unlock
+            console.log('[Picoclaw Interceptor] Login returned 403 vault_locked — setting vault_pending_unlock')
+            this.vaultPendingUnlock = true
+            this.pendingLoginLanguage = 'ja'
+            this.saveVaultPendingState()
+          }
+        } catch (err) {
+          console.error('[Picoclaw Interceptor] Login API call failed:', err)
         }
         break
       }
@@ -1016,5 +1175,49 @@ export class PicoclawManager {
 
     req.write(postData)
     req.end()
+  }
+
+  /**
+   * Make a synchronous (Promise-based) HTTP POST request to the local API server.
+   * Used by login to detect vault_locked 403 responses.
+   */
+  private callApiSync(url: string, body: Record<string, unknown>): Promise<{ statusCode: number; data: string }> {
+    const urlObj = new URL(url)
+    const postData = JSON.stringify(body)
+
+    console.log(`[Picoclaw Interceptor] Calling API (sync): POST ${urlObj.pathname} ${postData}`)
+
+    return new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: urlObj.hostname,
+          port: urlObj.port,
+          path: urlObj.pathname,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          }
+        },
+        (res) => {
+          let data = ''
+          res.on('data', (chunk) => {
+            data += chunk
+          })
+          res.on('end', () => {
+            console.log(`[Picoclaw Interceptor] API response (sync): ${res.statusCode} ${data}`)
+            resolve({ statusCode: res.statusCode || 0, data })
+          })
+        }
+      )
+
+      req.on('error', (err) => {
+        console.error(`[Picoclaw Interceptor] API call (sync) failed:`, err.message)
+        reject(err)
+      })
+
+      req.write(postData)
+      req.end()
+    })
   }
 }

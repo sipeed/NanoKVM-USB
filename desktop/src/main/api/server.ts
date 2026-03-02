@@ -4,6 +4,7 @@ import { IpcEvents } from '@common/ipc-events'
 import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision, getVisionLanguage } from '../picoclaw/vision'
 import { isFfmpegCaptureAvailable, captureFrameNative } from '../device/capture'
 import { loginToWindows } from '../device/login'
+import { vaultManager } from '../vault/manager'
 
 export interface ApiServerConfig {
   port: number
@@ -99,6 +100,12 @@ export class ApiServer {
       await this.handleScreenVerify(req, res)
     } else if (req.method === 'GET' && url.pathname === '/api/status') {
       await this.handleStatus(req, res)
+    } else if (req.method === 'POST' && url.pathname === '/api/vault/unlock') {
+      await this.handleVaultUnlock(req, res)
+    } else if (req.method === 'GET' && url.pathname === '/api/vault/credential') {
+      await this.handleVaultGetCredential(req, res)
+    } else if (req.method === 'GET' && url.pathname === '/api/vault/status') {
+      await this.handleVaultStatus(req, res)
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'Not found' }))
@@ -260,16 +267,57 @@ export class ApiServer {
   private async handleKeyboardLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const body = await this.readBody(req)
-      const { password, username: rawUsername } = JSON.parse(body)
+      const { password: rawPassword, username: rawUsername } = JSON.parse(body)
 
-      if (typeof password !== 'string' || password === '') {
-        res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'password field is required' }))
-        return
+      // --- Vault integration ---
+      // When vault is configured, ALWAYS use vault credentials regardless of
+      // what password the agent provides. This prevents the LLM from needing
+      // to know about @vault and ensures PINs never travel through chat channels.
+      let password: string
+      let username: string
+
+      if (vaultManager.isConfigured()) {
+        // Vault is configured — use vault credentials exclusively
+        if (!vaultManager.isUnlocked()) {
+          // Vault is locked — return vault_locked error.
+          // The agent will ask the user for the master password in chat.
+          // gateway (Telegram) / manager.ts (ChatUI) intercepts the next message
+          // and sends it directly to the Vault API, bypassing the LLM.
+          console.log('[API Server] Vault is configured but locked — returning vault_locked error')
+          res.writeHead(403, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({
+            error: 'vault_locked',
+            message: 'マスターパスワードが必要です',
+            user_message: '🔐 マスターパスワードを入力してください'
+          }))
+          return
+        }
+
+        const credential = vaultManager.getCredential()
+        if (!credential || !credential.pin) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({
+            error: 'vault_empty',
+            message: 'No credential stored in vault'
+          }))
+          return
+        }
+
+        password = credential.pin
+        username = credential.username || ''
+        console.log('[API Server] Using vault credential for login (PIN masked, agent-provided password ignored)')
+      } else {
+        // Vault not configured: use password provided directly in the request
+        if (typeof rawPassword !== 'string' || rawPassword === '') {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'password field is required' }))
+          return
+        }
+        password = rawPassword
+        username = typeof rawUsername === 'string' ? rawUsername.trim() : ''
       }
 
       // Sanitize username: reject OS names, bot names, emoji, and non-ASCII
-      let username = typeof rawUsername === 'string' ? rawUsername.trim() : ''
       if (username && !ApiServer.isValidUsername(username)) {
         console.warn(`[API Server] Ignoring invalid username "${username}", using PIN-only mode`)
         username = ''
@@ -281,6 +329,14 @@ export class ApiServer {
       console.log('[API Server] Starting login sequence in main process (skipWake=true)...')
       await loginToWindows(password, username || undefined, true)
       console.log('[API Server] Login sequence completed')
+
+      // Re-lock the vault after successful login.
+      // Spec: "毎回マスターパスワードを要求 — セッション保持なし"
+      // This ensures the next login attempt requires master password again.
+      if (vaultManager.isConfigured() && vaultManager.isUnlocked()) {
+        vaultManager.lock()
+        console.log('[API Server] Vault re-locked after login (one-time use)')
+      }
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true }))
@@ -610,43 +666,71 @@ export class ApiServer {
         return true
       }
 
+      // Normalize Japanese text for keyword matching (original + uppercased)
+      const analysisLower = analysis.toLowerCase()
+
       if (action === 'status') {
-        // Detect black/blank/no-signal screen FIRST (highest priority)
+        // Detect black/blank screen FIRST (highest priority)
+        // IMPORTANT: If we reach here, the frame PASSED brightness+variance checks,
+        // meaning HDMI IS connected and producing frames. A "completely black" frame
+        // indicates the PC display is OFF (power-saving/sleep), NOT that HDMI is
+        // disconnected. Classify as BLACK_SCREEN (sleep), not NO_SIGNAL.
+        // English AND Japanese keywords supported (Vision LLM may respond in either language)
         if (upper.includes('BLACK SCREEN') || upper.includes('BLANK SCREEN') ||
             upper.includes('NO SIGNAL') || upper.includes('COMPLETELY BLACK') ||
-            (upper.includes('NO VISIBLE') && upper.includes('BLACK'))) {
-          status = 'NO_SIGNAL'
-        } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
+            (upper.includes('NO VISIBLE') && upper.includes('BLACK')) ||
+            analysisLower.includes('真っ黒') || analysisLower.includes('黒い画面') ||
+            analysisLower.includes('信号なし') || analysisLower.includes('完全に黒') ||
+            analysisLower.includes('真っ暗') || analysisLower.includes('ブラックスクリーン') ||
+            analysisLower.includes('映像なし') || analysisLower.includes('no signal')) {
+          status = 'BLACK_SCREEN'
+        } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') ||
+            analysisLower.includes('ロック画面') || analysisLower.includes('ロックスクリーン') ||
+            analysisLower.includes('ログイン画面') && (analysisLower.includes('時計') || analysisLower.includes('アバター'))) {
           // LOCK_SCREEN before DESKTOP: Vision often says "lock screen...no taskbar"
           status = 'LOCK_SCREEN'
-        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR')) {
+        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') ||
+            (analysisLower.includes('デスクトップ') && !analysisLower.includes('ではない')) ||
+            (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない'))) {
           // Only match DESKTOP/TASKBAR in positive (non-negated) context
           status = 'DESKTOP'
-        } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('PIN')) {
+        } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('PIN') ||
+            analysisLower.includes('ログイン') || analysisLower.includes('サインイン') ||
+            analysisLower.includes('pin入力') || analysisLower.includes('パスワード入力')) {
           status = 'LOGIN_SCREEN'
-        } else if (upper.includes('LOCK') && !upper.includes('NOT') && !upper.includes('DOES NOT')) {
+        } else if ((upper.includes('LOCK') && !upper.includes('NOT') && !upper.includes('DOES NOT')) ||
+            (analysisLower.includes('ロック') && !analysisLower.includes('ではない'))) {
           status = 'LOCK_SCREEN'
         } else {
           status = 'DESCRIBED'
         }
       } else if (action === 'lock') {
         // For lock verification: only detect LOCK_SCREEN or DESKTOP
-        if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN')) {
+        if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') ||
+            analysisLower.includes('ロック画面') || analysisLower.includes('ロックスクリーン')) {
           status = 'LOCK_SCREEN'
-        } else if (upper.includes('LOCK') || upper.includes('CLOCK') || upper.includes('AVATAR')) {
+        } else if (upper.includes('LOCK') || upper.includes('CLOCK') || upper.includes('AVATAR') ||
+            analysisLower.includes('ロック') || analysisLower.includes('時計') || analysisLower.includes('アバター')) {
           status = 'LOCK_SCREEN'
-        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') || hasPositive('ICON')) {
+        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') || hasPositive('ICON') ||
+            (analysisLower.includes('デスクトップ') && !analysisLower.includes('ではない')) ||
+            (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない'))) {
           status = 'DESKTOP'
         }
       } else {
         // For login verification: detect LOGIN_SUCCESS, LOGIN_FAILED, or LOCK_SCREEN
-        if (upper.includes('LOGIN_SUCCESS') || upper.includes('LOGIN SUCCESS')) {
+        if (upper.includes('LOGIN_SUCCESS') || upper.includes('LOGIN SUCCESS') ||
+            analysisLower.includes('ログイン成功')) {
           status = 'LOGIN_SUCCESS'
-        } else if (upper.includes('LOGIN_FAILED') || upper.includes('LOGIN FAILED') || upper.includes('WRONG') || upper.includes('ERROR') || upper.includes('INCORRECT')) {
+        } else if (upper.includes('LOGIN_FAILED') || upper.includes('LOGIN FAILED') || upper.includes('WRONG') || upper.includes('ERROR') || upper.includes('INCORRECT') ||
+            analysisLower.includes('ログイン失敗') || analysisLower.includes('正しくありません') || analysisLower.includes('間違') || analysisLower.includes('エラー')) {
           status = 'LOGIN_FAILED'
-        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR')) {
+        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') ||
+            (analysisLower.includes('デスクトップ') && !analysisLower.includes('ではない')) ||
+            (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない'))) {
           status = 'LOGIN_SUCCESS'
-        } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') || upper.includes('LOCK')) {
+        } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') || upper.includes('LOCK') ||
+            analysisLower.includes('ロック画面') || analysisLower.includes('ロック')) {
           status = 'LOCK_SCREEN'
         }
       }
@@ -667,10 +751,63 @@ export class ApiServer {
         }
       }
 
+      // If Vision LLM detected a black/sleep screen, try wake-up and re-analyze
+      // This handles the case where the PC display turned off (power-saving)
+      // but HDMI is still connected (frame passed brightness checks).
+      if (status === 'BLACK_SCREEN' && this.mainWindow) {
+        console.log('[API Server] Screen verify: Vision detected black/sleep screen, attempting wake + retry...')
+        this.mainWindow.webContents.send('api:mouse:wake')
+        await new Promise((r) => setTimeout(r, 4000))
+        const retryCapture = await this.requestScreenCapture()
+        if (retryCapture.dataUrl) {
+          console.log('[API Server] Screen verify: wake succeeded, re-analyzing with Vision LLM...')
+          const retryAnalysis = await analyzeScreenWithVision(retryCapture.dataUrl, prompt)
+          console.log('[API Server] Screen verify: retry analysis:', retryAnalysis)
+          // Re-parse the retry analysis
+          const retryUpper = retryAnalysis.toUpperCase()
+          const retryLower = retryAnalysis.toLowerCase()
+          const retryHasPositive = (keyword: string): boolean => {
+            const idx = retryUpper.indexOf(keyword)
+            if (idx < 0) return false
+            const prefix = retryUpper.substring(Math.max(0, idx - 20), idx)
+            return !(/\b(NO|NOT|WITHOUT|NO VISIBLE)\s*$/.test(prefix) || /\bDOES NOT\b/.test(prefix))
+          }
+          let retryStatus = 'BLACK_SCREEN'
+          if (retryUpper.includes('LOCK_SCREEN') || retryUpper.includes('LOCK SCREEN') ||
+              retryLower.includes('ロック画面') || retryLower.includes('ロックスクリーン') ||
+              retryLower.includes('ログイン画面') && (retryLower.includes('時計') || retryLower.includes('アバター'))) {
+            retryStatus = 'LOCK_SCREEN'
+          } else if (retryHasPositive('DESKTOP') || retryHasPositive('TASKBAR') ||
+              (retryLower.includes('デスクトップ') && !retryLower.includes('ではない')) ||
+              (retryLower.includes('タスクバー') && !retryLower.includes('ではない'))) {
+            retryStatus = 'DESKTOP'
+          } else if (retryUpper.includes('LOGIN') || retryUpper.includes('SIGN IN') ||
+              retryLower.includes('ログイン') || retryLower.includes('サインイン')) {
+            retryStatus = 'LOGIN_SCREEN'
+          } else if ((retryUpper.includes('LOCK') && !retryUpper.includes('NOT')) ||
+              (retryLower.includes('ロック') && !retryLower.includes('ではない'))) {
+            retryStatus = 'LOCK_SCREEN'
+          }
+          if (retryStatus !== 'BLACK_SCREEN') {
+            console.log(`[API Server] Screen verify: wake recovery succeeded: ${retryStatus}`)
+            status = retryStatus
+            detail = retryAnalysis
+          } else {
+            console.log('[API Server] Screen verify: still black after wake attempt')
+            detail = retryAnalysis
+          }
+        } else {
+          console.log('[API Server] Screen verify: wake retry capture still null')
+        }
+      }
+
       // Generate feedback
       let feedback = ''
       if (action === 'status') {
         switch (status) {
+          case 'BLACK_SCREEN':
+            feedback = `🖥️ 画面が消灯/スリープ状態の可能性があります。画面は黒く表示されていますが、HDMI接続は確認されています。スリープ復帰を試みましたが画面が変わりませんでした。PCの電源が入っていることを確認し、マウスやキーボードで復帰を試みてください。\n${detail}`
+            break
           case 'NO_SIGNAL':
             feedback = `📹 映像信号がありません。PCの電源が入っていないか、HDMI接続が切れている可能性があります。\n${detail}`
             break
@@ -796,6 +933,60 @@ export class ApiServer {
 
       this.mainWindow.webContents.send(IpcEvents.SCREEN_CAPTURE)
     })
+  }
+
+  /**
+   * POST /api/vault/unlock — unlock vault with master password (called by picoclaw agent)
+   */
+  private async handleVaultUnlock(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req)
+      const { master_password } = JSON.parse(body)
+
+      if (!master_password || typeof master_password !== 'string') {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'master_password is required' }))
+        return
+      }
+
+      if (!vaultManager.isConfigured()) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'vault_not_configured', message: 'Vault is not set up' }))
+        return
+      }
+
+      await vaultManager.unlock(master_password)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true }))
+    } catch (err) {
+      console.error('[API Server] Vault unlock error:', err)
+      res.writeHead(403, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'unlock_failed', message: String(err) }))
+    }
+  }
+
+  /**
+   * GET /api/vault/credential — get decrypted credential (only when unlocked)
+   */
+  private async handleVaultGetCredential(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!vaultManager.isUnlocked()) {
+      res.writeHead(403, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'vault_locked', message: 'Vault is locked' }))
+      return
+    }
+
+    const credential = vaultManager.getCredential()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ success: true, credential }))
+  }
+
+  /**
+   * GET /api/vault/status — check whether vault is configured and unlocked
+   */
+  private async handleVaultStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const status = vaultManager.getStatus()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ success: true, ...status }))
   }
 
   getUrl(): string {

@@ -11,9 +11,17 @@ files:
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!node_modules/ffmpeg-static'
 
 asarUnpack:
   - resources/**
+
+extraResources:
+  - from: node_modules/ffmpeg-static/
+    to: bin/
+    filter:
+      - ffmpeg
+      - ffmpeg.exe
 
 win:
   executableName: NanoKVM-USB

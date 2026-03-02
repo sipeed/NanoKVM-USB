@@ -1,6 +1,6 @@
 import { ReactElement, useEffect, useRef, useState } from 'react'
-import { Button, Input, message, Select, Space, Tooltip, Switch, Divider } from 'antd'
-import { ClipboardIcon, ExternalLinkIcon } from 'lucide-react'
+import { Button, Input, message, Select, Space, Tooltip, Switch, Divider, Modal } from 'antd'
+import { ClipboardIcon, ExternalLinkIcon, Eye, EyeOff, Shield, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
@@ -29,6 +29,9 @@ interface PicoclawConfig {
       proxy?: string
       allow_from?: string[]
     }
+  }
+  model_update?: {
+    cached_models?: Record<string, string[]>
   }
 }
 
@@ -94,9 +97,11 @@ const PROVIDER_UI_META: Record<
   groq: {
     models: {
       'llama-3.1-8b-instant': { label: 'Llama 3.1 8B Instant 💨 (推奨)', description: '軽量・超高速・トークン節約' },
+      'meta-llama/llama-4-scout-17b-16e-instruct': { label: 'Llama 4 Scout 👁️ (Vision推奨)', description: 'Vision対応・無料・高速・最新', vision: true },
+      'meta-llama/llama-4-maverick-17b-128e-instruct': { label: 'Llama 4 Maverick 👁️', description: 'Vision対応・無料・高品質', vision: true },
       'llama-3.2-11b-vision-preview': { label: 'Llama 3.2 11B Vision 👁️', description: 'Vision対応・無料・高速', vision: true },
-      'mixtral-8x7b-32768': { label: 'Mixtral 8x7B', description: '中型・バランス' },
-      'llama-3.3-70b-versatile': { label: 'Llama 3.3 70B', description: '大型・高品質・トークン消費大' }
+      'llama-3.3-70b-versatile': { label: 'Llama 3.3 70B', description: '大型・高品質・トークン消費大' },
+      'mixtral-8x7b-32768': { label: 'Mixtral 8x7B', description: '中型・バランス' }
     }
   },
   ollama: {
@@ -118,26 +123,47 @@ const PROVIDER_UI_META: Record<
 }
 
 /**
- * Convert dynamic providers from picoclaw CLI to UI-ready format.
- * Merges with PROVIDER_UI_META for enriched display of known providers/models.
+ * Heuristic to detect if a model ID is likely Vision-capable.
+ * Used for API-discovered models that aren't in PROVIDER_UI_META.
  */
-function buildProviderOptions(dynamicProviders: DynamicProvider[]): ProviderOption[] {
+const VISION_MODEL_PATTERNS = /vision|llava|moondream|gpt-4o|gpt-4\.1|scout|maverick|multimodal|gemini|claude-3/i
+
+function isLikelyVisionModel(modelId: string): boolean {
+  return VISION_MODEL_PATTERNS.test(modelId)
+}
+
+/**
+ * Convert dynamic providers from picoclaw CLI to UI-ready format.
+ * Merges three sources:
+ *   1. Go static model list (picoclaw providers command)
+ *   2. PROVIDER_UI_META (manually curated UI labels/descriptions)
+ *   3. API-fetched cached_models (from model-updater auto-update)
+ */
+function buildProviderOptions(
+  dynamicProviders: DynamicProvider[],
+  cachedModels?: Record<string, string[]>
+): ProviderOption[] {
   return dynamicProviders.map((dp) => {
     const meta = PROVIDER_UI_META[dp.name]
+    const addedIds = new Set<string>()
+
     // Build model options: start with models from Go, enrich with UI metadata
     const modelOptions = dp.models.map((modelId) => {
+      addedIds.add(modelId)
       const modelMeta = meta?.models?.[modelId]
       return {
         value: modelId,
         label: modelMeta?.label || modelId,
         description: modelMeta?.description,
-        vision: modelMeta?.vision || false
+        vision: modelMeta?.vision || isLikelyVisionModel(modelId)
       }
     })
+
     // Also add any models from UI meta that aren't in Go's list (e.g., manually curated)
     if (meta?.models) {
       for (const [modelId, modelMeta] of Object.entries(meta.models)) {
-        if (!dp.models.includes(modelId)) {
+        if (!addedIds.has(modelId)) {
+          addedIds.add(modelId)
           modelOptions.push({
             value: modelId,
             label: modelMeta.label || modelId,
@@ -147,6 +173,23 @@ function buildProviderOptions(dynamicProviders: DynamicProvider[]): ProviderOpti
         }
       }
     }
+
+    // Merge API-fetched models (from model-updater cached_models)
+    const apiModels = cachedModels?.[dp.name] || []
+    for (const modelId of apiModels) {
+      if (!addedIds.has(modelId)) {
+        addedIds.add(modelId)
+        const modelMeta = meta?.models?.[modelId]
+        const vision = modelMeta?.vision || isLikelyVisionModel(modelId)
+        modelOptions.push({
+          value: modelId,
+          label: modelMeta?.label || (vision ? `${modelId} 👁️` : modelId),
+          description: modelMeta?.description || '(API検出)',
+          vision
+        })
+      }
+    }
+
     return {
       value: dp.name,
       label: dp.label,
@@ -185,75 +228,10 @@ const FALLBACK_PROVIDERS: ProviderOption[] = [
 ]
 
 /**
- * Vision LLM providers - only providers/models that support image analysis.
- * Used for screen verification (login result, lock screen detection).
+ * Vision LLM provider/model selection now uses the dynamic `providers` state
+ * (from buildProviderOptions 3-source merge) filtered by `model.vision` flag.
+ * No separate static list is needed.
  */
-const VISION_PROVIDERS = [
-  {
-    value: 'groq',
-    label: 'Groq (無料・クラウド・推奨)',
-    defaultModel: 'llama-3.2-11b-vision-preview',
-    apiUrl: 'https://console.groq.com/keys',
-    models: [
-      { value: 'llama-3.2-11b-vision-preview', label: 'Llama 3.2 11B Vision 👁️ (推奨)', description: '無料・高速・クレカ不要' },
-      { value: 'llama-3.2-90b-vision-preview', label: 'Llama 3.2 90B Vision 👁️', description: '無料・高品質・低速' }
-    ]
-  },
-  {
-    value: 'github-copilot',
-    label: 'GitHub Copilot (無料・gh認証)',
-    defaultModel: 'gpt-4o-mini',
-    apiUrl: 'https://github.com/settings/tokens',
-    models: [
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini 👁️ (推奨)', description: '無料・高速・gh認証のみ' },
-      { value: 'gpt-4o', label: 'GPT-4o 👁️', description: '無料・高品質' },
-      { value: 'gpt-4.1', label: 'GPT-4.1 👁️', description: '無料・最新世代' },
-      { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini 👁️', description: '無料・最新世代・軽量' },
-      { value: 'Llama-3.2-11B-Vision-Instruct', label: 'Llama 3.2 11B Vision 👁️', description: '無料・オープンモデル' },
-      { value: 'Llama-3.2-90B-Vision-Instruct', label: 'Llama 3.2 90B Vision 👁️', description: '無料・高精度' }
-    ]
-  },
-  {
-    value: 'ollama',
-    label: 'Ollama (無料・ローカル)',
-    defaultModel: 'moondream2:latest',
-    apiUrl: 'https://ollama.ai/download',
-    models: [
-      { value: 'moondream2:latest', label: 'Moondream2 👁️ (推奨)', description: '1.7B・軽量・CPU向き (~60秒)' },
-      { value: 'llava:latest', label: 'LLaVA 👁️', description: '7B・高精度・CPU遅め (~3分)' }
-    ]
-  },
-  {
-    value: 'openrouter',
-    label: 'OpenRouter',
-    defaultModel: 'google/gemini-2.0-flash-001',
-    apiUrl: 'https://openrouter.ai/keys',
-    models: [
-      { value: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash 👁️', description: '高速・Vision対応・安価' },
-      { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet 👁️', description: '高品質・高精度' }
-    ]
-  },
-  {
-    value: 'openai',
-    label: 'OpenAI',
-    defaultModel: 'gpt-4o-mini',
-    apiUrl: 'https://platform.openai.com/api-keys',
-    models: [
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini 👁️', description: '安価・高速' },
-      { value: 'gpt-4o', label: 'GPT-4o 👁️', description: '高品質' }
-    ]
-  },
-  {
-    value: 'anthropic',
-    label: 'Anthropic',
-    defaultModel: 'claude-3-5-haiku-20241022',
-    apiUrl: 'https://console.anthropic.com/settings/keys',
-    models: [
-      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku 👁️', description: '高速・コスト効率' },
-      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet 👁️', description: '高品質' }
-    ]
-  }
-]
 
 export const PicoclawSettings = (): ReactElement => {
   const { t } = useTranslation()
@@ -375,20 +353,256 @@ export const PicoclawSettings = (): ReactElement => {
   // Ref for ModelUpdateSettings to consolidate save
   const modelUpdateRef = useRef<ModelUpdateSettingsRef>(null)
 
+  // ── Credential Vault state ──
+  const [vaultConfigured, setVaultConfigured] = useState<boolean>(false)
+  const [vaultUnlocked, setVaultUnlocked] = useState<boolean>(false)
+  const [vaultLoading, setVaultLoading] = useState<boolean>(false)
+  const [vaultPin, setVaultPin] = useState<string>('')
+  const [vaultDescription, setVaultDescription] = useState<string>('')
+  const [vaultShowPin, setVaultShowPin] = useState<boolean>(false)
+  const [vaultMasterPassword, setVaultMasterPassword] = useState<string>('')
+  const [vaultMasterPasswordConfirm, setVaultMasterPasswordConfirm] = useState<string>('')
+  const [vaultNewMasterPassword, setVaultNewMasterPassword] = useState<string>('')
+  const [vaultNewMasterPasswordConfirm, setVaultNewMasterPasswordConfirm] = useState<string>('')
+  const [vaultCurrentMasterPassword, setVaultCurrentMasterPassword] = useState<string>('')
+
+  /** Load vault status from main process */
+  async function loadVaultStatus(): Promise<void> {
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.VAULT_STATUS)
+      if (result.success) {
+        setVaultConfigured(result.configured)
+        setVaultUnlocked(result.unlocked)
+        // If unlocked, load the credential
+        if (result.unlocked) {
+          await loadVaultCredential()
+        }
+      }
+    } catch (err) {
+      console.error('[Vault] Failed to load status:', err)
+    }
+  }
+
+  /** Load decrypted credential (only works when unlocked) */
+  async function loadVaultCredential(): Promise<void> {
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.VAULT_GET_CREDENTIAL)
+      if (result.success && result.credential) {
+        setVaultPin(result.credential.pin || '')
+        setVaultDescription(result.credential.description || '')
+      }
+    } catch (err) {
+      console.error('[Vault] Failed to load credential:', err)
+    }
+  }
+
+  /** Setup vault for the first time */
+  async function handleVaultSetup(): Promise<void> {
+    if (!vaultMasterPassword) {
+      message.error('マスターパスワードを入力してください')
+      return
+    }
+    if (vaultMasterPassword !== vaultMasterPasswordConfirm) {
+      message.error('マスターパスワードが一致しません')
+      return
+    }
+    if (!vaultPin) {
+      message.error('PINまたはパスワードを入力してください')
+      return
+    }
+
+    setVaultLoading(true)
+    try {
+      const credential = {
+        pin: vaultPin,
+        username: '',
+        description: vaultDescription || 'Windows PC'
+      }
+      const result = await window.electron.ipcRenderer.invoke(
+        IpcEvents.VAULT_SETUP,
+        vaultMasterPassword,
+        credential
+      )
+      if (result.success) {
+        message.success('🔐 Credential Vault を設定しました')
+        setVaultConfigured(true)
+        setVaultUnlocked(true)
+        setVaultMasterPassword('')
+        setVaultMasterPasswordConfirm('')
+      } else {
+        message.error(result.error || 'Vault セットアップに失敗しました')
+      }
+    } catch (err) {
+      console.error('[Vault] Setup failed:', err)
+      message.error(String(err))
+    } finally {
+      setVaultLoading(false)
+    }
+  }
+
+  /** Unlock vault with master password */
+  async function handleVaultUnlock(): Promise<void> {
+    if (!vaultCurrentMasterPassword) {
+      message.error('マスターパスワードを入力してください')
+      return
+    }
+
+    setVaultLoading(true)
+    try {
+      const result = await window.electron.ipcRenderer.invoke(
+        IpcEvents.VAULT_UNLOCK,
+        vaultCurrentMasterPassword
+      )
+      if (result.success) {
+        message.success('🔓 Vault を解錠しました')
+        setVaultUnlocked(true)
+        setVaultCurrentMasterPassword('')
+        await loadVaultCredential()
+      } else {
+        message.error(result.error || 'マスターパスワードが正しくありません')
+      }
+    } catch (err) {
+      console.error('[Vault] Unlock failed:', err)
+      message.error(String(err))
+    } finally {
+      setVaultLoading(false)
+    }
+  }
+
+  /** Lock vault */
+  async function handleVaultLock(): Promise<void> {
+    try {
+      await window.electron.ipcRenderer.invoke(IpcEvents.VAULT_LOCK)
+      setVaultUnlocked(false)
+      setVaultPin('')
+      setVaultDescription('')
+      message.info('🔒 Vault をロックしました')
+    } catch (err) {
+      console.error('[Vault] Lock failed:', err)
+    }
+  }
+
+  /** Save updated credential (while vault is unlocked) */
+  async function handleVaultSave(): Promise<void> {
+    if (!vaultPin) {
+      message.error('PINまたはパスワードを入力してください')
+      return
+    }
+
+    setVaultLoading(true)
+    try {
+      const credential = {
+        pin: vaultPin,
+        username: '',
+        description: vaultDescription || 'Windows PC'
+      }
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.VAULT_SAVE, credential)
+      if (result.success) {
+        message.success('認証情報を更新しました')
+      } else {
+        message.error(result.error || '保存に失敗しました')
+      }
+    } catch (err) {
+      console.error('[Vault] Save failed:', err)
+      message.error(String(err))
+    } finally {
+      setVaultLoading(false)
+    }
+  }
+
+  /** Change master password */
+  async function handleVaultChangePassword(): Promise<void> {
+    if (!vaultNewMasterPassword) {
+      message.error('新しいマスターパスワードを入力してください')
+      return
+    }
+    if (vaultNewMasterPassword !== vaultNewMasterPasswordConfirm) {
+      message.error('新しいマスターパスワードが一致しません')
+      return
+    }
+
+    setVaultLoading(true)
+    try {
+      const result = await window.electron.ipcRenderer.invoke(
+        IpcEvents.VAULT_CHANGE_PASSWORD,
+        vaultNewMasterPassword
+      )
+      if (result.success) {
+        message.success('マスターパスワードを変更しました')
+        setVaultNewMasterPassword('')
+        setVaultNewMasterPasswordConfirm('')
+      } else {
+        message.error(result.error || 'パスワード変更に失敗しました')
+      }
+    } catch (err) {
+      console.error('[Vault] Change password failed:', err)
+      message.error(String(err))
+    } finally {
+      setVaultLoading(false)
+    }
+  }
+
+  /** Delete vault entirely */
+  async function handleVaultDelete(): Promise<void> {
+    Modal.confirm({
+      title: '⚠️ Vault を削除',
+      content: '保存済みのログイン認証情報がすべて削除されます。この操作は元に戻せません。',
+      okText: '削除',
+      cancelText: 'キャンセル',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setVaultLoading(true)
+        try {
+          const result = await window.electron.ipcRenderer.invoke(IpcEvents.VAULT_DELETE)
+          if (result.success) {
+            message.success('Vault を削除しました')
+            setVaultConfigured(false)
+            setVaultUnlocked(false)
+            setVaultPin('')
+            setVaultDescription('')
+            setVaultMasterPassword('')
+            setVaultMasterPasswordConfirm('')
+          } else {
+            message.error(result.error || '削除に失敗しました')
+          }
+        } catch (err) {
+          console.error('[Vault] Delete failed:', err)
+          message.error(String(err))
+        } finally {
+          setVaultLoading(false)
+        }
+      }
+    })
+  }
+
   useEffect(() => {
     loadProviders()
     loadConfig()
     loadGatewayStatus()
     loadVersion()
+    loadVaultStatus()
   }, [])
 
   async function loadProviders(): Promise<void> {
     try {
-      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GET_PROVIDERS)
-      if (result.success && result.providers?.length > 0) {
-        const dynamicProviders = buildProviderOptions(result.providers as DynamicProvider[])
+      // Fetch both providers (Go static list) and config (API cached models) in parallel
+      const [provResult, cfgResult] = await Promise.all([
+        window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GET_PROVIDERS),
+        window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GET_CONFIG)
+      ])
+      const cachedModels = cfgResult?.config?.model_update?.cached_models as
+        | Record<string, string[]>
+        | undefined
+      if (provResult.success && provResult.providers?.length > 0) {
+        const dynamicProviders = buildProviderOptions(
+          provResult.providers as DynamicProvider[],
+          cachedModels
+        )
         setProviders(dynamicProviders)
-        console.log(`[Picoclaw] Loaded ${dynamicProviders.length} providers dynamically`)
+        const cachedCount = cachedModels ? Object.keys(cachedModels).length : 0
+        console.log(
+          `[Picoclaw] Loaded ${dynamicProviders.length} providers (cached models from ${cachedCount} providers)`
+        )
       } else {
         console.warn('[Picoclaw] Failed to load dynamic providers, using fallback')
       }
@@ -665,10 +879,10 @@ export const PicoclawSettings = (): ReactElement => {
     // Only auto-sync if Vision LLM is not yet configured
     if (visionProvider && visionModel) return
 
-    // Check if this provider+model exists in VISION_PROVIDERS
-    const vp = VISION_PROVIDERS.find((p) => p.value === chatProvider)
+    // Check if this provider+model exists in dynamic providers as vision-capable
+    const vp = providers.find((p) => p.value === chatProvider)
     if (vp) {
-      const vm = vp.models.find((m) => m.value === chatModel)
+      const vm = vp.models.find((m) => m.value === chatModel && m.vision)
       if (vm) {
         setVisionProvider(chatProvider)
         setVisionModel(chatModel)
@@ -922,8 +1136,10 @@ export const PicoclawSettings = (): ReactElement => {
               value={visionProvider || undefined}
               onChange={(value) => {
                 setVisionProvider(value || '')
-                const vp = VISION_PROVIDERS.find((p) => p.value === value)
-                setVisionModel(vp?.defaultModel || '')
+                // Find default vision model from dynamic providers
+                const vp = providers.find((p) => p.value === value)
+                const visionModels = vp?.models?.filter((m) => m.vision) || []
+                setVisionModel(visionModels[0]?.value || vp?.defaultModel || '')
                 // Load API key if already configured
                 if (value && config.providers?.[value]?.api_key) {
                   setVisionApiKey(config.providers[value].api_key)
@@ -937,7 +1153,9 @@ export const PicoclawSettings = (): ReactElement => {
               allowClear
               size="large"
               className="w-full"
-              options={VISION_PROVIDERS.map((vp) => ({ value: vp.value, label: vp.label }))}
+              options={providers
+                .filter((p) => p.models?.some((m) => m.vision))
+                .map((vp) => ({ value: vp.value, label: vp.label }))}
             />
             <p className="mt-1 text-xs text-neutral-500">
               無料推奨: Groq（クレカ不要）、GitHub Copilot（gh認証のみ）、またはOllama（ローカル）
@@ -1008,17 +1226,19 @@ export const PicoclawSettings = (): ReactElement => {
                 size="large"
                 className="w-full"
                 options={
-                  VISION_PROVIDERS.find((p) => p.value === visionProvider)?.models?.map((m) => ({
-                    value: m.value,
-                    label: (
-                      <div className="flex items-center justify-between">
-                        <span>{m.label}</span>
-                        {m.description && (
-                          <span className="ml-2 text-xs text-neutral-500">{m.description}</span>
-                        )}
-                      </div>
-                    )
-                  })) || []
+                  (providers.find((p) => p.value === visionProvider)?.models
+                    ?.filter((m) => m.vision)
+                    ?.map((m) => ({
+                      value: m.value,
+                      label: (
+                        <div className="flex items-center justify-between">
+                          <span>{m.label}</span>
+                          {m.description && (
+                            <span className="ml-2 text-xs text-neutral-500">{m.description}</span>
+                          )}
+                        </div>
+                      )
+                    }))) || []
                 }
               />
               {visionProvider === 'ollama' && (
@@ -1032,7 +1252,260 @@ export const PicoclawSettings = (): ReactElement => {
 
         {/* Model List Auto-Update */}
         <Divider />
-        <ModelUpdateSettings ref={modelUpdateRef} />
+
+        {/* ── Credential Vault ── */}
+        <div>
+          <h3 className="mb-2 text-lg font-semibold">🔐 ログイン認証情報</h3>
+          <p className="mb-4 text-xs text-neutral-400">
+            Windows のログイン PIN/パスワードを暗号化して安全に保存します。チャットに認証情報を入力する必要がなくなります。
+          </p>
+
+          {/* Status indicator */}
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-sm font-medium">ステータス:</span>
+            {!vaultConfigured ? (
+              <span className="flex items-center gap-1 text-sm text-neutral-500">
+                <Shield size={14} />
+                未設定
+              </span>
+            ) : vaultUnlocked ? (
+              <span className="flex items-center gap-1 text-sm text-green-400">
+                <ShieldCheck size={14} />
+                解錠済み
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-sm text-yellow-400">
+                <Shield size={14} />
+                ロック中
+              </span>
+            )}
+          </div>
+
+          {/* Case 1: Not configured — initial setup */}
+          {!vaultConfigured && (
+            <div className="space-y-4 rounded-lg border border-neutral-700 bg-neutral-800/50 p-4">
+              <p className="text-sm font-medium">初回セットアップ</p>
+
+              {/* PIN input */}
+              <div>
+                <label className="mb-1 block text-sm text-neutral-400">
+                  Windows PIN / パスワード
+                </label>
+                <Space.Compact className="w-full">
+                  <Input
+                    type={vaultShowPin ? 'text' : 'password'}
+                    value={vaultPin}
+                    onChange={(e) => setVaultPin(e.target.value)}
+                    placeholder="例: 1234"
+                    size="large"
+                    autoComplete="off"
+                    className="flex-1"
+                  />
+                  <Tooltip title={vaultShowPin ? '非表示' : '表示'}>
+                    <Button
+                      size="large"
+                      icon={vaultShowPin ? <EyeOff size={16} /> : <Eye size={16} />}
+                      onClick={() => setVaultShowPin(!vaultShowPin)}
+                    />
+                  </Tooltip>
+                </Space.Compact>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="mb-1 block text-sm text-neutral-400">
+                  説明（任意）
+                </label>
+                <Input
+                  value={vaultDescription}
+                  onChange={(e) => setVaultDescription(e.target.value)}
+                  placeholder="例: Windows PC (自宅)"
+                  size="large"
+                />
+              </div>
+
+              {/* Master password */}
+              <div>
+                <label className="mb-1 block text-sm text-neutral-400">
+                  マスターパスワード
+                </label>
+                <Input.Password
+                  value={vaultMasterPassword}
+                  onChange={(e) => setVaultMasterPassword(e.target.value)}
+                  placeholder="Vault 解錠用パスワード"
+                  size="large"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-neutral-400">
+                  マスターパスワード（確認）
+                </label>
+                <Input.Password
+                  value={vaultMasterPasswordConfirm}
+                  onChange={(e) => setVaultMasterPasswordConfirm(e.target.value)}
+                  placeholder="同じパスワードを再入力"
+                  size="large"
+                  autoComplete="off"
+                />
+              </div>
+
+              <Button
+                type="primary"
+                onClick={handleVaultSetup}
+                loading={vaultLoading}
+                block
+              >
+                🔐 Vault をセットアップ
+              </Button>
+
+              <p className="text-xs text-neutral-500">
+                ⚠️ マスターパスワードを忘れると保存済みの認証情報を復元できません。
+              </p>
+            </div>
+          )}
+
+          {/* Case 2: Configured but locked — unlock */}
+          {vaultConfigured && !vaultUnlocked && (
+            <div className="space-y-4 rounded-lg border border-neutral-700 bg-neutral-800/50 p-4">
+              <p className="text-sm font-medium">🔒 Vault はロックされています</p>
+              <div>
+                <label className="mb-1 block text-sm text-neutral-400">
+                  マスターパスワード
+                </label>
+                <Space.Compact className="w-full">
+                  <Input.Password
+                    value={vaultCurrentMasterPassword}
+                    onChange={(e) => setVaultCurrentMasterPassword(e.target.value)}
+                    placeholder="マスターパスワードを入力"
+                    size="large"
+                    autoComplete="off"
+                    className="flex-1"
+                    onPressEnter={handleVaultUnlock}
+                  />
+                  <Button
+                    type="primary"
+                    size="large"
+                    onClick={handleVaultUnlock}
+                    loading={vaultLoading}
+                  >
+                    🔓 解錠
+                  </Button>
+                </Space.Compact>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  danger
+                  size="small"
+                  icon={<Trash2 size={14} />}
+                  onClick={handleVaultDelete}
+                >
+                  Vault を削除
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Case 3: Configured and unlocked — view/edit credential */}
+          {vaultConfigured && vaultUnlocked && (
+            <div className="space-y-4 rounded-lg border border-green-700/30 bg-neutral-800/50 p-4">
+              {/* Saved credential */}
+              <div>
+                <p className="mb-3 text-sm font-medium">保存済みクレデンシャル</p>
+
+                <div className="mb-3">
+                  <label className="mb-1 block text-sm text-neutral-400">
+                    PIN / パスワード
+                  </label>
+                  <Space.Compact className="w-full">
+                    <Input
+                      type={vaultShowPin ? 'text' : 'password'}
+                      value={vaultPin}
+                      onChange={(e) => setVaultPin(e.target.value)}
+                      placeholder="1234"
+                      size="large"
+                      autoComplete="off"
+                      className="flex-1"
+                    />
+                    <Tooltip title={vaultShowPin ? '非表示' : '表示'}>
+                      <Button
+                        size="large"
+                        icon={vaultShowPin ? <EyeOff size={16} /> : <Eye size={16} />}
+                        onClick={() => setVaultShowPin(!vaultShowPin)}
+                      />
+                    </Tooltip>
+                  </Space.Compact>
+                </div>
+
+                <div className="mb-3">
+                  <label className="mb-1 block text-sm text-neutral-400">
+                    説明
+                  </label>
+                  <Input
+                    value={vaultDescription}
+                    onChange={(e) => setVaultDescription(e.target.value)}
+                    placeholder="Windows PC (自宅)"
+                    size="large"
+                  />
+                </div>
+
+                <Space>
+                  <Button type="primary" onClick={handleVaultSave} loading={vaultLoading}>
+                    保存
+                  </Button>
+                  <Button onClick={handleVaultLock}>
+                    🔒 ロック
+                  </Button>
+                </Space>
+              </div>
+
+              {/* Change master password */}
+              <Divider style={{ margin: '12px 0' }} />
+              <div>
+                <p className="mb-3 text-sm font-medium">マスターパスワード変更</p>
+                <div className="mb-2">
+                  <Input.Password
+                    value={vaultNewMasterPassword}
+                    onChange={(e) => setVaultNewMasterPassword(e.target.value)}
+                    placeholder="新しいマスターパスワード"
+                    size="large"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="mb-2">
+                  <Input.Password
+                    value={vaultNewMasterPasswordConfirm}
+                    onChange={(e) => setVaultNewMasterPasswordConfirm(e.target.value)}
+                    placeholder="新しいマスターパスワード（確認）"
+                    size="large"
+                    autoComplete="off"
+                  />
+                </div>
+                <Space>
+                  <Button onClick={handleVaultChangePassword} loading={vaultLoading}>
+                    パスワード変更
+                  </Button>
+                  <Button
+                    danger
+                    icon={<Trash2 size={14} />}
+                    onClick={handleVaultDelete}
+                  >
+                    Vault を削除
+                  </Button>
+                </Space>
+              </div>
+
+              <p className="text-xs text-neutral-500">
+                ⚠️ マスターパスワードを忘れると保存済みの認証情報を復元できません。
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Model List Auto-Update */}
+        <Divider />
+        <ModelUpdateSettings ref={modelUpdateRef} onModelsUpdated={loadProviders} />
 
         {/* Telegram Bot Settings */}
         <Divider />

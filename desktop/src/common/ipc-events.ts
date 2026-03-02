@@ -50,5 +50,15 @@ export enum IpcEvents {
   // Screen capture & login verification
   SCREEN_CAPTURE = 'screen-capture',
   SCREEN_CAPTURE_RESULT = 'screen-capture-result',
-  VERIFY_LOGIN_RESULT = 'verify-login-result'
+  VERIFY_LOGIN_RESULT = 'verify-login-result',
+
+  // Credential Vault
+  VAULT_STATUS = 'vault-status',
+  VAULT_SETUP = 'vault-setup',
+  VAULT_UNLOCK = 'vault-unlock',
+  VAULT_LOCK = 'vault-lock',
+  VAULT_SAVE = 'vault-save',
+  VAULT_GET_CREDENTIAL = 'vault-get-credential',
+  VAULT_CHANGE_PASSWORD = 'vault-change-password',
+  VAULT_DELETE = 'vault-delete'
 }
