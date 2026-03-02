@@ -629,18 +629,33 @@ export class ApiServer {
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
       } else {
         // action === 'status': general screen description
-        prompt =
-          'Describe what is currently shown on this computer screen in 2-3 sentences.\n' +
-          'Include:\n' +
-          '- What type of screen it is (desktop, lock screen, login screen, application window, etc.)\n' +
-          '- What applications or windows are visible (if any)\n' +
-          '- Any notable UI elements (taskbar, dialog boxes, error messages, etc.)\n\n' +
-          'IMPORTANT classification rules:\n' +
-          '- DESKTOP: Must have a TASKBAR visible at the bottom (or top/side). Without a taskbar, it is NOT a desktop.\n' +
-          '- LOCK SCREEN: Shows a clock/time display, wallpaper background, but NO taskbar. May show user avatar.\n' +
-          '- LOGIN SCREEN: Shows a user name/avatar with a PIN or password input field, but NO taskbar.\n' +
-          '- If you see NO taskbar and NO applications, it is almost certainly a lock screen or login screen, NOT a desktop.\n\n' +
-          'Be specific and factual about what you see.' + langInstruction
+        if (lang === 'ja') {
+          prompt =
+            'このコンピュータ画面に表示されている内容を2〜3文で説明してください。\n' +
+            '以下を含めてください:\n' +
+            '- 画面の種類（デスクトップ、ロック画面、ログイン画面、アプリケーションウィンドウなど）\n' +
+            '- 表示されているアプリケーションやウィンドウ（ある場合）\n' +
+            '- 注目すべきUI要素（タスクバー、ダイアログボックス、エラーメッセージなど）\n\n' +
+            '重要な分類ルール:\n' +
+            '- デスクトップ: 画面下部（または上部/側面）にタスクバーが表示されていること。タスクバーがなければデスクトップではない。\n' +
+            '- ロック画面: 時計/日時が表示され、壁紙が背景にあるが、タスクバーはない。ユーザーアバターが表示される場合がある。\n' +
+            '- ログイン画面: ユーザー名/アバターとPINまたはパスワード入力欄が表示されるが、タスクバーはない。\n' +
+            '- タスクバーもアプリケーションも表示されていない場合、ほぼ確実にロック画面またはログイン画面であり、デスクトップではない。\n\n' +
+            '見えているものを具体的かつ事実に基づいて説明してください。'
+        } else {
+          prompt =
+            'Describe what is currently shown on this computer screen in 2-3 sentences.\n' +
+            'Include:\n' +
+            '- What type of screen it is (desktop, lock screen, login screen, application window, etc.)\n' +
+            '- What applications or windows are visible (if any)\n' +
+            '- Any notable UI elements (taskbar, dialog boxes, error messages, etc.)\n\n' +
+            'IMPORTANT classification rules:\n' +
+            '- DESKTOP: Must have a TASKBAR visible at the bottom (or top/side). Without a taskbar, it is NOT a desktop.\n' +
+            '- LOCK SCREEN: Shows a clock/time display, wallpaper background, but NO taskbar. May show user avatar.\n' +
+            '- LOGIN SCREEN: Shows a user name/avatar with a PIN or password input field, but NO taskbar.\n' +
+            '- If you see NO taskbar and NO applications, it is almost certainly a lock screen or login screen, NOT a desktop.\n\n' +
+            'Be specific and factual about what you see.' + langInstruction
+        }
       }
 
       // Analyze with Vision LLM
