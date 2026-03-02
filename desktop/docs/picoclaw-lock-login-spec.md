@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-03-02 (v2026.03.02d)
+> **最終更新**: 2026-03-02 (v2026.03.02e)
 
 ## 概要
 
@@ -1808,3 +1808,18 @@ upstream の最大の変更。チャンネルシステムが全面的にリア�
 | **SetBuildInfo ブリッジパターン** | Go 1.25+ では `-X` ldflags で `cmd/*/internal` パッケージの変数を設定できない制約がある。`internal/helpers.go` に `SetBuildInfo(v, commit, build, goVer string)` セッター関数を追加し、`main.go` の `main()` 冒頭で `main.*` 変数（ldflags で注入）を `internal` パッケージに伝播するブリッジパターンを実装 |
 | **build-desktop.sh スクリプト** | `git describe --tags --always --dirty` でバージョン、`git rev-parse --short=8 HEAD` でコミットハッシュを取得し、`-X main.version=... -X main.gitCommit=... -X main.buildTime=... -X main.goVersion=... -s -w` の ldflags でバイナリにバージョン情報を埋め込むビルドスクリプトを新規作成。ビルド後 `../NanoKVM-USB/desktop/resources/bin/picoclaw` に自動コピー |
 | **バージョン表示結果** | `🦞 picoclaw v0.2.0-51-g845da9b (git: 845da9bb)` のように表示。従来は `unknown` と表示されていた |
+
+### NanoKVM-USB Desktop (v2026.03.02e clickMouse HID修正)
+
+| 変更 | 内容 |
+|------|------|
+| **sendMouse() HID レポートフォーマット修正** | `api-handler.ts` の `sendMouse()` が3バイト `[buttonBits, deltaX, deltaY]` を送信していたが、NanoKVM-USB プロトコルは5バイト `[0x01, buttons, deltaX, deltaY, scroll]` を要求する。`0x01` はリレイティブモード識別子であり、ボタンビットではない。修正前は左クリック `[0x01, 0, 0]` が偶然 relative mode にマッチしたがボタンバイトが0（ボタン未押下）で、右クリック `[0x02, 0, 0]` は absolute mode と誤認されていた。`loginToWindows()` Step 1 は正しい5バイト形式 `[0x01, 0x01, 0x00, 0x00, 0x00]` を使用していたため ChatUI ログインは動作していた |
+| **影響範囲** | Telegram からの `クリックして` `右クリック` 等のマウスコマンドが「実行しました」と応答するが実際には画面に反映されない問題が解消。`loginToWindows()` は元から正しいフォーマットを使用しており影響なし |
+
+### picoclaw Go (v2026.03.02e heartbeat バックオフ改善)
+
+| 変更 | 内容 |
+|------|------|
+| **parseRetryAfter 正規表現改善** | `pkg/heartbeat/service.go` の `reWaitSeconds` 正規表現で `seconds` / `s` サフィックスを**任意**に変更（`?` 追加）。これにより `Retry-After: 66961`（HTTPヘッダ、サフィックスなし）も正しくパースされるようになった。また Groq 形式 `try again in 9.55s` をパースする `reTryAgainIn` 正規表現を新規追加（秒の小数点対応、切り上げ） |
+| **テスト追加** | `TestParseRetryAfter`（7ケース: GitHub Copilot "Please wait N seconds"、フルエラーメッセージ、Retry-After ヘッダ単体、Groq 小数秒、Groq 整数秒、マッチなし、"86400s" 偽陽性チェック）と `TestRateLimitBackoff`（統合テスト: 429 → backoff 設定 → 次回スキップ確認）を追加。全10テスト PASS |
+| **バックオフ動作確認** | 429 検出条件（`result.IsError` + `strings.Contains(errLower, "status: 429")` 等）とバックオフ設定（`rateLimitUntil`）のコードは commit `e633895`（v2026.03.02）で初めて追加されたが、バイナリ再ビルド前のプロセスで動作していたため一度も実行されていなかった。今回のバイナリ再ビルド（`v0.2.0-52-g2126106`）により有効化 |
