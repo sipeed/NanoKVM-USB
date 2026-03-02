@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-03-02 (v2026.03.02c)
+> **最終更新**: 2026-03-02 (v2026.03.02d)
 
 ## 概要
 
@@ -1800,3 +1800,11 @@ upstream の最大の変更。チャンネルシステムが全面的にリア�
 | 変更 | 内容 |
 |------|------|
 | **max_tokens プロバイダ別設定** | `handleSave()` で `max_tokens` を `undefined`（削除）ではなくプロバイダ別に明示設定（groq=1024, github-copilot=16384, その他=16384）。upstream v0.2.0 で Go デフォルトが 8192→32768 に変更されたため、`undefined` では gpt-4o-mini 等の上限（16384）を超える HTTP 400 エラーが発生していた |
+
+### picoclaw Go (v2026.03.02d バージョン表示修正)
+
+| 変更 | 内容 |
+|------|------|
+| **SetBuildInfo ブリッジパターン** | Go 1.25+ では `-X` ldflags で `cmd/*/internal` パッケージの変数を設定できない制約がある。`internal/helpers.go` に `SetBuildInfo(v, commit, build, goVer string)` セッター関数を追加し、`main.go` の `main()` 冒頭で `main.*` 変数（ldflags で注入）を `internal` パッケージに伝播するブリッジパターンを実装 |
+| **build-desktop.sh スクリプト** | `git describe --tags --always --dirty` でバージョン、`git rev-parse --short=8 HEAD` でコミットハッシュを取得し、`-X main.version=... -X main.gitCommit=... -X main.buildTime=... -X main.goVersion=... -s -w` の ldflags でバイナリにバージョン情報を埋め込むビルドスクリプトを新規作成。ビルド後 `../NanoKVM-USB/desktop/resources/bin/picoclaw` に自動コピー |
+| **バージョン表示結果** | `🦞 picoclaw v0.2.0-51-g845da9b (git: 845da9bb)` のように表示。従来は `unknown` と表示されていた |
