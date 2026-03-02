@@ -1,6 +1,6 @@
 # picoclaw によるリモート Windows ロック・ログイン機能仕様書
 
-> **最終更新**: 2026-03-02 (v2026.03.02a)
+> **最終更新**: 2026-03-02 (v2026.03.02b)
 
 ## 概要
 
@@ -1147,13 +1147,23 @@ flowchart LR
 
 ```
 1. Go 静的リスト のモデルを起点にする
+   └─ Go は provider-prefixed な ID を返す (例: "groq/meta-llama/llama-4-scout-...")
+   └─ addedIds Set に prefixed ID と stripProtocolPrefix() で取得した bare ID の両方を登録
 2. 各モデルに UI メタデータ があれば、ラベル・説明・Vision フラグを付与
+   └─ PROVIDER_UI_META の lookup は bare ID で行う (meta-llama/... 等の HuggingFace 形式に対応)
 3. UI メタデータ にあるが Go リストにないモデルを追加（手動キュレーション分）
+   └─ value は ensureProtocolPrefix(modelId, provider) で正規化した prefixed ID を使用
+   └─ addedIds に bare ID と prefixed ID の両方を登録（重複防止）
 4. cached_models にあるが 1-3 にないモデルを追加（API 検出分）
+   └─ value は ensureProtocolPrefix(modelId, provider) で正規化
    └─ UI メタデータにない場合: isLikelyVisionModel() で Vision フラグを自動判定
       └─ Vision 判定された場合: モデル名に 👁️ を自動付与
-5. Set ベースの重複排除（同一モデル ID は先勝ち）
+5. Set ベースの重複排除（prefixed ID と bare ID の dual-key で同一モデルの重複を排除）
 ```
+
+> **known-protocols**: `src/common/known-protocols.ts` に定義された `KNOWN_PROTOCOLS` Set（28プロトコル）と
+> `ensureProtocolPrefix()` / `stripProtocolPrefix()` / `hasKnownProtocolPrefix()` ヘルパー関数を使用。
+> Go 側 `pkg/config/migration.go` の `knownProtocols` マップと同期を保つ必要がある。
 
 #### Vision モデル自動検出ヒューリスティック
 
@@ -1467,23 +1477,30 @@ Vision LLM が設定されていない場合:
     "github-copilot": { "api_key": "(gh auth token で自動取得)" }
   },
   "model_list": [
-    { "model_name": "github-copilot/gpt-4.1", "model": "gpt-4.1" }
+    { "model_name": "github-copilot/gpt-4.1", "model": "github-copilot/gpt-4.1" }
   ]
 }
 ```
 
 > **Note**: 設定フィールド `model` は `model_name` にリネームされました（v2026.02.25〜）。
 > 旧 `model` フィールドは後方互換で引き続き読み込まれますが、新規設定では `model_name` を推奨します。
+>
+> **loadConfig 正規化**: 読み込み時も `ensureProtocolPrefix(rawModel, currentProvider)` で正規化。
+> 旧 Config に保存されたプレフィックスなしのモデル ID（例: `gpt-4.1`）が自動的にドロップダウン値と一致するように変換されます。
 
 ### 設定保存時の同期ルール
 
 Go 側の `GetModelName()` は `model_name` → `model` の優先順で読み取るため、
 UI の設定保存時には **両フィールドを同一の値で書き込む** 必要があります。
 
+また、保存前に `ensureProtocolPrefix(model, provider)` で **プロトコルプレフィックスを正規化** します。
+これにより、HuggingFace 形式（`meta-llama/llama-4-scout`）のモデル名にもプロバイダプレフィックスが
+確実に付与されます（例: `groq/meta-llama/llama-4-scout`）。
+
 | フィールド | 保存時の動作 | 読み込み時の動作 |
 |-----------|------------|----------------|
-| `model` | 選択したモデルID を書き込み | `model_name` が空の場合のフォールバック |
-| `model_name` | 同一の値で同時に書き込み | Go が **最優先** で読み取る |
+| `model` | `ensureProtocolPrefix()` 正規化後のモデルID を書き込み | `model_name` が空の場合のフォールバック |
+| `model_name` | 同一の正規化済み値で同時に書き込み | Go が **最優先** で読み取る |
 | `max_tokens` | groq の場合 `1024`、**それ以外は削除** | Go デフォルト `8192` を使用 |
 
 > **max_tokens リセット**: v2026.03.02 以前は groq → 他プロバイダに切替後も `max_tokens: 1024` が
@@ -1499,6 +1516,7 @@ UI の設定保存時には **両フィールドを同一の値で書き込む**
 |---------|------|
 | `agents.list` | Go の複数エージェント定義（UI は `defaults` のみ操作） |
 | `channels.discord`, `channels.slack` 等 | UI は Telegram のみ操作するが、他チャンネル設定を消さない |
+| `channels.telegram.proxy` | UI は `proxy` を操作しないため、既存値を `config.channels?.telegram?.proxy \|\| ''` で保持 |
 | `tools`, `heartbeat`, `devices` 等 | UI が操作しないトップレベル設定 |
 
 `agents.defaults` 内で値が `undefined` のフィールド（例: `max_tokens` リセット時）は
@@ -1751,3 +1769,20 @@ upstream の最大の変更。チャンネルシステムが全面的にリア�
 | **max_tokens プロバイダ切替リセット** | groq 以外のプロバイダ選択時に `max_tokens` を `undefined` に設定し config から削除。Go デフォルト 8192 が使用されるようリセット |
 | **updateConfig 深層マージ** | `manager.ts` の `updateConfig()` を浅いマージ（`{ ...config, ...updates }`）から1段階の深層マージに変更。`agents.list`、他チャンネル設定（discord, slack 等10件）の消失を防止 |
 | **PicoclawConfig 型定義補完** | `agents.defaults` に `model_fallbacks`, `temperature`, `max_tool_iterations`, `workspace`, `restrict_to_workspace` を追加。`agents.list` と `channels` の index signature を追加 |
+
+### NanoKVM-USB Desktop (v2026.03.02 Config同期監査修正)
+
+| 変更 | 内容 |
+|------|------|
+| **known-protocols.ts 共有モジュール** | `src/common/known-protocols.ts` 新規作成。Go `migration.go` の `knownProtocols` マップ（28エントリ）と同期した `KNOWN_PROTOCOLS` Set + `ensureProtocolPrefix()` / `stripProtocolPrefix()` / `hasKnownProtocolPrefix()` ヘルパー関数。Main プロセス（`manager.ts`）と Renderer（`picoclaw.tsx`）の両方で共有 |
+| **syncModelList knownProtocols 修正** | `manager.ts` の `upsertModel()` でモデル ID のプレフィックス判定を `modelName.includes('/')` から `ensureProtocolPrefix()` に変更。HuggingFace 形式（`meta-llama/llama-4-scout`）を正しくプレフィックス付与（`groq/meta-llama/llama-4-scout`） |
+| **buildProviderOptions 重複排除修正** | Go が返す prefixed ID（`groq/meta-llama/...`）を `stripProtocolPrefix()` で bare ID（`meta-llama/...`）に変換し PROVIDER_UI_META を参照。`addedIds` Set に prefixed/bare 両形式を登録して重複を排除。UI メタ・cached_models のエントリにも `ensureProtocolPrefix()` を適用 |
+| **handleSave ensureProtocolPrefix 正規化** | `handleSave()` で保存前に `ensureProtocolPrefix(model, provider)` を適用。ドロップダウン値が既に prefixed であっても、手動入力やレガシー状態の edge case をカバー |
+| **loadConfig ensureProtocolPrefix 正規化** | `loadConfig()` で `model_name \|\| model` を読み込んだ後に `ensureProtocolPrefix(rawModel, currentProvider)` を適用。旧 Config のプレフィックスなしモデル ID をドロップダウン値と一致するよう変換 |
+| **telegram.proxy 保持** | `handleSave()` の Telegram チャンネル設定で `proxy: config.channels?.telegram?.proxy \|\| ''` により既存の proxy 設定を保持。以前は空文字列で上書きされていた |
+
+### picoclaw Go (v2026.03.02 Config同期監査修正)
+
+| 変更 | 内容 |
+|------|------|
+| **buildModelWithProtocol knownProtocols 修正** | `migration.go` の `buildModelWithProtocol()` でモデル名の `/` 判定を `knownProtocols` マップ（28エントリ）によるホワイトリスト方式に変更。HuggingFace 形式（`meta-llama/...`）にプロバイダプレフィックスを正しく付与。テスト3件追加（DifferentPrefix edge case 含む） |
