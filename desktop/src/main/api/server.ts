@@ -466,8 +466,10 @@ export class ApiServer {
       // Analyze with Vision LLM
       const lang = getVisionLanguage()
       const prompt = 
-        'この画像はWindows PCの画面キャプチャです。以下の3つのうちどの状態か判定してください:\n\n' +
-        '1. LOGIN_SUCCESS: デスクトップ画面が表示されている（タスクバー、アイコン等が見える）\n' +
+        'この画像はPCの画面キャプチャです。以下の3つのうちどの状態か判定してください:\n\n' +
+        '1. LOGIN_SUCCESS: デスクトップ画面が表示されている\n' +
+        '   - Windows: タスクバー（画面下部のアイコンバー）が見える\n' +
+        '   - macOS: メニューバー（画面上部）とDock（画面下部のアイコンバー）が見える\n' +
         '2. LOGIN_FAILED: PIN/パスワードエラーメッセージが表示されている（「PIN が正しくありません」「パスワードが正しくありません」等）\n' +
         '3. LOCK_SCREEN: ロック画面またはサインイン画面が表示されている（時計、ユーザーアイコン、入力欄等）\n\n' +
         '回答は以下のJSON形式のみで返してください（他のテキストは不要）:\n' +
@@ -613,19 +615,24 @@ export class ApiServer {
       let prompt: string
       if (action === 'lock') {
         prompt =
-          'Is this a Windows lock screen or a desktop?\n' +
-          'Lock screen: shows clock, date, user avatar, background image, no taskbar.\n' +
-          'Desktop: shows taskbar at bottom, application windows, desktop icons.\n\n' +
+          'Is this a lock screen or a desktop?\n' +
+          'Lock screen indicators:\n' +
+          '- Windows: large clock/time, date, wallpaper background, no taskbar\n' +
+          '- macOS: large time display centered, date below, wallpaper background, no Dock\n' +
+          'Desktop indicators:\n' +
+          '- Windows: taskbar at bottom with icons\n' +
+          '- macOS: menu bar at top (Apple logo) and Dock at bottom with icons\n\n' +
           'Answer with ONLY one word: LOCK_SCREEN or DESKTOP' + langInstruction
       } else if (action === 'login') {
         prompt =
-          'After a Windows login attempt, what is currently shown on screen?\n' +
+          'After a login attempt, what is currently shown on screen?\n' +
           'Look carefully for these specific indicators:\n' +
-          '- TASKBAR at the bottom of the screen (thin bar with icons) = LOGIN_SUCCESS\n' +
-          '- Desktop icons, open windows, or Start menu = LOGIN_SUCCESS\n' +
+          '- Windows: TASKBAR at bottom (thin bar with icons) = LOGIN_SUCCESS\n' +
+          '- macOS: Menu bar at top + Dock at bottom = LOGIN_SUCCESS\n' +
+          '- Desktop icons, open windows, Start menu = LOGIN_SUCCESS\n' +
           '- "PIN is incorrect" or "password is incorrect" error text = LOGIN_FAILED\n' +
-          '- Large clock display, user avatar circle, or PIN input field = LOCK_SCREEN\n\n' +
-          'IMPORTANT: If you see a taskbar at the bottom, it is LOGIN_SUCCESS even if the wallpaper looks similar to a lock screen.\n\n' +
+          '- Large clock display, user avatar with PIN/password input field = LOCK_SCREEN\n\n' +
+          'IMPORTANT: If you see a taskbar/Dock/menu bar, it is LOGIN_SUCCESS.\n\n' +
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
       } else {
         // action === 'status': general screen description
@@ -633,28 +640,48 @@ export class ApiServer {
           prompt =
             'このコンピュータ画面に表示されている内容を2〜3文で説明してください。\n' +
             '以下を含めてください:\n' +
-            '- 画面の種類（デスクトップ、ロック画面、ログイン画面、アプリケーションウィンドウなど）\n' +
+            '- 画面の種類（デスクトップ、ロック画面、サインイン画面、アプリケーションウィンドウなど）\n' +
             '- 表示されているアプリケーションやウィンドウ（ある場合）\n' +
-            '- 注目すべきUI要素（タスクバー、ダイアログボックス、エラーメッセージなど）\n\n' +
+            '- 注目すべきUI要素（タスクバー、Dock、ダイアログボックス、エラーメッセージなど）\n\n' +
             '重要な分類ルール:\n' +
-            '- デスクトップ: 画面下部（または上部/側面）にタスクバーが表示されていること。タスクバーがなければデスクトップではない。\n' +
-            '- ロック画面: 時計/日時が大きく表示され、背景画像があるが、タスクバーもテキスト入力欄もない。クリックや任意キー押下でログイン画面に遷移する前の画面。\n' +
-            '- ログイン画面: ユーザー名/アバターが表示され、テキスト入力欄（PINまたはパスワード用のテキストボックス）が実際に画面上に見えている。入力欄が見えなければログイン画面ではなくロック画面である。\n' +
-            '- タスクバーもアプリケーションも表示されていない場合、ほぼ確実にロック画面またはログイン画面であり、デスクトップではない。\n\n' +
+            '## Windows\n' +
+            '- デスクトップ: 画面下部にタスクバー（アイコンが並んだ細いバー）が表示されている。\n' +
+            '- ロック画面: 時計/日時が画面中央に大きく表示され、背景画像がある。ユーザーアバターもテキスト入力欄も表示されない。タスクバーもない。\n' +
+            '- サインイン画面: ユーザーアバター（丸い写真や人型アイコン）が画面中央に表示される。その下にユーザー名が表示される。その下にPINまたはパスワードの入力欄（白い横長のテキストボックス、またはドットが並ぶ入力フィールド）が表示される。「サインイン」「PIN」「パスワード」等のテキストが見えることがある。時刻は画面中央ではなく左下に小さく表示されるか、表示されない。背景画像はロック画面と同じことがある。\n' +
+            '- ロック画面とサインイン画面の最大の違い: ユーザーアバターと入力欄があるかどうか。ユーザーアバターが表示されていればサインイン画面。\n\n' +
+            '## macOS\n' +
+            '- デスクトップ: 画面上部にメニューバー（Appleロゴ、時計等）、画面下部にDock（アイコンが並んだバー）が表示されている。\n' +
+            '- ロック画面: 時刻が大きく中央に表示され、日付も表示される。ユーザーアバターやパスワード入力欄は表示されない。背景は壁紙。\n' +
+            '- サインイン画面: ユーザーアバター（丸い写真/アイコン）が表示され、その下にユーザー名、さらにその下にパスワード入力欄（丸い点のドットが並ぶフィールドや白い入力ボックス）が表示される。時刻は大きく表示されない。「Touch ID」や「パスワードを入力」のテキストが表示されることがある。\n\n' +
+            '共通ルール:\n' +
+            '- タスクバー/Dock/メニューバーもアプリケーションも表示されていない場合、ロック画面またはサインイン画面である。\n' +
+            '- ユーザーアバター（丸い写真や人型アイコン）が画面中央に表示されていれば、サインイン画面である（ロック画面ではない）。\n' +
+            '- 画面中央に大きな時刻表示があり、ユーザーアバターがなければロック画面。\n' +
+            '- 画面中央にユーザーアバターがあり、入力欄があれば（または「PIN」「パスワード」のテキストがあれば）サインイン画面。\n\n' +
             '重要: 実際に画面上に見えている要素だけを報告してください。推測や仮定で要素を追加しないでください。\n' +
             'テキスト入力欄が実際に見えていない場合は「入力欄がある」と言わないでください。'
         } else {
           prompt =
             'Describe what is currently shown on this computer screen in 2-3 sentences.\n' +
             'Include:\n' +
-            '- What type of screen it is (desktop, lock screen, login screen, application window, etc.)\n' +
+            '- What type of screen it is (desktop, lock screen, sign-in/login screen, application window, etc.)\n' +
             '- What applications or windows are visible (if any)\n' +
-            '- Any notable UI elements (taskbar, dialog boxes, error messages, etc.)\n\n' +
+            '- Any notable UI elements (taskbar, Dock, dialog boxes, error messages, etc.)\n\n' +
             'IMPORTANT classification rules:\n' +
-            '- DESKTOP: Must have a TASKBAR visible at the bottom (or top/side). Without a taskbar, it is NOT a desktop.\n' +
-            '- LOCK SCREEN: Shows a large clock/time display, wallpaper background, but NO taskbar and NO text input field. This is the screen before clicking/pressing a key to get to the login screen.\n' +
-            '- LOGIN SCREEN: Shows a user name/avatar with a visible text input box (for PIN or password) actually present on screen, but NO taskbar. If no text input field is visible, it is a lock screen, NOT a login screen.\n' +
-            '- If you see NO taskbar and NO applications, it is almost certainly a lock screen or login screen, NOT a desktop.\n\n' +
+            '## Windows\n' +
+            '- DESKTOP: Taskbar (thin bar with icons) at the bottom of the screen.\n' +
+            '- LOCK SCREEN: Large clock/time display centered on screen, wallpaper background, NO user avatar, NO text input field, NO taskbar.\n' +
+            '- SIGN-IN SCREEN: User avatar (circular photo or person icon) displayed centrally. Username shown below avatar. Below that, a PIN or password input field (white text box or dot-filled field). May show "Sign in", "PIN", "Password" text. Time is shown small in the bottom-left corner (or not at all), NOT large in the center. Background may look the same as the lock screen.\n' +
+            '- KEY DIFFERENCE between lock and sign-in: If a user avatar is visible in the center, it is a SIGN-IN screen. If a large clock is centered with no avatar, it is a LOCK screen.\n\n' +
+            '## macOS\n' +
+            '- DESKTOP: Menu bar at the top (Apple logo, clock, etc.) and Dock (icon bar) at the bottom.\n' +
+            '- LOCK SCREEN: Large time display centered on screen with date below. NO user avatar, NO password field. Wallpaper background.\n' +
+            '- SIGN-IN SCREEN: User avatar (circular photo/icon) displayed centrally, with username below and password input field (dots or white input box) below that. Time is NOT prominently displayed. May show "Touch ID" or "Enter Password" text.\n\n' +
+            'Common rules:\n' +
+            '- If NO taskbar/Dock/menu bar and NO applications visible, it is a lock screen or sign-in screen.\n' +
+            '- If a user avatar (circular photo or person icon) is centered on screen, it is a SIGN-IN screen (NOT a lock screen).\n' +
+            '- If a large clock/time is centered with no user avatar, it is a LOCK screen.\n' +
+            '- If a user avatar is visible with an input field (or "PIN"/"Password" text), it is a SIGN-IN screen.\n\n' +
             'IMPORTANT: Only report UI elements that are actually visible. Do NOT assume or hallucinate elements.\n' +
             'If you do not see a text input field, do NOT say there is one.' + langInstruction
         }
@@ -707,19 +734,27 @@ export class ApiServer {
             analysisLower.includes('真っ暗') || analysisLower.includes('ブラックスクリーン') ||
             analysisLower.includes('映像なし') || analysisLower.includes('no signal')) {
           status = 'BLACK_SCREEN'
+        } else if (upper.includes('SIGN-IN SCREEN') || upper.includes('SIGN IN SCREEN') ||
+            upper.includes('LOGIN_SCREEN') || upper.includes('LOGIN SCREEN') ||
+            analysisLower.includes('サインイン画面')) {
+          // SIGN-IN / LOGIN detection BEFORE lock screen — when Vision explicitly says "sign-in screen"
+          status = 'LOGIN_SCREEN'
         } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') ||
-            analysisLower.includes('ロック画面') || analysisLower.includes('ロックスクリーン') ||
-            analysisLower.includes('ログイン画面') && (analysisLower.includes('時計') || analysisLower.includes('アバター'))) {
+            analysisLower.includes('ロック画面') || analysisLower.includes('ロックスクリーン')) {
           // LOCK_SCREEN before DESKTOP: Vision often says "lock screen...no taskbar"
           status = 'LOCK_SCREEN'
         } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') ||
+            hasPositive('DOCK') || hasPositive('MENU BAR') ||
             (analysisLower.includes('デスクトップ') && !analysisLower.includes('ではない')) ||
-            (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない'))) {
-          // Only match DESKTOP/TASKBAR in positive (non-negated) context
+            (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない')) ||
+            (analysisLower.includes('dock') && !analysisLower.includes('ではない')) ||
+            (analysisLower.includes('メニューバー') && !analysisLower.includes('ではない'))) {
+          // Only match DESKTOP/TASKBAR/Dock/Menu bar in positive (non-negated) context
           status = 'DESKTOP'
-        } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('PIN') ||
+        } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('SIGN-IN') || upper.includes('PIN') ||
             analysisLower.includes('ログイン') || analysisLower.includes('サインイン') ||
-            analysisLower.includes('pin入力') || analysisLower.includes('パスワード入力')) {
+            analysisLower.includes('pin入力') || analysisLower.includes('パスワード入力') ||
+            analysisLower.includes('パスワードフィールド') || analysisLower.includes('touch id')) {
           status = 'LOGIN_SCREEN'
         } else if ((upper.includes('LOCK') && !upper.includes('NOT') && !upper.includes('DOES NOT')) ||
             (analysisLower.includes('ロック') && !analysisLower.includes('ではない'))) {
@@ -796,16 +831,23 @@ export class ApiServer {
             return !(/\b(NO|NOT|WITHOUT|NO VISIBLE)\s*$/.test(prefix) || /\bDOES NOT\b/.test(prefix))
           }
           let retryStatus = 'BLACK_SCREEN'
-          if (retryUpper.includes('LOCK_SCREEN') || retryUpper.includes('LOCK SCREEN') ||
-              retryLower.includes('ロック画面') || retryLower.includes('ロックスクリーン') ||
-              retryLower.includes('ログイン画面') && (retryLower.includes('時計') || retryLower.includes('アバター'))) {
+          if (retryUpper.includes('SIGN-IN SCREEN') || retryUpper.includes('SIGN IN SCREEN') ||
+              retryUpper.includes('LOGIN_SCREEN') || retryUpper.includes('LOGIN SCREEN') ||
+              retryLower.includes('サインイン画面')) {
+            retryStatus = 'LOGIN_SCREEN'
+          } else if (retryUpper.includes('LOCK_SCREEN') || retryUpper.includes('LOCK SCREEN') ||
+              retryLower.includes('ロック画面') || retryLower.includes('ロックスクリーン')) {
             retryStatus = 'LOCK_SCREEN'
           } else if (retryHasPositive('DESKTOP') || retryHasPositive('TASKBAR') ||
+              retryHasPositive('DOCK') || retryHasPositive('MENU BAR') ||
               (retryLower.includes('デスクトップ') && !retryLower.includes('ではない')) ||
-              (retryLower.includes('タスクバー') && !retryLower.includes('ではない'))) {
+              (retryLower.includes('タスクバー') && !retryLower.includes('ではない')) ||
+              (retryLower.includes('dock') && !retryLower.includes('ではない')) ||
+              (retryLower.includes('メニューバー') && !retryLower.includes('ではない'))) {
             retryStatus = 'DESKTOP'
-          } else if (retryUpper.includes('LOGIN') || retryUpper.includes('SIGN IN') ||
-              retryLower.includes('ログイン') || retryLower.includes('サインイン')) {
+          } else if (retryUpper.includes('LOGIN') || retryUpper.includes('SIGN IN') || retryUpper.includes('SIGN-IN') ||
+              retryLower.includes('ログイン') || retryLower.includes('サインイン') ||
+              retryLower.includes('touch id')) {
             retryStatus = 'LOGIN_SCREEN'
           } else if ((retryUpper.includes('LOCK') && !retryUpper.includes('NOT')) ||
               (retryLower.includes('ロック') && !retryLower.includes('ではない'))) {
