@@ -798,7 +798,13 @@ export class PicoclawManager {
     return new Promise((resolve, reject) => {
       const args = ['agent', '-m', message, '-l', language]
       if (sessionId) {
-        args.push('-s', sessionId)
+        // Format as agent-scoped session key so picoclaw honors it.
+        // Keys without "agent:" prefix are ignored by the router and fall back
+        // to agent:main:main, causing all ChatUI messages to share one session.
+        // Telegram uses BuildAgentMainSessionKey("oneshot-xxx") → "agent:oneshot-xxx:main".
+        // ChatUI uses per-component-mount keys: "agent:main:chat-xxx".
+        const scopedKey = sessionId.startsWith('agent:') ? sessionId : `agent:main:${sessionId}`
+        args.push('-s', scopedKey)
       }
       
       const agent = spawn(this.picoclawBinary, args, {
