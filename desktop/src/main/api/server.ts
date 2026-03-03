@@ -643,23 +643,25 @@ export class ApiServer {
             '- 画面の種類（デスクトップ、ロック画面、サインイン画面、アプリケーションウィンドウなど）\n' +
             '- 表示されているアプリケーションやウィンドウ（ある場合）\n' +
             '- 注目すべきUI要素（タスクバー、Dock、ダイアログボックス、エラーメッセージなど）\n\n' +
-            '重要な分類ルール:\n' +
-            '## Windows\n' +
-            '- デスクトップ: 画面下部にタスクバー（アイコンが並んだ細いバー）が表示されている。\n' +
-            '- ロック画面: 時計/日時が画面中央に大きく表示され、背景画像がある。ユーザーアバターもテキスト入力欄も表示されない。タスクバーもない。\n' +
-            '- サインイン画面: ユーザーアバター（丸い写真や人型アイコン）が画面中央に表示される。その下にユーザー名が表示される。その下にPINまたはパスワードの入力欄（白い横長のテキストボックス、またはドットが並ぶ入力フィールド）が表示される。「サインイン」「PIN」「パスワード」等のテキストが見えることがある。時刻は画面中央ではなく左下に小さく表示されるか、表示されない。背景画像はロック画面と同じことがある。\n' +
-            '- ロック画面とサインイン画面の最大の違い: ユーザーアバターと入力欄があるかどうか。ユーザーアバターが表示されていればサインイン画面。\n\n' +
-            '## macOS\n' +
-            '- デスクトップ: 画面上部にメニューバー（Appleロゴ、時計等）、画面下部にDock（アイコンが並んだバー）が表示されている。\n' +
-            '- ロック画面: 時刻が大きく中央に表示され、日付も表示される。ユーザーアバターやパスワード入力欄は表示されない。背景は壁紙。\n' +
-            '- サインイン画面: ユーザーアバター（丸い写真/アイコン）が表示され、その下にユーザー名、さらにその下にパスワード入力欄（丸い点のドットが並ぶフィールドや白い入力ボックス）が表示される。時刻は大きく表示されない。「Touch ID」や「パスワードを入力」のテキストが表示されることがある。\n\n' +
-            '共通ルール:\n' +
-            '- タスクバー/Dock/メニューバーもアプリケーションも表示されていない場合、ロック画面またはサインイン画面である。\n' +
-            '- ユーザーアバター（丸い写真や人型アイコン）が画面中央に表示されていれば、サインイン画面である（ロック画面ではない）。\n' +
-            '- 画面中央に大きな時刻表示があり、ユーザーアバターがなければロック画面。\n' +
-            '- 画面中央にユーザーアバターがあり、入力欄があれば（または「PIN」「パスワード」のテキストがあれば）サインイン画面。\n\n' +
-            '重要: 実際に画面上に見えている要素だけを報告してください。推測や仮定で要素を追加しないでください。\n' +
-            'テキスト入力欄が実際に見えていない場合は「入力欄がある」と言わないでください。'
+            '## 画面分類の手順（この順番で判定すること）:\n\n' +
+            'ステップ1: タスクバー/Dock/メニューバーがあるか？\n' +
+            '→ YES → デスクトップ（判定終了）\n\n' +
+            'ステップ2: 画面中央に大きな時計/時刻表示があるか？\n' +
+            '→ YES → ロック画面（判定終了）\n' +
+            '※ Windowsロック画面では画面下部にユーザー名が小さく表示されることがありますが、' +
+            'これはサインイン画面ではありません。大きな時計が中央にあればロック画面です。\n' +
+            '※ ロック画面にはPIN入力欄やパスワード入力欄は絶対に表示されません。\n\n' +
+            'ステップ3: ユーザーアバター（丸い写真/人型アイコン）が画面中央に大きく表示され、' +
+            'その下にPIN/パスワード入力欄（白い横長のテキストボックスまたはドット入力フィールド）が' +
+            '実際に見えているか？\n' +
+            '→ YES → サインイン画面（判定終了）\n' +
+            '→ NO → ロック画面（大きな時計はないがアバター/入力欄もない場合）\n\n' +
+            '## 重要な注意事項:\n' +
+            '- ロック画面とサインイン画面の最大の区別点は「大きな時計が中央にあるか」です。\n' +
+            '- ロック画面にはPINやパスワードの入力欄は表示されません。入力欄が見えなければロック画面です。\n' +
+            '- Windowsロック画面の下部にユーザー名テキストが表示されていても、それだけではサインイン画面にはなりません。\n' +
+            '- 実際に画面上に見えている要素だけを報告してください。推測や仮定で要素を追加しないでください。\n' +
+            '- テキスト入力欄（白いボックスやドットフィールド）が画面上にはっきり見えていない限り、「入力欄がある」と報告しないでください。'
         } else {
           prompt =
             'Describe what is currently shown on this computer screen in 2-3 sentences.\n' +
@@ -667,23 +669,24 @@ export class ApiServer {
             '- What type of screen it is (desktop, lock screen, sign-in/login screen, application window, etc.)\n' +
             '- What applications or windows are visible (if any)\n' +
             '- Any notable UI elements (taskbar, Dock, dialog boxes, error messages, etc.)\n\n' +
-            'IMPORTANT classification rules:\n' +
-            '## Windows\n' +
-            '- DESKTOP: Taskbar (thin bar with icons) at the bottom of the screen.\n' +
-            '- LOCK SCREEN: Large clock/time display centered on screen, wallpaper background, NO user avatar, NO text input field, NO taskbar.\n' +
-            '- SIGN-IN SCREEN: User avatar (circular photo or person icon) displayed centrally. Username shown below avatar. Below that, a PIN or password input field (white text box or dot-filled field). May show "Sign in", "PIN", "Password" text. Time is shown small in the bottom-left corner (or not at all), NOT large in the center. Background may look the same as the lock screen.\n' +
-            '- KEY DIFFERENCE between lock and sign-in: If a user avatar is visible in the center, it is a SIGN-IN screen. If a large clock is centered with no avatar, it is a LOCK screen.\n\n' +
-            '## macOS\n' +
-            '- DESKTOP: Menu bar at the top (Apple logo, clock, etc.) and Dock (icon bar) at the bottom.\n' +
-            '- LOCK SCREEN: Large time display centered on screen with date below. NO user avatar, NO password field. Wallpaper background.\n' +
-            '- SIGN-IN SCREEN: User avatar (circular photo/icon) displayed centrally, with username below and password input field (dots or white input box) below that. Time is NOT prominently displayed. May show "Touch ID" or "Enter Password" text.\n\n' +
-            'Common rules:\n' +
-            '- If NO taskbar/Dock/menu bar and NO applications visible, it is a lock screen or sign-in screen.\n' +
-            '- If a user avatar (circular photo or person icon) is centered on screen, it is a SIGN-IN screen (NOT a lock screen).\n' +
-            '- If a large clock/time is centered with no user avatar, it is a LOCK screen.\n' +
-            '- If a user avatar is visible with an input field (or "PIN"/"Password" text), it is a SIGN-IN screen.\n\n' +
-            'IMPORTANT: Only report UI elements that are actually visible. Do NOT assume or hallucinate elements.\n' +
-            'If you do not see a text input field, do NOT say there is one.' + langInstruction
+            '## Screen classification steps (follow this order):\n\n' +
+            'Step 1: Is there a taskbar/Dock/menu bar?\n' +
+            '→ YES → DESKTOP (done)\n\n' +
+            'Step 2: Is there a LARGE clock/time display centered on the screen?\n' +
+            '→ YES → LOCK SCREEN (done)\n' +
+            'NOTE: Windows lock screen may show the user\'s name in small text at the bottom, ' +
+            'but this does NOT make it a sign-in screen. If a large clock is centered, it is a LOCK SCREEN.\n' +
+            'NOTE: Lock screens NEVER have a PIN or password input field.\n\n' +
+            'Step 3: Is a user avatar (circular photo/person icon) displayed prominently in the center, ' +
+            'AND is there a visible PIN/password input field (white text box or dot-filled field) below it?\n' +
+            '→ YES → SIGN-IN SCREEN (done)\n' +
+            '→ NO → LOCK SCREEN (no large clock but also no avatar/input field)\n\n' +
+            '## Critical rules:\n' +
+            '- The PRIMARY indicator for LOCK vs SIGN-IN is whether a large clock is centered on screen.\n' +
+            '- Lock screens do NOT have PIN/password input fields. If you don\'t see an input field, it is a lock screen.\n' +
+            '- A user name shown at the bottom of a Windows lock screen does NOT make it a sign-in screen.\n' +
+            '- Only report UI elements that are ACTUALLY VISIBLE. Do NOT assume or hallucinate elements.\n' +
+            '- If you do not clearly see a text input field (white box or dot field) on screen, do NOT claim there is one.' + langInstruction
         }
       }
 
