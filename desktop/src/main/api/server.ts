@@ -638,10 +638,11 @@ export class ApiServer {
             '- 注目すべきUI要素（タスクバー、ダイアログボックス、エラーメッセージなど）\n\n' +
             '重要な分類ルール:\n' +
             '- デスクトップ: 画面下部（または上部/側面）にタスクバーが表示されていること。タスクバーがなければデスクトップではない。\n' +
-            '- ロック画面: 時計/日時が表示され、壁紙が背景にあるが、タスクバーはない。ユーザーアバターが表示される場合がある。\n' +
-            '- ログイン画面: ユーザー名/アバターとPINまたはパスワード入力欄が表示されるが、タスクバーはない。\n' +
+            '- ロック画面: 時計/日時が大きく表示され、背景画像があるが、タスクバーもテキスト入力欄もない。クリックや任意キー押下でログイン画面に遷移する前の画面。\n' +
+            '- ログイン画面: ユーザー名/アバターが表示され、テキスト入力欄（PINまたはパスワード用のテキストボックス）が実際に画面上に見えている。入力欄が見えなければログイン画面ではなくロック画面である。\n' +
             '- タスクバーもアプリケーションも表示されていない場合、ほぼ確実にロック画面またはログイン画面であり、デスクトップではない。\n\n' +
-            '見えているものを具体的かつ事実に基づいて説明してください。'
+            '重要: 実際に画面上に見えている要素だけを報告してください。推測や仮定で要素を追加しないでください。\n' +
+            'テキスト入力欄が実際に見えていない場合は「入力欄がある」と言わないでください。'
         } else {
           prompt =
             'Describe what is currently shown on this computer screen in 2-3 sentences.\n' +
@@ -651,10 +652,11 @@ export class ApiServer {
             '- Any notable UI elements (taskbar, dialog boxes, error messages, etc.)\n\n' +
             'IMPORTANT classification rules:\n' +
             '- DESKTOP: Must have a TASKBAR visible at the bottom (or top/side). Without a taskbar, it is NOT a desktop.\n' +
-            '- LOCK SCREEN: Shows a clock/time display, wallpaper background, but NO taskbar. May show user avatar.\n' +
-            '- LOGIN SCREEN: Shows a user name/avatar with a PIN or password input field, but NO taskbar.\n' +
+            '- LOCK SCREEN: Shows a large clock/time display, wallpaper background, but NO taskbar and NO text input field. This is the screen before clicking/pressing a key to get to the login screen.\n' +
+            '- LOGIN SCREEN: Shows a user name/avatar with a visible text input box (for PIN or password) actually present on screen, but NO taskbar. If no text input field is visible, it is a lock screen, NOT a login screen.\n' +
             '- If you see NO taskbar and NO applications, it is almost certainly a lock screen or login screen, NOT a desktop.\n\n' +
-            'Be specific and factual about what you see.' + langInstruction
+            'IMPORTANT: Only report UI elements that are actually visible. Do NOT assume or hallucinate elements.\n' +
+            'If you do not see a text input field, do NOT say there is one.' + langInstruction
         }
       }
 
