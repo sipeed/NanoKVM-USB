@@ -635,58 +635,61 @@ export class ApiServer {
           'IMPORTANT: If you see a taskbar/Dock/menu bar, it is LOGIN_SUCCESS.\n\n' +
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
       } else {
-        // action === 'status': general screen description
+        // action === 'status': classification keyword FIRST, then description.
+        // Using the same pattern as action=lock ("Answer with ONLY one word")
+        // prevents the Vision LLM from hallucinating elements in a free-form description.
         if (lang === 'ja') {
           prompt =
-            'このコンピュータ画面に表示されている内容を2〜3文で説明してください。\n' +
-            '以下を含めてください:\n' +
-            '- 画面の種類（デスクトップ、ロック画面、サインイン画面、アプリケーションウィンドウなど）\n' +
-            '- 表示されているアプリケーションやウィンドウ（ある場合）\n' +
-            '- 注目すべきUI要素（タスクバー、Dock、ダイアログボックス、エラーメッセージなど）\n\n' +
-            '## 画面分類の手順（この順番で判定すること）:\n\n' +
-            'ステップ1: タスクバー/Dock/メニューバーがあるか？\n' +
-            '→ YES → デスクトップ（判定終了）\n\n' +
-            'ステップ2: 画面中央に大きな時計/時刻表示があるか？\n' +
-            '→ YES → ロック画面（判定終了）\n' +
-            '※ Windowsロック画面では画面下部にユーザー名が小さく表示されることがありますが、' +
-            'これはサインイン画面ではありません。大きな時計が中央にあればロック画面です。\n' +
-            '※ ロック画面にはPIN入力欄やパスワード入力欄は絶対に表示されません。\n\n' +
-            'ステップ3: ユーザーアバター（丸い写真/人型アイコン）が画面中央に大きく表示され、' +
-            'その下にPIN/パスワード入力欄（白い横長のテキストボックスまたはドット入力フィールド）が' +
-            '実際に見えているか？\n' +
-            '→ YES → サインイン画面（判定終了）\n' +
-            '→ NO → ロック画面（大きな時計はないがアバター/入力欄もない場合）\n\n' +
-            '## 重要な注意事項:\n' +
-            '- ロック画面とサインイン画面の最大の区別点は「大きな時計が中央にあるか」です。\n' +
-            '- ロック画面にはPINやパスワードの入力欄は表示されません。入力欄が見えなければロック画面です。\n' +
-            '- Windowsロック画面の下部にユーザー名テキストが表示されていても、それだけではサインイン画面にはなりません。\n' +
-            '- 実際に画面上に見えている要素だけを報告してください。推測や仮定で要素を追加しないでください。\n' +
-            '- テキスト入力欄（白いボックスやドットフィールド）が画面上にはっきり見えていない限り、「入力欄がある」と報告しないでください。'
+            'この画面を分析してください。\n\n' +
+            '## 回答形式（必ずこの形式で回答）:\n' +
+            '1行目: 分類キーワード1つだけ\n' +
+            '2行目以降: 画面の説明2〜3文\n\n' +
+            '## 分類キーワードの選択肢:\n' +
+            '- LOCK_SCREEN — ロック画面（時刻/日付表示＋背景画像。入力欄なし）\n' +
+            '- SIGN_IN_SCREEN — サインイン画面（ユーザーアバター＋PIN/パスワード入力欄が実際に見える）\n' +
+            '- DESKTOP — デスクトップ（タスクバーが画面下部に見える）\n' +
+            '- APPLICATION — アプリケーション画面\n' +
+            '- BLACK_SCREEN — 真っ黒/信号なし\n\n' +
+            '## 判定手順（この順番で判定すること）:\n' +
+            '1. タスクバー（画面下部の横長バー、スタートボタン等）があるか？ → DESKTOP\n' +
+            '2. 画面に大きく時刻（例: "12:34"）や日付が表示されているか？ → LOCK_SCREEN\n' +
+            '3. ユーザーアバターの下にPIN/パスワード入力欄（白いテキストボックスまたはドット入力フィールド）が実際にはっきり見えるか？ → SIGN_IN_SCREEN\n' +
+            '4. 上記のいずれにも該当しない → LOCK_SCREEN\n\n' +
+            '## Windowsロック画面 vs サインイン画面の区別:\n' +
+            '- ロック画面: 背景に写真や風景画像が表示され、画面中央〜下部に大きな時刻と日付が重ねて表示される。入力欄は一切ない。\n' +
+            '- サインイン画面: ユーザーアバター（丸いアイコン）とユーザー名が中央に表示され、その下にPINまたはパスワードの入力欄がある。\n' +
+            '- ロック画面では画面下部にユーザー名が小さく表示されることがあるが、これはサインイン画面ではない。\n' +
+            '- 大きな時刻表示があれば必ずロック画面。時刻表示とPIN入力欄が同時に表示されることはない。\n\n' +
+            '## 重要:\n' +
+            '- 入力欄が見えなければ LOCK_SCREEN。入力欄を推測で追加しないこと。\n' +
+            '- 実際に見えている要素だけを報告すること。\n' +
+            '- 背景画像は写真・風景・抽象画像など様々。背景の種類で判断せず、時刻表示や入力欄の有無で判断すること。'
         } else {
           prompt =
-            'Describe what is currently shown on this computer screen in 2-3 sentences.\n' +
-            'Include:\n' +
-            '- What type of screen it is (desktop, lock screen, sign-in/login screen, application window, etc.)\n' +
-            '- What applications or windows are visible (if any)\n' +
-            '- Any notable UI elements (taskbar, Dock, dialog boxes, error messages, etc.)\n\n' +
-            '## Screen classification steps (follow this order):\n\n' +
-            'Step 1: Is there a taskbar/Dock/menu bar?\n' +
-            '→ YES → DESKTOP (done)\n\n' +
-            'Step 2: Is there a LARGE clock/time display centered on the screen?\n' +
-            '→ YES → LOCK SCREEN (done)\n' +
-            'NOTE: Windows lock screen may show the user\'s name in small text at the bottom, ' +
-            'but this does NOT make it a sign-in screen. If a large clock is centered, it is a LOCK SCREEN.\n' +
-            'NOTE: Lock screens NEVER have a PIN or password input field.\n\n' +
-            'Step 3: Is a user avatar (circular photo/person icon) displayed prominently in the center, ' +
-            'AND is there a visible PIN/password input field (white text box or dot-filled field) below it?\n' +
-            '→ YES → SIGN-IN SCREEN (done)\n' +
-            '→ NO → LOCK SCREEN (no large clock but also no avatar/input field)\n\n' +
-            '## Critical rules:\n' +
-            '- The PRIMARY indicator for LOCK vs SIGN-IN is whether a large clock is centered on screen.\n' +
-            '- Lock screens do NOT have PIN/password input fields. If you don\'t see an input field, it is a lock screen.\n' +
-            '- A user name shown at the bottom of a Windows lock screen does NOT make it a sign-in screen.\n' +
-            '- Only report UI elements that are ACTUALLY VISIBLE. Do NOT assume or hallucinate elements.\n' +
-            '- If you do not clearly see a text input field (white box or dot field) on screen, do NOT claim there is one.' + langInstruction
+            'Analyze this screen.\n\n' +
+            '## Response format (you MUST follow this format):\n' +
+            'Line 1: Classification keyword ONLY\n' +
+            'Line 2+: 2-3 sentence description of the screen\n\n' +
+            '## Classification keywords:\n' +
+            '- LOCK_SCREEN — Lock screen (large time/date display over background image. No input field)\n' +
+            '- SIGN_IN_SCREEN — Sign-in screen (user avatar AND a visible PIN/password input field)\n' +
+            '- DESKTOP — Desktop (taskbar visible at bottom of screen)\n' +
+            '- APPLICATION — Application window\n' +
+            '- BLACK_SCREEN — Black/no signal\n\n' +
+            '## Decision steps (follow this order):\n' +
+            '1. Is there a taskbar (horizontal bar at screen bottom with Start button, etc.)? → DESKTOP\n' +
+            '2. Is there a large time display (e.g. "12:34") and/or date shown prominently? → LOCK_SCREEN\n' +
+            '3. Is there a user avatar with a PIN/password input field (white text box or dot field) clearly visible below it? → SIGN_IN_SCREEN\n' +
+            '4. None of the above → LOCK_SCREEN\n\n' +
+            '## Windows lock screen vs sign-in screen:\n' +
+            '- Lock screen: Background photo/landscape image with large time and date overlaid. No input fields at all.\n' +
+            '- Sign-in screen: User avatar (circular icon) and username centered, with PIN or password input field below.\n' +
+            '- A small username at the bottom of a lock screen does NOT make it a sign-in screen.\n' +
+            '- If a large time display is visible, it is ALWAYS a lock screen. Time display and PIN input never appear together.\n\n' +
+            '## Critical:\n' +
+            '- If no input field is visible → LOCK_SCREEN. Do NOT assume input fields exist.\n' +
+            '- Only report elements that are ACTUALLY VISIBLE on screen.\n' +
+            '- Background images can be photos, landscapes, or abstract images. Do NOT judge by background type — judge by presence of time display or input fields.' + langInstruction
         }
       }
 
@@ -723,47 +726,71 @@ export class ApiServer {
       const analysisLower = analysis.toLowerCase()
 
       if (action === 'status') {
-        // Detect black/blank screen FIRST (highest priority)
-        // IMPORTANT: If we reach here, the frame PASSED brightness+variance checks,
-        // meaning HDMI IS connected and producing frames. A "completely black" frame
-        // indicates the PC display is OFF (power-saving/sleep), NOT that HDMI is
-        // disconnected. Classify as BLACK_SCREEN (sleep), not NO_SIGNAL.
-        // English AND Japanese keywords supported (Vision LLM may respond in either language)
-        if (upper.includes('BLACK SCREEN') || upper.includes('BLANK SCREEN') ||
-            upper.includes('NO SIGNAL') || upper.includes('COMPLETELY BLACK') ||
-            (upper.includes('NO VISIBLE') && upper.includes('BLACK')) ||
-            analysisLower.includes('真っ黒') || analysisLower.includes('黒い画面') ||
-            analysisLower.includes('信号なし') || analysisLower.includes('完全に黒') ||
-            analysisLower.includes('真っ暗') || analysisLower.includes('ブラックスクリーン') ||
-            analysisLower.includes('映像なし') || analysisLower.includes('no signal')) {
+        // ── Step 1: Try structured classification from first line ──
+        // The prompt asks Vision LLM to output a classification keyword on the first line.
+        // This is more reliable than keyword-matching in free-form descriptions,
+        // which caused hallucination issues (e.g. "サインイン画面...PIN入力欄" on lock screens).
+        const firstLine = analysis.split('\n')[0].trim().toUpperCase()
+        const classificationLine = firstLine
+          .replace(/^(分類|CLASSIFICATION)\s*[:：]\s*/i, '') // strip prefix if present
+          .trim()
+
+        // Extract description (everything after first line) for the detail field
+        const descriptionLines = analysis.split('\n').slice(1).join('\n').trim()
+        if (descriptionLines) {
+          detail = descriptionLines
+        }
+
+        // Map classification keyword to status
+        if (classificationLine.includes('BLACK') || classificationLine.includes('NO_SIGNAL')) {
           status = 'BLACK_SCREEN'
-        } else if (upper.includes('SIGN-IN SCREEN') || upper.includes('SIGN IN SCREEN') ||
-            upper.includes('LOGIN_SCREEN') || upper.includes('LOGIN SCREEN') ||
-            analysisLower.includes('サインイン画面')) {
-          // SIGN-IN / LOGIN detection BEFORE lock screen — when Vision explicitly says "sign-in screen"
+        } else if (classificationLine.includes('SIGN_IN') || classificationLine.includes('SIGN-IN') ||
+            classificationLine.includes('LOGIN_SCREEN') || classificationLine.includes('LOGIN SCREEN')) {
           status = 'LOGIN_SCREEN'
-        } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') ||
-            analysisLower.includes('ロック画面') || analysisLower.includes('ロックスクリーン')) {
-          // LOCK_SCREEN before DESKTOP: Vision often says "lock screen...no taskbar"
+        } else if (classificationLine.includes('LOCK')) {
           status = 'LOCK_SCREEN'
-        } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') ||
-            hasPositive('DOCK') || hasPositive('MENU BAR') ||
-            (analysisLower.includes('デスクトップ') && !analysisLower.includes('ではない')) ||
-            (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない')) ||
-            (analysisLower.includes('dock') && !analysisLower.includes('ではない')) ||
-            (analysisLower.includes('メニューバー') && !analysisLower.includes('ではない'))) {
-          // Only match DESKTOP/TASKBAR/Dock/Menu bar in positive (non-negated) context
+        } else if (classificationLine.includes('DESKTOP') || classificationLine.includes('APPLICATION')) {
           status = 'DESKTOP'
-        } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('SIGN-IN') || upper.includes('PIN') ||
-            analysisLower.includes('ログイン') || analysisLower.includes('サインイン') ||
-            analysisLower.includes('pin入力') || analysisLower.includes('パスワード入力') ||
-            analysisLower.includes('パスワードフィールド') || analysisLower.includes('touch id')) {
-          status = 'LOGIN_SCREEN'
-        } else if ((upper.includes('LOCK') && !upper.includes('NOT') && !upper.includes('DOES NOT')) ||
-            (analysisLower.includes('ロック') && !analysisLower.includes('ではない'))) {
-          status = 'LOCK_SCREEN'
-        } else {
-          status = 'DESCRIBED'
+        }
+
+        // ── Step 2: Fallback to keyword matching in full response ──
+        // If structured classification didn't match, fall back to keyword detection.
+        if (status === 'UNKNOWN') {
+          console.log('[API Server] Screen verify: structured classification not found, falling back to keyword matching')
+          if (upper.includes('BLACK SCREEN') || upper.includes('BLANK SCREEN') ||
+              upper.includes('NO SIGNAL') || upper.includes('COMPLETELY BLACK') ||
+              (upper.includes('NO VISIBLE') && upper.includes('BLACK')) ||
+              analysisLower.includes('真っ黒') || analysisLower.includes('黒い画面') ||
+              analysisLower.includes('信号なし') || analysisLower.includes('完全に黒') ||
+              analysisLower.includes('真っ暗') || analysisLower.includes('ブラックスクリーン') ||
+              analysisLower.includes('映像なし') || analysisLower.includes('no signal')) {
+            status = 'BLACK_SCREEN'
+          } else if (upper.includes('LOCK_SCREEN') || upper.includes('LOCK SCREEN') ||
+              analysisLower.includes('ロック画面') || analysisLower.includes('ロックスクリーン')) {
+            // LOCK_SCREEN before LOGIN — prioritize lock to avoid description hallucination
+            status = 'LOCK_SCREEN'
+          } else if (upper.includes('SIGN-IN SCREEN') || upper.includes('SIGN IN SCREEN') ||
+              upper.includes('LOGIN_SCREEN') || upper.includes('LOGIN SCREEN') ||
+              analysisLower.includes('サインイン画面')) {
+            status = 'LOGIN_SCREEN'
+          } else if (hasPositive('DESKTOP') || hasPositive('TASKBAR') ||
+              hasPositive('DOCK') || hasPositive('MENU BAR') ||
+              (analysisLower.includes('デスクトップ') && !analysisLower.includes('ではない')) ||
+              (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない')) ||
+              (analysisLower.includes('dock') && !analysisLower.includes('ではない')) ||
+              (analysisLower.includes('メニューバー') && !analysisLower.includes('ではない'))) {
+            status = 'DESKTOP'
+          } else if (upper.includes('LOGIN') || upper.includes('SIGN IN') || upper.includes('SIGN-IN') || upper.includes('PIN') ||
+              analysisLower.includes('ログイン') || analysisLower.includes('サインイン') ||
+              analysisLower.includes('pin入力') || analysisLower.includes('パスワード入力') ||
+              analysisLower.includes('パスワードフィールド') || analysisLower.includes('touch id')) {
+            status = 'LOGIN_SCREEN'
+          } else if ((upper.includes('LOCK') && !upper.includes('NOT') && !upper.includes('DOES NOT')) ||
+              (analysisLower.includes('ロック') && !analysisLower.includes('ではない'))) {
+            status = 'LOCK_SCREEN'
+          } else {
+            status = 'DESCRIBED'
+          }
         }
       } else if (action === 'lock') {
         // For lock verification: only detect LOCK_SCREEN or DESKTOP
