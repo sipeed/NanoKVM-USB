@@ -64,9 +64,13 @@ console.log(`✅ Wrote processed MD: ${PROCESSED_MD}`)
 
 // ── 3. PDF 用 CSS ─────────────────────────────────────────────────────────────
 const css = `
+/* ===== Google Fonts: 日本語 + 絵文字 ===== */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
+
 /* ===== ベースフォント ===== */
 body {
-  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Yu Gothic", sans-serif;
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
   font-size: 10pt;
   line-height: 1.6;
   color: #1a1a1a;
@@ -79,7 +83,7 @@ h4 { font-size: 10.5pt; }
 
 /* ===== コードブロック ===== */
 pre, code {
-  font-family: "Menlo", "Courier New", monospace;
+  font-family: "Noto Sans Mono", "Menlo", "Courier New", monospace;
   font-size: 8.5pt;
   background: #f6f8fa;
   border-radius: 4px;
@@ -170,11 +174,24 @@ const pdfOptions = JSON.stringify({
   printBackground: true,
 })
 
+// Puppeteer の headless Chromium にシステムフォントへのアクセスを許可し
+// フォントレンダリングを改善するフラグを渡す
+const launchOptions = JSON.stringify({
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--font-render-hinting=none',
+    '--disable-font-subpixel-positioning',
+  ],
+})
+
 const cmd = [
   'md-to-pdf',
   `"${PROCESSED_MD}"`,
   `--stylesheet "${CSS_FILE}"`,
   `--pdf-options '${pdfOptions}'`,
+  `--launch-options '${launchOptions}'`,
+  `--page-media-type print`,
   `--basedir "${WORK_DIR}"`,
   `--document-title "picoclaw ロック・ログイン仕様書"`,
 ].join(' ')
