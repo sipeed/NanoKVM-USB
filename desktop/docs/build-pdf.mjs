@@ -132,18 +132,24 @@ blockquote {
   color: #333;
 }
 
-/* ===== 図のレイアウト ===== */
-/* break-inside を設定しないことで、縦長の図はページをまたいで自然に流れる */
+/* ===== 図が改ページで切れないようにする ===== */
 .figure-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
   text-align: center;
   margin: 8pt 0;
 }
 .figure-block img {
   max-width: 100%;
+  max-height: 210mm; /* A4 可用高さ(257mm)より小さく収める */
+  width: auto;
   height: auto;
+  object-fit: contain;
 }
 img {
   max-width: 100%;
+  max-height: 210mm;
+  width: auto;
   height: auto;
 }
 
