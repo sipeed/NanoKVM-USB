@@ -583,7 +583,7 @@ export class ApiServer {
     try {
       const body = await this.readBody(req)
       const { action, context } = JSON.parse(body) as {
-        action: 'lock' | 'login' | 'status' | 'email_compose' | 'email_sent' | 'email_to_field' | 'email_subject_field' | 'email_body_field' | 'email_outlook_active'
+        action: 'lock' | 'login' | 'status' | 'email_compose' | 'email_sent' | 'email_to_field' | 'email_subject_field' | 'email_body_field' | 'email_outlook_active' | 'email_ime_mode'
         context?: string
       }
 
@@ -596,12 +596,13 @@ export class ApiServer {
         action !== 'email_to_field' &&
         action !== 'email_subject_field' &&
         action !== 'email_body_field' &&
-        action !== 'email_outlook_active'
+        action !== 'email_outlook_active' &&
+        action !== 'email_ime_mode'
       ) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(
           JSON.stringify({
-            error: 'action must be "lock", "login", "status", "email_compose", "email_sent", "email_to_field", "email_subject_field", "email_body_field", or "email_outlook_active"'
+            error: 'action must be "lock", "login", "status", "email_compose", "email_sent", "email_to_field", "email_subject_field", "email_body_field", "email_outlook_active", or "email_ime_mode"'
           })
         )
         return
@@ -703,12 +704,20 @@ export class ApiServer {
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
       } else if (action === 'email_compose') {
         prompt =
-          'Is the Microsoft Outlook new email compose window currently open?\n' +
-          'Compose window indicators: TO/CC/BCC field, SUBJECT line, email body text area all visible.\n\n' +
+          'Is a NEW EMAIL COMPOSE WINDOW currently open in Microsoft Outlook?\n\n' +
+          'The compose window is a SEPARATE floating window (or maximized compose view) that has:\n' +
+          '  - A "To:" or "宛先:" field at the top (for entering email addresses)\n' +
+          '  - A "Subject:" or "件名:" field below the To field\n' +
+          '  - A large blank text area for the email body\n' +
+          '  - Send button or ribbon toolbar at the top with mail-related buttons\n\n' +
+          'This is NOT the compose window:\n' +
+          '  - The main Outlook inbox/mail list view (even if an email/reading pane is visible)\n' +
+          '  - A dialog box, settings panel, or error message\n' +
+          '  - The Outlook main window without a separate compose area\n\n' +
           'Answer on line 1 with ONLY the classification keyword:\n' +
-          '- COMPOSE_OPEN  — New email compose window is open (To/Subject/Body fields visible)\n' +
-          '- COMPOSE_NOT_OPEN — Not open (main Outlook window, dialog, error, or other screen)\n' +
-          'Line 2+: one sentence explanation.' + langInstruction
+          '- COMPOSE_OPEN  — A new email compose window with To/Subject/Body fields is clearly visible\n' +
+          '- COMPOSE_NOT_OPEN — No compose window open (main inbox view, dialog, or other screen)\n' +
+          'Line 2+: one sentence describing what is actually visible on screen.' + langInstruction
       } else if (action === 'email_sent') {
         prompt =
           'After pressing Ctrl+Enter to send an email in Outlook, what is the current screen state?\n\n' +
@@ -759,6 +768,16 @@ export class ApiServer {
           `- FIELD_WRONG   — The body area shows different content from "${expected}"\n` +
           '- FIELD_EMPTY   — The body area appears empty\n' +
           'Line 2+: one sentence description of what the body area currently shows.' + langInstruction
+      } else if (action === 'email_ime_mode') {
+        prompt =
+          'Look at the Windows taskbar at the bottom-right area of the screen.\n' +
+          'Is the Japanese IME (Input Method Editor) currently in JAPANESE mode (showing \"あ\" or \"あ\" icon) ' +
+          'or in ASCII/English mode (showing \"A\" or \"英\" icon)?\n\n' +
+          'Answer on line 1 with ONLY one of these keywords:\n' +
+          '- IME_JAPANESE — IME is active and in Japanese (Hiragana/Katakana) input mode (\"あ\" shown)\n' +
+          '- IME_ASCII    — IME is in ASCII/Half-width English mode (\"A\" shown) or IME is off\n' +
+          '- IME_UNKNOWN  — Cannot clearly determine IME mode from the taskbar\n' +
+          'Line 2+: one sentence describing what you see in the taskbar language/IME area.'
       } else {
         // action === 'status': classification keyword FIRST, then description.
         // Using the same pattern as action=lock ("Answer with ONLY one word")
@@ -979,6 +998,27 @@ export class ApiServer {
         }
         const aDescLines = analysis.split('\n').slice(1).join('\n').trim()
         if (aDescLines) detail = aDescLines
+      } else if (action === 'email_ime_mode') {
+        // IME mode check
+        const firstLine = analysis.split('\n')[0].trim().toUpperCase()
+        if (firstLine.includes('IME_JAPANESE') || firstLine.includes('JAPANESE')) {
+          status = 'IME_JAPANESE'
+        } else if (firstLine.includes('IME_ASCII') || firstLine.includes('ASCII')) {
+          status = 'IME_ASCII'
+        } else if (upper.includes('IME_JAPANESE') || upper.includes('JAPANESE MODE') ||
+            upper.includes('「あ」') || upper.includes('あ MODE') ||
+            analysisLower.includes('日本語モード') || analysisLower.includes('ひらがな') ||
+            analysisLower.includes('"あ"')) {
+          status = 'IME_JAPANESE'
+        } else if (upper.includes('IME_ASCII') || upper.includes('ASCII MODE') ||
+            upper.includes('"A"') || upper.includes('ENGLISH MODE') ||
+            analysisLower.includes('英数モード') || analysisLower.includes('半角英数')) {
+          status = 'IME_ASCII'
+        } else {
+          status = 'IME_UNKNOWN' // cannot determine; caller should proceed cautiously
+        }
+        const imeDescLines = analysis.split('\n').slice(1).join('\n').trim()
+        if (imeDescLines) detail = imeDescLines
       } else if (action === 'email_to_field' || action === 'email_subject_field' || action === 'email_body_field') {
         // For email field content verification
         const firstLine = analysis.split('\n')[0].trim().toUpperCase()
