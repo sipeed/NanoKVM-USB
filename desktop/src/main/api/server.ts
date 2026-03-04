@@ -533,7 +533,7 @@ export class ApiServer {
     try {
       const body = await this.readBody(req)
       const { action, context } = JSON.parse(body) as {
-        action: 'lock' | 'login' | 'status' | 'email_compose' | 'email_sent' | 'email_to_field' | 'email_subject_field' | 'email_body_field'
+        action: 'lock' | 'login' | 'status' | 'email_compose' | 'email_sent' | 'email_to_field' | 'email_subject_field' | 'email_body_field' | 'email_outlook_active'
         context?: string
       }
 
@@ -545,12 +545,13 @@ export class ApiServer {
         action !== 'email_sent' &&
         action !== 'email_to_field' &&
         action !== 'email_subject_field' &&
-        action !== 'email_body_field'
+        action !== 'email_body_field' &&
+        action !== 'email_outlook_active'
       ) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(
           JSON.stringify({
-            error: 'action must be "lock", "login", "status", "email_compose", "email_sent", "email_to_field", "email_subject_field", or "email_body_field"'
+            error: 'action must be "lock", "login", "status", "email_compose", "email_sent", "email_to_field", "email_subject_field", "email_body_field", or "email_outlook_active"'
           })
         )
         return
@@ -666,6 +667,21 @@ export class ApiServer {
           '- SEND_ERROR    — Error dialog is visible (e.g. delivery failure, auth error)\n' +
           '- COMPOSE_OPEN  — Compose window is still open (email may not have been sent)\n' +
           'Line 2+: one sentence explanation.' + langInstruction
+      } else if (action === 'email_outlook_active') {
+        prompt =
+          'Is Microsoft Outlook the active, frontmost window on this Windows screen?\n\n' +
+          'Signs Outlook IS active:\n' +
+          '- Outlook navigation pane visible (Inbox / Sent / Drafts folder list on left side)\n' +
+          '- Email list or reading pane visible in center or right area\n' +
+          '- Outlook title bar or blue ribbon toolbar visible at top\n\n' +
+          'Signs Outlook is NOT active:\n' +
+          '- Windows Search bar / Cortana / Start menu overlay is covering the screen\n' +
+          '- A different application window is frontmost (browser, File Explorer, etc.)\n' +
+          '- Only desktop, taskbar, or lock/sign-in screen is visible\n\n' +
+          'Answer on line 1 with ONLY one of these keywords:\n' +
+          '- OUTLOOK_ACTIVE   — Outlook is the frontmost/active window\n' +
+          '- OUTLOOK_INACTIVE — Something else is in front; Outlook is not the active window\n' +
+          'Line 2+: one sentence description of what is currently visible.' + langInstruction
       } else if (action === 'email_to_field') {
         const expected = context || '(expected content unknown)'
         prompt =
@@ -899,6 +915,20 @@ export class ApiServer {
         }
         const descLines = analysis.split('\n').slice(1).join('\n').trim()
         if (descLines) detail = descLines
+      } else if (action === 'email_outlook_active') {
+        // For Outlook active window verification
+        const firstLine = analysis.split('\n')[0].trim().toUpperCase()
+        if (firstLine.includes('OUTLOOK_ACTIVE')) {
+          status = 'OUTLOOK_ACTIVE'
+        } else if (firstLine.includes('OUTLOOK_INACTIVE')) {
+          status = 'OUTLOOK_INACTIVE'
+        } else if (upper.includes('OUTLOOK_ACTIVE')) {
+          status = 'OUTLOOK_ACTIVE'
+        } else {
+          status = 'OUTLOOK_INACTIVE' // conservative
+        }
+        const aDescLines = analysis.split('\n').slice(1).join('\n').trim()
+        if (aDescLines) detail = aDescLines
       } else if (action === 'email_to_field' || action === 'email_subject_field' || action === 'email_body_field') {
         // For email field content verification
         const firstLine = analysis.split('\n')[0].trim().toUpperCase()
@@ -1069,6 +1099,19 @@ export class ApiServer {
             break
           case 'COMPOSE_OPEN':
             feedback = '⚠️ コンポーズウィンドウが残っています。手動で送信を確認してください。'
+            if (detail) feedback += `\n${detail}`
+            break
+          default:
+            feedback = `🔍 画面状態: ${detail}`
+        }
+      } else if (action === 'email_outlook_active') {
+        switch (status) {
+          case 'OUTLOOK_ACTIVE':
+            feedback = '✅ Outlookがアクティブウィンドウです。'
+            if (detail) feedback += `\n${detail}`
+            break
+          case 'OUTLOOK_INACTIVE':
+            feedback = '⚠️ Outlookが前面にありません。Alt+Tabでウィンドウを探します。'
             if (detail) feedback += `\n${detail}`
             break
           default:
