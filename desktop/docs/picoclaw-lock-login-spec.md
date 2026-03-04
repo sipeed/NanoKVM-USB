@@ -711,38 +711,102 @@ POST https://api.telegram.org/bot<token>/deleteMessage
 
 #### Settings UI（設定画面）
 
+**設定画面の全体構成：**
+
 ```mermaid
 block-beta
-    columns 1
+  columns 1
+  header["⚙️ picoclaw 設定（タイトル + バージョン表示）"]
+  block:chatSection["💬 チャット LLM"]:1
+    columns 2
+    pLabel["プロバイダ:"] pValue["[ ドロップダウン ▼ ]"]
+    mLabel["モデル:"] mValue["[ ドロップダウン ▼ ]"]
+    kLabel["API Key:"] kValue["[ ●●●● ] 👁 📋 🔗"]
+    ghLabel["GitHub Copilot:"] ghValue["🟢 GitHub 認証済み（Copilot 選択時のみ表示）"]
+  end
+  block:visionSection["👁️ 画面検証 Vision LLM"]:1
+    columns 2
+    vpLabel["Vision プロバイダ:"] vpValue["[ ドロップダウン（Vision 対応のみ） ▼ ]"]
+    vkLabel["Vision API Key:"] vkValue["[ ●●●● ]（別プロバイダ選択時のみ表示）"]
+    vmLabel["Vision モデル:"] vmValue["[ ドロップダウン（Vision 対応モデルのみ） ▼ ]"]
+  end
+  block:vaultSection["🔐 ログイン認証情報"]:1
+    columns 2
+    vsLabel["ステータス:"] vsValue["🛡 未設定 ／ ✅ 解錠済み ／ ⚠️ ロック中"]
+    stateNote["（状態に応じてフォームが切り替わる → 下図参照）"] spacerV[" "]
+  end
+  block:updateSection["🔄 モデルリスト自動更新"]:1
+    columns 2
+    updTime["最終更新: yyyy/mm/dd hh:mm"] updBtn["[ 今すぐ更新 ] [ 自動更新 ON/OFF ]"]
+  end
+  block:telegramSection["📱 Telegram Bot 設定"]:1
+    columns 2
+    tgLabel["Telegram Bot 有効化:"] tgSwitch["[ スイッチ ]"]
+    tgTLabel["Bot Token:"] tgTInput["[ 123456:ABC... ]"]
+    tgULabel["User ID:"] tgUInput["[ 数字 ID ]"]
+  end
+  saveBtn["[ 保存 ]"]
 
-    block:panel["🔐 ログイン認証情報"]:1
-        columns 2
-        status["ステータス: ✅ 設定済み"]:2
+  style header        fill:#1a1a2e,stroke:#555
+  style chatSection   fill:#1e2a3a,stroke:#4a90d9
+  style visionSection fill:#1e1e2e,stroke:#9c27b0
+  style vaultSection  fill:#1e2a1e,stroke:#4caf50
+  style updateSection fill:#1e1e1e,stroke:#666
+  style telegramSection fill:#1a1a2e,stroke:#2196f3
+  style saveBtn       fill:#1e2a1e,stroke:#4caf50
+```
 
-        block:cred["── 保存済みクレデンシャル ──"]:2
-            columns 2
-            authLabel["認証方式:"]
-            authInput["[ PIN ▼ ]"]
-            pinLabel["PIN:"]
-            pinInput["[ •••• ] 👁 [ 保存 ]"]
-            descLabel["説明:"]
-            descInput["Windows PC（自宅）"]
-        end
+**Vault 状態①：未設定（初回セットアップ）**
 
-        block:master["── マスターパスワード ──"]:2
-            columns 3
-            mpCurrent["現在のパスワード"]
-            mpNew["新しいパスワード"]
-            mpBtn["[ 変更 ]"]
-        end
+```mermaid
+block-beta
+  columns 1
+  block:setup["🔐 ログイン認証情報  ▶  初回セットアップ"]:1
+    columns 2
+    pinLabel["Windows PIN / パスワード:"] pinInput["[ ●●●● ] 👁"]
+    descLabel["説明（任意）:"] descInput["[ Windows PC（自宅） ]"]
+    mpLabel["マスターパスワード:"] mpInput["[ ●●●●●●●● ]"]
+    mpCLabel["マスターパスワード（確認）:"] mpCInput["[ ●●●●●●●● ]"]
+    setupBtn["[ 🔐 Vault をセットアップ ]"]:2
+    warn["⚠️ マスターパスワードを忘れると保存済みの認証情報を復元できません"]:2
+  end
+  style setup fill:#1a2a1a,stroke:#f9a825
+  style warn  fill:#2a1a00,stroke:#ff9800
+```
 
-        warn["⚠️ マスターパスワードを忘れると保存済みの認証情報を復元できません"]:2
-    end
+**Vault 状態②：設定済み・ロック中**
 
-    style panel fill:#fff8e1,stroke:#f9a825
-    style cred  fill:#f3f3f3,stroke:#bdbdbd
-    style master fill:#f3f3f3,stroke:#bdbdbd
-    style warn  fill:#fff3e0,stroke:#ff9800
+```mermaid
+block-beta
+  columns 1
+  block:locked["🔐 ログイン認証情報  ▶  🔒 Vault はロックされています"]:1
+    columns 2
+    mpLabel["マスターパスワード:"] mpAction["[ ●●●●●●●● ] 👁  [ 🔓 解錠 ]"]
+    spacer[" "]:1 delBtn["[ 🗑 Vault を削除 ]"]
+  end
+  style locked fill:#2a2a1a,stroke:#f9a825
+```
+
+**Vault 状態③：設定済み・解錠済み**
+
+```mermaid
+block-beta
+  columns 1
+  block:unlocked["🔐 ログイン認証情報  ▶  ✅ 解錠済み"]:1
+    columns 2
+    credTitle["─── 保存済みクレデンシャル ───"]:2
+    pinLabel["PIN / パスワード:"] pinInput["[ ●●●● ] 👁"]
+    descLabel["説明:"] descInput["[ Windows PC（自宅） ]"]
+    saveRow["[ 保存 ]  [ 🔒 ロック ]"]:2
+    divider["─────────────────────────"]:2
+    chgTitle["─── マスターパスワード変更 ───"]:2
+    newMpLabel["新しいマスターパスワード:"] newMpInput["[ ●●●●●●●● ]"]
+    newMpCLabel["新しいMPW（確認）:"] newMpCInput["[ ●●●●●●●● ]"]
+    chgRow["[ パスワード変更 ]  [ 🗑 Vault を削除 ]"]:2
+    warn["⚠️ マスターパスワードを忘れると保存済みの認証情報を復元できません"]:2
+  end
+  style unlocked fill:#1a2a1a,stroke:#4caf50
+  style warn     fill:#2a1a00,stroke:#ff9800
 ```
 
 #### セキュリティ比較
