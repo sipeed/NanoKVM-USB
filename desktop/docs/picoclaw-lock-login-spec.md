@@ -928,8 +928,8 @@ USB キャプチャカードの自動検出に使用するデバイス名パタ�
 3. Electron API Server が HDMI キャプチャを実行
 4. **黒画面（brightness < 15）の場合**: マウス左クリック＋キーボード Space キーを HID 送信してスリープ復帰を試行 → 4秒待機 → 再キャプチャ（最大2回リトライ）
    > **閾値 15 の根拠**: HDMI キャプチャカードはソースディスプレイ OFF 時でも brightness 3〜12 のノイズフレームを生成する。閾値 8 ではこれらが Vision LLM に渡り「真っ黒」→ NO_SIGNAL（誤分類）となっていた。閾値 15 に引き上げることで、スリープ時のノイズフレームをウェイクアップパスに正しくルーティング
-5. 映像取得成功なら Vision LLM に汎用プロンプトで画面内容を記述させる
-6. ステータス分類（`DESKTOP` / `LOCK_SCREEN` / `LOGIN_SCREEN` / `DESCRIBED`）と詳細説明を返却
+5. 映像取得成功なら Vision LLM に **分類キーワード先行プロンプト**（後述）で画面を分析させる
+6. 1行目の分類キーワードを抽出しステータス判定（`DESKTOP` / `LOCK_SCREEN` / `LOGIN_SCREEN` / `DESCRIBED`）、2行目以降を詳細説明として返却
 7. リトライ後も黒画面の場合は `BLACK_SCREEN` ステータスを返却（「マウスクリックとキーボード入力でスリープ復帰を試みましたが画面が変わりませんでした」）
 8. 早期終了で即座にユーザーに結果を表示
 
@@ -961,12 +961,299 @@ USB キャプチャカードの自動検出に使用するデバイス名パタ�
 | **Vision 未設定** | Vision LLM プロバイダ/モデル未設定 | `visionConfigured=false` | Vision LLM が設定されていません… |
 | **セッション履歴破損** | 並列 tool_calls のレスポンス欠落 | `sanitizeToolCallHistory()` で自動トランケート | （自動修復：ログに WARNING 出力、ユーザーへのメッセージなし） |
 | **並列 tool レスポンス欠落** | `sanitizeHistoryForProvider()` が連続 tool メッセージを削除 | predecessor チェックを `role=="tool"` にも拡張 | （透過的修正：ユーザー影響なし） |
+
+---
+
+## Vision LLM プロンプト詳細
+
+`POST /api/screen/verify` が Vision LLM に送信するプロンプトを action 別に記載します。
+プロンプト変更の議論・レビューはこのセクションを基準とします。
+
+> **実装ファイル**: `src/main/api/server.ts` → `buildScreenVerifyPrompt()` 相当部  
+> **言語切替**: Vision LLM の設定言語が `ja` の場合は日本語プロンプト、それ以外は英語プロンプトを使用
+
+### action=lock（ロック確認）
+
+Win+L 送信後にロック画面になったかを確認する。**1語で回答させる**シンプルな形式。
+
+```
+Is this a lock screen or a desktop?
+Lock screen indicators:
+- Windows: large clock/time, date, wallpaper background, no taskbar
+- macOS: large time display centered, date below, wallpaper background, no Dock
+Desktop indicators:
+- Windows: taskbar at bottom with icons
+- macOS: menu bar at top (Apple logo) and Dock at bottom with icons
+
+Answer with ONLY one word: LOCK_SCREEN or DESKTOP
+```
+
+**パース**: `LOCK_SCREEN` / `DESKTOP` の2値
+
+---
+
+### action=login（ログイン結果確認）
+
+PIN 入力後 15 秒待機してからログイン成否を確認する。**1語で回答させる**シンプルな形式。
+
+```
+After a login attempt, what is currently shown on screen?
+Look carefully for these specific indicators:
+- Windows: TASKBAR at bottom (thin bar with icons) = LOGIN_SUCCESS
+- macOS: Menu bar at top + Dock at bottom = LOGIN_SUCCESS
+- Desktop icons, open windows, Start menu = LOGIN_SUCCESS
+- "PIN is incorrect" or "password is incorrect" error text = LOGIN_FAILED
+- Large clock display, user avatar with PIN/password input field = LOCK_SCREEN
+
+IMPORTANT: If you see a taskbar/Dock/menu bar, it is LOGIN_SUCCESS.
+
+Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN
+```
+
+**パース**: `LOGIN_SUCCESS` / `LOGIN_FAILED` / `LOCK_SCREEN` の3値
+
+---
+
+### action=status（画面状態確認）
+
+「画面確認して」などの指示で汎用的に画面状態を分析する。  
+**ハルシネーション防止のため、1行目に分類キーワードを出力させる構造化形式**を採用。
+
+#### 日本語プロンプト（`lang=ja` 時）
+
+```
+この画面を分析してください。
+
+## 回答形式（必ずこの形式で回答）:
+1行目: 分類キーワード1つだけ
+2行目以降: 画面の説明2〜3文
+
+## 分類キーワードの選択肢:
+- LOCK_SCREEN — ロック画面（時刻/日付表示＋背景画像。入力欄なし）
+- SIGN_IN_SCREEN — サインイン画面（ユーザーアバター＋PIN/パスワード入力欄が実際に見える）
+- DESKTOP — デスクトップ（タスクバーが画面下部に見える）
+- APPLICATION — アプリケーション画面
+- BLACK_SCREEN — 真っ黒/信号なし
+
+## 判定手順（この順番で判定すること）:
+1. タスクバー（画面下部の横長バー、スタートボタン等）があるか？ → DESKTOP
+2. 画面に大きく時刻（例: "12:34"）や日付が表示されているか？ → LOCK_SCREEN
+3. ユーザーアバターの下にPIN/パスワード入力欄（白いテキストボックスまたはドット入力フィールド）が実際にはっきり見えるか？ → SIGN_IN_SCREEN
+4. 上記のいずれにも該当しない → LOCK_SCREEN
+
+## Windowsロック画面 vs サインイン画面の区別:
+- ロック画面: 背景に写真や風景画像が表示され、画面中央〜下部に大きな時刻と日付が重ねて表示される。入力欄は一切ない。
+- サインイン画面: ユーザーアバター（丸いアイコン）とユーザー名が中央に表示され、その下にPINまたはパスワードの入力欄がある。
+- ロック画面では画面下部にユーザー名が小さく表示されることがあるが、これはサインイン画面ではない。
+- 大きな時刻表示があれば必ずロック画面。時刻表示とPIN入力欄が同時に表示されることはない。
+
+## 重要:
+- 入力欄が見えなければ LOCK_SCREEN。入力欄を推測で追加しないこと。
+- 実際に見えている要素だけを報告すること。
+- 背景画像は写真・風景・抽象画像など様々。背景の種類で判断せず、時刻表示や入力欄の有無で判断すること。
+```
+
+#### 英語プロンプト（`lang=ja` 以外）
+
+```
+Analyze this screen.
+
+## Response format (you MUST follow this format):
+Line 1: Classification keyword ONLY
+Line 2+: 2-3 sentence description of the screen
+
+## Classification keywords:
+- LOCK_SCREEN — Lock screen (large time/date display over background image. No input field)
+- SIGN_IN_SCREEN — Sign-in screen (user avatar AND a visible PIN/password input field)
+- DESKTOP — Desktop (taskbar visible at bottom of screen)
+- APPLICATION — Application window
+- BLACK_SCREEN — Black/no signal
+
+## Decision steps (follow this order):
+1. Is there a taskbar (horizontal bar at screen bottom with Start button, etc.)? → DESKTOP
+2. Is there a large time display (e.g. "12:34") and/or date shown prominently? → LOCK_SCREEN
+3. Is there a user avatar with a PIN/password input field (white text box or dot field) clearly visible below it? → SIGN_IN_SCREEN
+4. None of the above → LOCK_SCREEN
+
+## Windows lock screen vs sign-in screen:
+- Lock screen: Background photo/landscape image with large time and date overlaid. No input fields at all.
+- Sign-in screen: User avatar (circular icon) and username centered, with PIN or password input field below.
+- A small username at the bottom of a lock screen does NOT make it a sign-in screen.
+- If a large time display is visible, it is ALWAYS a lock screen. Time display and PIN input never appear together.
+
+## Critical:
+- If no input field is visible → LOCK_SCREEN. Do NOT assume input fields exist.
+- Only report elements that are ACTUALLY VISIBLE on screen.
+- Background images can be photos, landscapes, or abstract images.
+  Do NOT judge by background type — judge by presence of time display or input fields.
+```
+
+#### パース処理（2段階）
+
+| 段階 | 方式 | 説明 |
+|------|------|------|
+| **Step 1** | 構造化抽出 | 1行目のキーワードを大文字化して分類 (`LOCK_SCREEN` / `SIGN_IN_SCREEN` / `DESKTOP` / `APPLICATION` / `BLACK_SCREEN`) |
+| **Step 2** | フォールバックキーワードマッチング | Step 1 で未分類の場合のみ全文キーワードマッチング。フォールバック内では **LOCK_SCREEN を LOGIN_SCREEN より優先**して検出 |
+
+> **設計上の注意**: Step 2 のフォールバックで LOCK_SCREEN 検出を LOGIN_SCREEN より先に行う理由は、自由記述プロンプトを使っていた時代に Vision LLM が「サインイン画面です…PIN入力欄が…」とハルシネーションした際に `LOGIN_SCREEN` に誤分類されていた問題を防ぐため。
+
 ---
 
 ## チャット用 LLM（Chat LLM）
 
 picoclaw のチャット機能（自然言語によるコマンド解釈・応答生成）に使用する LLM プロバイダとモデルの一覧です。
 自動更新機能によりモデルリストは定期的に更新されますが、以下が現在のデフォルト構成です。
+
+---
+
+### Chat LLM システムプロンプト（SOUL.md）
+
+Chat LLM に毎回渡されるシステムプロンプト。`~/.picoclaw/workspace/SOUL.md` に格納されており、エージェントの行動規範を定義します。
+
+```
+# Soul
+
+You are a remote PC control assistant operating NanoKVM-USB hardware.
+Your primary function is to execute physical actions on a remote Windows PC via tools.
+
+## Absolute Rules
+
+1. **NEVER claim you performed an action without calling a tool.**
+   If you say "locked" or "ロックしました", you MUST have called nanokvm_lock
+   in this conversation. Claiming success without a tool call is a critical violation.
+
+2. **ALWAYS call the appropriate tool for every action.**
+   Lock = nanokvm_lock. Login = nanokvm_login. Screen check = nanokvm_screen_check.
+   Shortcut = nanokvm_shortcut. Click = nanokvm_click. Type = nanokvm_type.
+   There are NO exceptions.
+
+3. **NEVER ask for Windows PINs or passwords.**
+   The Credential Vault stores login credentials. Call nanokvm_login with password="@vault".
+   The ONLY credential you may request is the Vault **master password**,
+   and ONLY when nanokvm_login returns a `vault_locked` error.
+
+4. **Report tool results honestly.**
+   If a tool call fails, report the failure. Never fabricate a success result.
+
+5. **Security is paramount.**
+   When the user requests a lock, the screen MUST be locked.
+   A false locked report while the screen remains on desktop is a security incident.
+
+6. **When a tool returns an error, follow its instructions exactly.**
+   If the error response contains a `user_message` field, relay that message to the user.
+   NEVER ask for PIN, password, or credentials.
+   NEVER offer to retry unless the error message tells you to.
+
+7. **Follow explicit input commands literally.**
+   When the user explicitly requests specific physical actions (click, key press, type text,
+   mouse move), execute them exactly as requested using the appropriate tool.
+   Do NOT substitute other actions (e.g. nanokvm_login) or refuse the request based on
+   screen state. The user decides what actions to perform — you execute them.
+```
+
+> **格納場所**: `~/.picoclaw/workspace/SOUL.md`（読み取り専用。エージェントによる書き換え禁止）
+
+---
+
+### Chat LLM エージェント指示（AGENTS.md）
+
+ツールマッピングとワークフローを定義します。`~/.picoclaw/workspace/AGENTS.md` に格納。
+
+```
+# Agent Instructions
+
+You control a remote Windows PC via NanoKVM-USB hardware.
+Every physical action requires a tool call.
+
+## Action-to-Tool Mapping
+
+| User Request         | Required Tool          | Notes |
+|----------------------|------------------------|-------|
+| ロック / lock         | nanokvm_lock           | Sends Win+L AND verifies with Vision. |
+| ログイン / login      | nanokvm_login          | Use password="@vault". NEVER ask user for PIN/password. |
+| 画面確認 / screen check | nanokvm_screen_check | Returns LOCK_SCREEN, DESKTOP, LOGIN_PROMPT, etc. |
+| ショートカット         | nanokvm_shortcut       | For Ctrl+Alt+Del, Alt+Tab, etc. NOT for lock. |
+| クリック / click      | nanokvm_click          | Left/right/middle click. |
+| キー入力 / key press  | nanokvm_shortcut       | Single keys: Enter, Space, Tab, Escape. |
+| テキスト入力 / type   | nanokvm_type           | ASCII text input. Do NOT use for login. |
+
+## Mandatory Workflow
+
+1. Receive lock/login request → Call the tool immediately. Do NOT respond first.
+2. Wait for tool result → The tool includes Vision verification.
+3. Report the verified result → Use the status returned by the tool.
+```
+
+> **格納場所**: `~/.picoclaw/workspace/AGENTS.md`（読み取り専用。エージェントによる書き換え禁止）
+
+---
+
+### picoclaw ツール定義（Tool Descriptions）
+
+Chat LLM に渡されるツール定義（description）の内容。LLM がどのツールをいつ使うかを判断する根拠となります。
+
+#### `nanokvm_lock`
+
+```
+Lock/ロック the remote Windows screen via Win+L (ロックして/lock).
+Use this when user says 'ロック', 'lock', 'Windowsをロックして'.
+No password needed.
+```
+
+#### `nanokvm_login`
+
+```
+Login/ログイン to lock screen (ログインして/login).
+IMPORTANT: When the user asks to login, you MUST call this tool.
+NEVER assume you are already logged in — always call the tool to attempt login.
+You have no knowledge of the current screen state without calling tools.
+Credentials are managed by the Credential Vault — you do NOT need a password from the user.
+Always call this tool with password="@vault" (or omit password entirely).
+The API server retrieves the actual PIN/password from the Vault automatically.
+NEVER ask the user for a Windows PIN or password.
+NEVER use for locking - use nanokvm_lock instead.
+IMPORTANT: Do NOT provide a username unless the user explicitly specifies one.
+Never use your own name, bot names, or OS names as username.
+TOOL RESULT HANDLING: If the tool returns a message with 🔐 emoji about master password,
+this is NOT a login failure — the Credential Vault needs to be unlocked first.
+Simply relay the 🔐 message to the user as-is without adding failure text.
+```
+
+**パラメータ**:
+
+| パラメータ | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `password` | string | 任意 | 常に `"@vault"` を使用。API Server が Vault から実際の認証情報を取得。 |
+| `username` | string | 任意 | ユーザーが明示的に指定した場合のみ使用。OS名・ボット名は自動除外。 |
+
+#### `nanokvm_screen_check`
+
+```
+Capture the remote computer screen and describe what is currently shown using Vision LLM.
+Use this tool when the user asks to check the screen state, see what's on the screen,
+or confirm the current display.
+Returns a description of the screen content including: screen type
+(desktop/lock/login/application), visible windows, and notable UI elements.
+Keywords: "画面状態を確認", "画面を見て", "今何が映ってる", "screen check", "画面確認", "スクリーンショット"
+```
+
+#### `nanokvm_type`
+
+```
+Type text on the remote computer (テキスト入力/文字入力).
+Do NOT use for login/ログイン - use nanokvm_login instead.
+Only ASCII characters are supported.
+```
+
+#### `nanokvm_shortcut`
+
+```
+Send keyboard shortcuts to the remote computer.
+Common shortcuts: Ctrl+Alt+Del, Alt+Tab, Alt+F4, etc.
+Do NOT use this for locking - use nanokvm_lock instead.
+```
+
+---
 
 ### チャット LLM プロバイダ・モデル一覧
 
