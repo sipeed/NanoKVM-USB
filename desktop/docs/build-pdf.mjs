@@ -58,7 +58,7 @@ const processed = markdown.replace(mermaidRe, (_, code) => {
 
   try {
     execSync(
-      `mmdc -i "${mmdFile}" -o "${pngFile}" --backgroundColor white --width 1200 --height 800 --configFile "${MMDC_CONFIG_FILE}"`,
+      `mmdc -i "${mmdFile}" -o "${pngFile}" --backgroundColor white --width 900 --height 600 --configFile "${MMDC_CONFIG_FILE}"`,
       { stdio: 'pipe', timeout: 30000 }
     )
     console.log(`✅ Rendered: ${pngFile}`)
@@ -137,14 +137,19 @@ blockquote {
   break-inside: avoid;
   page-break-inside: avoid;
   text-align: center;
-  margin: 12pt 0;
+  margin: 8pt 0;
 }
 .figure-block img {
   max-width: 100%;
+  max-height: 210mm; /* A4 可用高さ(257mm)より小さく収める */
+  width: auto;
   height: auto;
+  object-fit: contain;
 }
 img {
   max-width: 100%;
+  max-height: 210mm;
+  width: auto;
   height: auto;
 }
 
