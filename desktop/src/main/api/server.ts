@@ -142,8 +142,13 @@ export class ApiServer {
         return
       }
 
-      // Send to renderer process
+      // Send to renderer process and wait for estimated typing completion.
+      // Each character takes ~200ms (keyDown 30ms + keyUp 30ms + delay 150ms).
+      // We wait here before returning 200 OK so that callers (picoclaw) can
+      // safely proceed to field-verification after the response.
+      console.log(`[API Server] keyboard/type: sending ${text.length} chars, waiting ~${text.length * 220 + 600}ms`)
       this.mainWindow.webContents.send('api:keyboard:type', text)
+      await new Promise((r) => setTimeout(r, text.length * 220 + 600))
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true }))
