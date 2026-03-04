@@ -711,23 +711,38 @@ POST https://api.telegram.org/bot<token>/deleteMessage
 
 #### Settings UI（設定画面）
 
-```
-┌─────────────────────────────────────────────┐
-│ 🔐 ログイン認証情報                            │
-│                                             │
-│ ステータス: ✅ 設定済み                        │
-│                                             │
-│ ── 保存済みクレデンシャル ──                    │
-│   認証方式: [PIN ▼]                           │
-│   PIN:    [••••] [👁] [保存]                  │
-│   説明:   Windows PC (自宅)                   │
-│                                             │
-│ ── マスターパスワード ──                       │
-│   [現在のパスワード] [新しいパスワード] [変更]   │
-│                                             │
-│ ⚠️ マスターパスワードを忘れると保存済みの       │
-│   認証情報を復元できません。                    │
-└─────────────────────────────────────────────┘
+```mermaid
+block-beta
+    columns 1
+
+    block:panel["🔐 ログイン認証情報"]:1
+        columns 2
+        status["ステータス: ✅ 設定済み"]:2
+
+        block:cred["── 保存済みクレデンシャル ──"]:2
+            columns 2
+            authLabel["認証方式:"]
+            authInput["[ PIN ▼ ]"]
+            pinLabel["PIN:"]
+            pinInput["[ •••• ] 👁 [ 保存 ]"]
+            descLabel["説明:"]
+            descInput["Windows PC（自宅）"]
+        end
+
+        block:master["── マスターパスワード ──"]:2
+            columns 3
+            mpCurrent["現在のパスワード"]
+            mpNew["新しいパスワード"]
+            mpBtn["[ 変更 ]"]
+        end
+
+        warn["⚠️ マスターパスワードを忘れると保存済みの認証情報を復元できません"]:2
+    end
+
+    style panel fill:#fff8e1,stroke:#f9a825
+    style cred  fill:#f3f3f3,stroke:#bdbdbd
+    style master fill:#f3f3f3,stroke:#bdbdbd
+    style warn  fill:#fff3e0,stroke:#ff9800
 ```
 
 #### セキュリティ比較
