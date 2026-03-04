@@ -591,6 +591,7 @@ sequenceDiagram
   U->>A: 「はい」
   A->>T: Win+S → "outlook" → Enter
   note over T: Outlook 起動またはウィンドウ復元（5秒待機）
+  A->>T: Escape（検索バーを閉じる）
   A->>T: Ctrl+N（新規メール）
   A->>T: Vision確認: email_compose
   alt COMPOSE_OPEN
@@ -660,6 +661,7 @@ NanoKVM-USB のキーボード入力は ASCII 文字（英語）のみ対応し�
 | 1 | Win+S（Windows 検索を開く） | 1秒 | |
 | 2 | "outlook" 入力 → Enter | 0.5秒 | |
 | 3 | Outlook 起動待機 | 5秒 | Outlook 起動済の場合はウィンドウが復元される。起動遅くても Vision でカバーされる |
+| 3.5 | **Escape**（検索バーを閉じフォーカスを Outlook へ移す） | 0.5秒 | Win+S → Enter 後に検索バーがフォーカスを保持し Ctrl+N を横取りする問題の対策 |
 | 4 | Ctrl+N（新規メール作成） | 2秒 | |
 | 4.5 | Vision verify `email_compose` | — | **リスク対策**: COMPOSE_NOT_OPEN → Escape → Ctrl+N 再試行（1回のみ） |
 | 4.6 | 再確認でも COMPOSE_NOT_OPEN | — | エラー終了 |
