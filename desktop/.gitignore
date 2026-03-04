@@ -7,3 +7,6 @@ out
 
 .idea
 .vscode
+
+# PDF build artifacts
+docs/_pdf_work/

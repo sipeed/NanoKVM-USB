@@ -136,8 +136,8 @@ graph TB
     %% ===== 外部サービス =====
     TelegramServer["📱 Telegram サーバー"]
     subgraph Cloud["☁️ クラウド LLM API（GitHub Copilot 等）"]
-        ChatLLM["Chat LLM\ngpt-4.1"]
-        VisionLLM["Vision LLM\ngpt-4.1"]
+        ChatLLM["Chat LLM\n設定で選択"]
+        VisionLLM["Vision LLM\n設定で選択"]
     end
 
     %% ===== Host PC (Mac) =====
@@ -1604,15 +1604,15 @@ block-beta
         columns 2
         block:chat["💬 チャット LLM"]:2
             columns 2
-            chatProvider["Provider: GitHub Copilot"]
-            chatModel["Model: gpt-4.1"]
-            chatKey["API Key: gsk_..."]:2
+            chatProvider["Provider: 設定メニューで選択"]
+            chatModel["Model: 設定メニューで選択"]
+            chatKey["API Key: 各プロバイダの APIキー"]:2
         end
         block:vision["👁️ 画面検証 Vision LLM"]:2
             columns 2
-            visionProvider["Provider: GitHub Copilot"]
-            visionModel["Model: gpt-4.1 👁️"]
-            visionKey["API Key: gsk_... (共有可)"]:2
+            visionProvider["Provider: 設定メニューで選択"]
+            visionModel["Model: 設定メニューで選択 (Vision対応のみ)"]
+            visionKey["API Key: 各プロバイダの APIキー"]:2
         end
     end
 
@@ -1622,7 +1622,8 @@ block-beta
 ```
 
 **理由**: チャットには安価なテキスト LLM、画面検証には Vision 対応 LLM という使い分け。
-例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = gpt-4.1 (GitHub Copilot 無料)
+両方ともアプリの設定メニューからプロバイダ・モデルを自由に選択可能です。
+例: チャット = gpt-4.1 (GitHub Copilot 無料) + Vision = llama-4-scout (Groq 無料)
 
 > **推奨構成**: GitHub Copilot の `gpt-4.1` を Chat・Vision 両方に設定。無料で高品質かつプロンプト調整が最小限で済みます。
 
