@@ -532,11 +532,23 @@ export class ApiServer {
 
     try {
       const body = await this.readBody(req)
-      const { action } = JSON.parse(body) as { action: 'lock' | 'login' | 'status' }
+      const { action } = JSON.parse(body) as {
+        action: 'lock' | 'login' | 'status' | 'email_compose' | 'email_sent'
+      }
 
-      if (action !== 'lock' && action !== 'login' && action !== 'status') {
+      if (
+        action !== 'lock' &&
+        action !== 'login' &&
+        action !== 'status' &&
+        action !== 'email_compose' &&
+        action !== 'email_sent'
+      ) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'action must be "lock", "login", or "status"' }))
+        res.end(
+          JSON.stringify({
+            error: 'action must be "lock", "login", "status", "email_compose", or "email_sent"'
+          })
+        )
         return
       }
 
@@ -634,6 +646,22 @@ export class ApiServer {
           '- Large clock display, user avatar with PIN/password input field = LOCK_SCREEN\n\n' +
           'IMPORTANT: If you see a taskbar/Dock/menu bar, it is LOGIN_SUCCESS.\n\n' +
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
+      } else if (action === 'email_compose') {
+        prompt =
+          'Is the Microsoft Outlook new email compose window currently open?\n' +
+          'Compose window indicators: TO/CC/BCC field, SUBJECT line, email body text area all visible.\n\n' +
+          'Answer on line 1 with ONLY the classification keyword:\n' +
+          '- COMPOSE_OPEN  — New email compose window is open (To/Subject/Body fields visible)\n' +
+          '- COMPOSE_NOT_OPEN — Not open (main Outlook window, dialog, error, or other screen)\n' +
+          'Line 2+: one sentence explanation.' + langInstruction
+      } else if (action === 'email_sent') {
+        prompt =
+          'After pressing Ctrl+Enter to send an email in Outlook, what is the current screen state?\n\n' +
+          'Answer on line 1 with ONLY the classification keyword:\n' +
+          '- SENT_SUCCESS  — Send complete (compose window closed, returned to Inbox/mail list)\n' +
+          '- SEND_ERROR    — Error dialog is visible (e.g. delivery failure, auth error)\n' +
+          '- COMPOSE_OPEN  — Compose window is still open (email may not have been sent)\n' +
+          'Line 2+: one sentence explanation.' + langInstruction
       } else {
         // action === 'status': classification keyword FIRST, then description.
         // Using the same pattern as action=lock ("Answer with ONLY one word")
@@ -805,6 +833,41 @@ export class ApiServer {
             (analysisLower.includes('タスクバー') && !analysisLower.includes('ではない'))) {
           status = 'DESKTOP'
         }
+      } else if (action === 'email_compose') {
+        // For compose window verification
+        const firstLine = analysis.split('\n')[0].trim().toUpperCase()
+        if (firstLine.includes('COMPOSE_OPEN') && !firstLine.includes('NOT')) {
+          status = 'COMPOSE_OPEN'
+        } else if (firstLine.includes('COMPOSE_NOT_OPEN') || firstLine.includes('NOT_OPEN')) {
+          status = 'COMPOSE_NOT_OPEN'
+        } else if (upper.includes('COMPOSE_OPEN') && !upper.includes('COMPOSE_NOT_OPEN')) {
+          status = 'COMPOSE_OPEN'
+        } else {
+          status = 'COMPOSE_NOT_OPEN'
+        }
+        const descLines = analysis.split('\n').slice(1).join('\n').trim()
+        if (descLines) detail = descLines
+      } else if (action === 'email_sent') {
+        // For send completion verification
+        const firstLine = analysis.split('\n')[0].trim().toUpperCase()
+        if (firstLine.includes('SENT_SUCCESS')) {
+          status = 'SENT_SUCCESS'
+        } else if (firstLine.includes('SEND_ERROR')) {
+          status = 'SEND_ERROR'
+        } else if (firstLine.includes('COMPOSE_OPEN')) {
+          status = 'COMPOSE_OPEN'
+        } else if (upper.includes('SENT_SUCCESS')) {
+          status = 'SENT_SUCCESS'
+        } else if (upper.includes('SEND_ERROR') || (upper.includes('ERROR') && upper.includes('DIALOG'))) {
+          status = 'SEND_ERROR'
+        } else if (upper.includes('COMPOSE_OPEN') || upper.includes('COMPOSE WINDOW')) {
+          status = 'COMPOSE_OPEN'
+        } else {
+          // Conservative: assume still open if uncertain
+          status = 'COMPOSE_OPEN'
+        }
+        const descLines = analysis.split('\n').slice(1).join('\n').trim()
+        if (descLines) detail = descLines
       } else {
         // For login verification: detect LOGIN_SUCCESS, LOGIN_FAILED, or LOCK_SCREEN
         if (upper.includes('LOGIN_SUCCESS') || upper.includes('LOGIN SUCCESS') ||
@@ -927,6 +990,36 @@ export class ApiServer {
           case 'DESKTOP':
             feedback = '⚠️ ロック未完了: まだデスクトップ画面が表示されています。'
             if (detail && detail !== analysis) feedback += `\n（${detail}）`
+            break
+          default:
+            feedback = `🔍 画面状態: ${detail}`
+        }
+      } else if (action === 'email_compose') {
+        switch (status) {
+          case 'COMPOSE_OPEN':
+            feedback = '✅ 新規メール作成画面が開いています。'
+            if (detail) feedback += `\n${detail}`
+            break
+          case 'COMPOSE_NOT_OPEN':
+            feedback = '⚠️ 新規メール作成画面が開いていません。'
+            if (detail) feedback += `\n${detail}`
+            break
+          default:
+            feedback = `🔍 画面状態: ${detail}`
+        }
+      } else if (action === 'email_sent') {
+        switch (status) {
+          case 'SENT_SUCCESS':
+            feedback = '✅ メール送信完了が確認できました。'
+            if (detail) feedback += `\n${detail}`
+            break
+          case 'SEND_ERROR':
+            feedback = '❌ 送信エラーダイアログが検出されました。Outlookの画面を確認してください。'
+            if (detail) feedback += `\n${detail}`
+            break
+          case 'COMPOSE_OPEN':
+            feedback = '⚠️ コンポーズウィンドウが残っています。手動で送信を確認してください。'
+            if (detail) feedback += `\n${detail}`
             break
           default:
             feedback = `🔍 画面状態: ${detail}`

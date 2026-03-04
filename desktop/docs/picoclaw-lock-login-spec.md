@@ -590,9 +590,16 @@ sequenceDiagram
   A->>U: 送信内容の最終確認
   U->>A: 「はい」
   A->>T: Win+S → "outlook" → Enter
-  note over T: Outlook 起動（5秒待機）
+  note over T: Outlook 起動またはウィンドウ復元（5秒待機）
   A->>T: Ctrl+N（新規メール）
-  note over T: コンポーズウィンドウ表示確認（Vision）
+  A->>T: Vision確認: email_compose
+  alt COMPOSE_OPEN
+    note over T: コンポーズ画面確認 OK → 入力続行
+  else COMPOSE_NOT_OPEN
+    A->>T: Escape（ダイアログ解除）→ Ctrl+N（リトライ）
+    A->>T: Vision再確認: email_compose
+    note over A: 再度 COMPOSE_NOT_OPEN → エラー終了
+  end
   A->>T: 宛先・件名・本文を順番に入力
   A->>T: Ctrl+Enter（送信）
   note over T: 3秒待機後、送信完了を Vision で確認
@@ -646,18 +653,21 @@ NanoKVM-USB のキーボード入力は ASCII 文字（英語）のみ対応し�
 
 ### Outlook 操作シーケンス（`Execute()` 内部）
 
-| Step | 操作 | 待機 |
-|------|------|------|
-| 1 | Win+S（Windows 検索を開く） | 1秒 |
-| 2 | "outlook" 入力 → Enter | 0.5秒 |
-| 3 | Outlook 起動待機 | 5秒 |
-| 4 | Ctrl+N（新規メール作成） | 2秒 |
-| 4.5 | Vision verify `email_compose` → 確認 | ― |
-| 5 | 宛先入力 → Tab | 0.3秒 |
-| 6 | 件名入力 → Tab | 0.3秒 |
-| 7 | 本文入力 | 0.5秒 |
-| 8 | Ctrl+Enter（送信） | 3秒 |
-| 9 | Vision verify `email_sent` → 結果報告 | ― |
+> **Outlook 実行中の場合**: Win+S → "outlook" → Enter は、Outlook が起動済の場合でも機能する。Windows 検索からアプリを選択すると既存ウィンドウがフォアグラウンドに復元される。
+
+| Step | 操作 | 待機 | 備考 |
+|------|------|------|------|
+| 1 | Win+S（Windows 検索を開く） | 1秒 | |
+| 2 | "outlook" 入力 → Enter | 0.5秒 | |
+| 3 | Outlook 起動待機 | 5秒 | Outlook 起動済の場合はウィンドウが復元される。起動遅くても Vision でカバーされる |
+| 4 | Ctrl+N（新規メール作成） | 2秒 | |
+| 4.5 | Vision verify `email_compose` | — | **リスク対策**: COMPOSE_NOT_OPEN → Escape → Ctrl+N 再試行（1回のみ） |
+| 4.6 | 再確認でも COMPOSE_NOT_OPEN | — | エラー終了 |
+| 5 | 宛先入力 → Tab | 0.3秒 | |
+| 6 | 件名入力 → Tab | 0.3秒 | |
+| 7 | 本文入力 | 0.5秒 | |
+| 8 | Ctrl+Enter（送信） | 3秒 | |
+| 9 | Vision verify `email_sent` → 結果報告 | — | |
 
 ### Vision 確認ステップ
 
@@ -676,8 +686,9 @@ Outlookの新規メール作成画面（コンポーズウィンドウ）が開�
 
 | status | 処理 |
 |---|---|
-| `COMPOSE_OPEN` | 続行 |
-| `COMPOSE_NOT_OPEN` | エラー終了「新規メール作成画面が開きませんでした。Outlookが起動しているか確認してください」 |
+| `COMPOSE_OPEN` | 続行（宛先・件名・本文の入力へ） |
+| `COMPOSE_NOT_OPEN` | **Escape → Ctrl+N → 2秒待機 → Vision 再確認**（1回のみ）|
+| `COMPOSE_NOT_OPEN`（再確認後） | エラー終了「❌ 新規メール作成画面が開きませんでした。Outlookが起動しているか、ダイアログが残っていないか確認してください」 |
 | Vision 未設定 / nil | ログ記録のみ・そのまま続行 |
 
 #### `email_sent`（送信完了の確認）
