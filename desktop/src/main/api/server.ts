@@ -98,6 +98,8 @@ export class ApiServer {
       await this.handleVerifyLogin(req, res)
     } else if (req.method === 'POST' && url.pathname === '/api/screen/verify') {
       await this.handleScreenVerify(req, res)
+    } else if (req.method === 'POST' && url.pathname === '/api/screen/analyze') {
+      await this.handleScreenAnalyze(req, res)
     } else if (req.method === 'GET' && url.pathname === '/api/status') {
       await this.handleStatus(req, res)
     } else if (req.method === 'POST' && url.pathname === '/api/vault/unlock') {
@@ -431,6 +433,49 @@ export class ApiServer {
       }
     } catch (err) {
       console.error('[API Server] Screen capture error:', err)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: String(err) }))
+    }
+  }
+
+  /**
+   * Analyze screen with Vision LLM using a custom prompt.
+   * POST /api/screen/analyze
+   * Body: { prompt: string }
+   * Returns: { success, result }
+   */
+  private async handleScreenAnalyze(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!this.mainWindow) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Main window not available' }))
+      return
+    }
+    try {
+      const body = await this.readBody(req)
+      const { prompt } = JSON.parse(body) as { prompt: string }
+      if (!prompt) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'prompt is required' }))
+        return
+      }
+      if (!isVisionConfigured()) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: false, error: 'Vision not configured' }))
+        return
+      }
+      const capture = await this.requestScreenCapture()
+      if (!capture.dataUrl) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: false, error: 'Screen capture failed' }))
+        return
+      }
+      const lang = getVisionLanguage()
+      const result = await analyzeScreenWithVision(capture.dataUrl, prompt, lang)
+      console.log('[API Server] /api/screen/analyze result:', result)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true, result }))
+    } catch (err) {
+      console.error('[API Server] /api/screen/analyze error:', err)
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: String(err) }))
     }
