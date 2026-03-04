@@ -532,8 +532,9 @@ export class ApiServer {
 
     try {
       const body = await this.readBody(req)
-      const { action } = JSON.parse(body) as {
-        action: 'lock' | 'login' | 'status' | 'email_compose' | 'email_sent'
+      const { action, context } = JSON.parse(body) as {
+        action: 'lock' | 'login' | 'status' | 'email_compose' | 'email_sent' | 'email_to_field' | 'email_subject_field' | 'email_body_field'
+        context?: string
       }
 
       if (
@@ -541,12 +542,15 @@ export class ApiServer {
         action !== 'login' &&
         action !== 'status' &&
         action !== 'email_compose' &&
-        action !== 'email_sent'
+        action !== 'email_sent' &&
+        action !== 'email_to_field' &&
+        action !== 'email_subject_field' &&
+        action !== 'email_body_field'
       ) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(
           JSON.stringify({
-            error: 'action must be "lock", "login", "status", "email_compose", or "email_sent"'
+            error: 'action must be "lock", "login", "status", "email_compose", "email_sent", "email_to_field", "email_subject_field", or "email_body_field"'
           })
         )
         return
@@ -662,6 +666,33 @@ export class ApiServer {
           '- SEND_ERROR    — Error dialog is visible (e.g. delivery failure, auth error)\n' +
           '- COMPOSE_OPEN  — Compose window is still open (email may not have been sent)\n' +
           'Line 2+: one sentence explanation.' + langInstruction
+      } else if (action === 'email_to_field') {
+        const expected = context || '(expected content unknown)'
+        prompt =
+          `Examine the Microsoft Outlook compose window. Is the To/宛先 field showing the email address "${expected}"?\n\n` +
+          'Answer on line 1 with ONLY one of these keywords:\n' +
+          `- FIELD_CORRECT — The To field clearly shows "${expected}"\n` +
+          `- FIELD_WRONG   — The To field shows different content or is different from "${expected}"\n` +
+          '- FIELD_EMPTY   — The To field appears empty\n' +
+          'Line 2+: one sentence description of what the To field currently shows.' + langInstruction
+      } else if (action === 'email_subject_field') {
+        const expected = context || '(expected content unknown)'
+        prompt =
+          `Examine the Microsoft Outlook compose window. Is the Subject/件名 field showing the exact text "${expected}"?\n\n` +
+          'Answer on line 1 with ONLY one of these keywords:\n' +
+          `- FIELD_CORRECT — The Subject field clearly shows "${expected}"\n` +
+          `- FIELD_WRONG   — The Subject field shows different content from "${expected}"\n` +
+          '- FIELD_EMPTY   — The Subject field appears empty\n' +
+          'Line 2+: one sentence description of what the Subject field currently shows.' + langInstruction
+      } else if (action === 'email_body_field') {
+        const expected = context || '(expected content unknown)'
+        prompt =
+          `Examine the Microsoft Outlook compose window. Does the email body area contain the text "${expected}"?\n\n` +
+          'Answer on line 1 with ONLY one of these keywords:\n' +
+          `- FIELD_CORRECT — The body area clearly contains "${expected}"\n` +
+          `- FIELD_WRONG   — The body area shows different content from "${expected}"\n` +
+          '- FIELD_EMPTY   — The body area appears empty\n' +
+          'Line 2+: one sentence description of what the body area currently shows.' + langInstruction
       } else {
         // action === 'status': classification keyword FIRST, then description.
         // Using the same pattern as action=lock ("Answer with ONLY one word")
@@ -868,6 +899,25 @@ export class ApiServer {
         }
         const descLines = analysis.split('\n').slice(1).join('\n').trim()
         if (descLines) detail = descLines
+      } else if (action === 'email_to_field' || action === 'email_subject_field' || action === 'email_body_field') {
+        // For email field content verification
+        const firstLine = analysis.split('\n')[0].trim().toUpperCase()
+        if (firstLine.includes('FIELD_CORRECT')) {
+          status = 'FIELD_CORRECT'
+        } else if (firstLine.includes('FIELD_WRONG')) {
+          status = 'FIELD_WRONG'
+        } else if (firstLine.includes('FIELD_EMPTY')) {
+          status = 'FIELD_EMPTY'
+        } else if (upper.includes('FIELD_CORRECT')) {
+          status = 'FIELD_CORRECT'
+        } else if (upper.includes('FIELD_EMPTY')) {
+          status = 'FIELD_EMPTY'
+        } else {
+          // Conservative: assume wrong if uncertain
+          status = 'FIELD_WRONG'
+        }
+        const fieldDescLines = analysis.split('\n').slice(1).join('\n').trim()
+        if (fieldDescLines) detail = fieldDescLines
       } else {
         // For login verification: detect LOGIN_SUCCESS, LOGIN_FAILED, or LOCK_SCREEN
         if (upper.includes('LOGIN_SUCCESS') || upper.includes('LOGIN SUCCESS') ||
@@ -1023,6 +1073,24 @@ export class ApiServer {
             break
           default:
             feedback = `🔍 画面状態: ${detail}`
+        }
+      } else if (action === 'email_to_field' || action === 'email_subject_field' || action === 'email_body_field') {
+        const fieldName = action === 'email_to_field' ? '宛先(To)' : action === 'email_subject_field' ? '件名(Subject)' : '本文(Body)'
+        switch (status) {
+          case 'FIELD_CORRECT':
+            feedback = `✅ ${fieldName}フィールドに正しい内容が入力されています。`
+            if (detail) feedback += `\n${detail}`
+            break
+          case 'FIELD_WRONG':
+            feedback = `⚠️ ${fieldName}フィールドの内容が期待値と異なります。`
+            if (detail) feedback += `\n${detail}`
+            break
+          case 'FIELD_EMPTY':
+            feedback = `❌ ${fieldName}フィールドが空です。入力されていない可能性があります。`
+            if (detail) feedback += `\n${detail}`
+            break
+          default:
+            feedback = `🔍 ${fieldName}フィールド状態: ${detail}`
         }
       } else {
         switch (status) {
