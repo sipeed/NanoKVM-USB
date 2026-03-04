@@ -36,7 +36,7 @@ if (existsSync(IMG_DIR)) {
 const mmdcConfig = {
   theme: 'default',
   themeVariables: {
-    fontFamily: '"Hiragino Kaku Gothic ProN", "Hiragino Sans", "YuGothic", "Yu Gothic", Meiryo, sans-serif',
+    fontFamily: '"Hiragino Kaku Gothic ProN", "Hiragino Sans", "YuGothic", "Yu Gothic", Meiryo, "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
     fontSize: '14px'
   }
 }
@@ -80,7 +80,7 @@ console.log(`✅ Wrote processed MD: ${PROCESSED_MD}`)
 const css = `
 /* ===== ベースフォント（Hiragino: macOS headless Chromium でも有効） ===== */
 body {
-  font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "YuGothic", "Yu Gothic", "Meiryo", sans-serif;
+  font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "YuGothic", "Yu Gothic", "Meiryo", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
   font-size: 10pt;
   line-height: 1.6;
   color: #1a1a1a;
