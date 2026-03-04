@@ -1410,6 +1410,7 @@ Every physical action requires a tool call.
 | ロック / lock         | nanokvm_lock           | Sends Win+L AND verifies with Vision. |
 | ログイン / login      | nanokvm_login          | Use password="@vault". NEVER ask user for PIN/password. |
 | 画面確認 / screen check | nanokvm_screen_check | Returns LOCK_SCREEN, DESKTOP, LOGIN_PROMPT, etc. |
+| メール送信 / send email | nanokvm_send_email   | MUST collect to/subject/body via multi-turn dialog BEFORE calling. ASCII only. |
 | ショートカット         | nanokvm_shortcut       | For Ctrl+Alt+Del, Alt+Tab, etc. NOT for lock. |
 | クリック / click      | nanokvm_click          | Left/right/middle click. |
 | キー入力 / key press  | nanokvm_shortcut       | Single keys: Enter, Space, Tab, Escape. |
@@ -1474,6 +1475,31 @@ Returns a description of the screen content including: screen type
 (desktop/lock/login/application), visible windows, and notable UI elements.
 Keywords: "画面状態を確認", "画面を見て", "今何が映ってる", "screen check", "画面確認", "スクリーンショット"
 ```
+
+#### `nanokvm_send_email`
+
+```
+Send an email on the remote Windows PC via Outlook keyboard automation (メール送信).
+Use this when the user says 'メール送信', 'send email', 'メールして' etc.
+
+CRITICAL: You MUST complete ALL of the following steps via multi-turn dialog BEFORE calling this tool:
+1. FIRST, notify the user: "⚠️ NanoKVM-USBのキーボード入力はASCII文字（英語）のみ対応しています。件名・本文に日本語は入力できません。"
+2. Collect: to (email address), subject (ASCII only), body (ASCII only)
+3. If user provides Japanese in subject/body, ask them to re-enter in English
+4. Show final confirmation with all 3 parameters and wait for approval
+5. Only call the tool after user confirms
+
+NEVER call with example values (recipient@example.com, Test Email, etc.).
+NEVER call without explicit user confirmation of all parameters.
+```
+
+**パラメータ**:
+
+| パラメータ | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `to` | string | ✅ | 宛先メールアドレス |
+| `subject` | string | ✅ | 件名（ASCII英語のみ） |
+| `body` | string | ✅ | 本文（ASCII英語のみ） |
 
 #### `nanokvm_type`
 
