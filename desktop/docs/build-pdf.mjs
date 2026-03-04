@@ -19,6 +19,7 @@ const PROCESSED_MD = join(WORK_DIR, 'spec-processed.md')
 const IMG_DIR = join(WORK_DIR, 'mermaid-images')
 const OUTPUT_PDF = join(__dirname, 'picoclaw-lock-login-spec.pdf')
 const CSS_FILE = join(WORK_DIR, 'pdf.css')
+const MMDC_CONFIG_FILE = join(WORK_DIR, 'mmdc-config.json')
 
 // ── 1. 作業ディレクトリ準備 ──────────────────────────────────────────────────
 if (!existsSync(WORK_DIR)) mkdirSync(WORK_DIR, { recursive: true })
@@ -28,6 +29,19 @@ if (!existsSync(IMG_DIR)) mkdirSync(IMG_DIR, { recursive: true })
 if (existsSync(IMG_DIR)) {
   readdirSync(IMG_DIR).forEach(f => { if (f.endsWith('.png')) unlinkSync(join(IMG_DIR, f)) })
 }
+
+// mmdc 用の Mermaid テーマ設定を生成
+// themeVariables.fontFamily で SVG の font-family を直接 Hiragino に設定する
+// (--cssFile より確実: SVG の #my-svg { font-family:... } に直接反映される)
+const mmdcConfig = {
+  theme: 'default',
+  themeVariables: {
+    fontFamily: '"Hiragino Kaku Gothic ProN", "Hiragino Sans", "YuGothic", "Yu Gothic", Meiryo, sans-serif',
+    fontSize: '14px'
+  }
+}
+writeFileSync(MMDC_CONFIG_FILE, JSON.stringify(mmdcConfig, null, 2), 'utf8')
+console.log(`✅ Wrote mmdc config: ${MMDC_CONFIG_FILE}`)
 
 // ── 2. Mermaid ブロックを PNG に変換 ─────────────────────────────────────────
 let markdown = readFileSync(SPEC_MD, 'utf8')
@@ -44,7 +58,7 @@ const processed = markdown.replace(mermaidRe, (_, code) => {
 
   try {
     execSync(
-      `mmdc -i "${mmdFile}" -o "${pngFile}" --theme default --backgroundColor white --width 1200 --height 800`,
+      `mmdc -i "${mmdFile}" -o "${pngFile}" --backgroundColor white --width 1200 --height 800 --configFile "${MMDC_CONFIG_FILE}"`,
       { stdio: 'pipe', timeout: 30000 }
     )
     console.log(`✅ Rendered: ${pngFile}`)
@@ -64,13 +78,9 @@ console.log(`✅ Wrote processed MD: ${PROCESSED_MD}`)
 
 // ── 3. PDF 用 CSS ─────────────────────────────────────────────────────────────
 const css = `
-/* ===== Google Fonts: 日本語 + 絵文字 ===== */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+Mono:wght@400;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
-
-/* ===== ベースフォント ===== */
+/* ===== ベースフォント（Hiragino: macOS headless Chromium でも有効） ===== */
 body {
-  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "YuGothic", "Yu Gothic", "Meiryo", sans-serif;
   font-size: 10pt;
   line-height: 1.6;
   color: #1a1a1a;
@@ -83,7 +93,7 @@ h4 { font-size: 10.5pt; }
 
 /* ===== コードブロック ===== */
 pre, code {
-  font-family: "Noto Sans Mono", "Menlo", "Courier New", monospace;
+  font-family: "Menlo", "Courier New", monospace;
   font-size: 8.5pt;
   background: #f6f8fa;
   border-radius: 4px;
