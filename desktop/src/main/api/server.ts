@@ -704,19 +704,19 @@ export class ApiServer {
           'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
       } else if (action === 'email_compose') {
         prompt =
-          'Is a NEW EMAIL COMPOSE WINDOW currently open in Microsoft Outlook?\n\n' +
-          'The compose window is a SEPARATE floating window (or maximized compose view) that has:\n' +
-          '  - A "To:" or "宛先:" field at the top (for entering email addresses)\n' +
-          '  - A "Subject:" or "件名:" field below the To field\n' +
-          '  - A large blank text area for the email body\n' +
-          '  - Send button or ribbon toolbar at the top with mail-related buttons\n\n' +
-          'This is NOT the compose window:\n' +
-          '  - The main Outlook inbox/mail list view (even if an email/reading pane is visible)\n' +
-          '  - A dialog box, settings panel, or error message\n' +
-          '  - The Outlook main window without a separate compose area\n\n' +
+          'Look at the screen. Is a new email compose/draft form currently visible in Microsoft Outlook?\n\n' +
+          'A new email COMPOSE FORM has ALL of the following:\n' +
+          '  - A "To:" or "宛先:" address field (for entering recipient email address)\n' +
+          '  - A "Subject:" or "件名:" text field\n' +
+          '  - A large blank area for typing the email body\n\n' +
+          'It may appear as a separate popup window OR as a full-screen/maximized compose view.\n\n' +
+          'This is NOT a compose form:\n' +
+          '  - The Outlook inbox list showing received emails (no blank To/Subject/Body entry fields)\n' +
+          '  - A read-only email view / reading pane (showing content of a received email)\n' +
+          '  - A dialog box or settings panel\n\n' +
           'Answer on line 1 with ONLY the classification keyword:\n' +
-          '- COMPOSE_OPEN  — A new email compose window with To/Subject/Body fields is clearly visible\n' +
-          '- COMPOSE_NOT_OPEN — No compose window open (main inbox view, dialog, or other screen)\n' +
+          '- COMPOSE_OPEN  — A compose form with blank To/Subject/Body fields is visible\n' +
+          '- COMPOSE_NOT_OPEN — No compose form open (inbox view, reading pane, dialog, or other)\n' +
           'Line 2+: one sentence describing what is actually visible on screen.' + langInstruction
       } else if (action === 'email_sent') {
         prompt =
