@@ -137,9 +137,10 @@ Low-level actions (other tasks only):
 Rules:
 1. ONE action per request. Report result then STOP. Do NOT chain actions.
 2. lock->nanokvm_lock only. login->nanokvm_login only.
-3. High-level actions have built-in verification. No extra screen_capture needed.
-4. vault_locked -> ask user for master password.
-5. Email: params must be ASCII. Collect to/subject/body, confirm, then send.
+3. nanokvm_lock/nanokvm_login have built-in verification. Do NOT add extra screen_capture after them.
+4. If user asks to see the screen / capture / screenshot -> use screen_capture.
+5. vault_locked -> ask user for master password.
+6. Email: params must be ASCII. Collect to/subject/body, confirm, then send.
 `
 }
 
