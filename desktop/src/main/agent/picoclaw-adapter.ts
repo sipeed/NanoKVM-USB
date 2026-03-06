@@ -32,13 +32,17 @@ export class PicoclawAdapter implements AgentAdapter {
     return this.manager.getVaultPendingUnlock()
   }
 
+  setVaultPendingUnlock(pending: boolean, loginMessage?: string, language?: string): void {
+    this.manager.setVaultPendingUnlock(pending, loginMessage, language)
+  }
+
   async getVersion(): Promise<string> {
     return this.manager.getVersion()
   }
 
   async getProviders(): Promise<AgentProvidersResult> {
     const data = await this.manager.getProviders()
-    return data as AgentProvidersResult
+    return data as unknown as AgentProvidersResult
   }
 
   getConfig(): AgentConfigResult {

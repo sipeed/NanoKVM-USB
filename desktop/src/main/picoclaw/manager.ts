@@ -158,6 +158,18 @@ export class PicoclawManager {
   }
 
   /**
+   * Set vault_pending_unlock state externally.
+   * Called by AgentRouter when a router-handled intent returns vault_locked.
+   */
+  setVaultPendingUnlock(pending: boolean, loginMessage?: string, language?: string): void {
+    this.vaultPendingUnlock = pending
+    this.pendingLoginMessage = loginMessage || null
+    this.pendingLoginLanguage = language || 'en'
+    this.saveVaultPendingState()
+    console.log(`[Picoclaw] setVaultPendingUnlock: pending=${pending}`)
+  }
+
+  /**
    * Initialize picoclaw (run onboard if needed)
    */
   async initialize(): Promise<void> {

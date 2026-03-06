@@ -80,7 +80,7 @@ export function registerPicoclawHandlers(
         const d = updates.agents?.defaults
         if (d?.provider !== undefined) commonUpdates.provider = d.provider
         if (d?.model !== undefined) commonUpdates.model = d.model
-        if (d?.model_name !== undefined) commonUpdates.modelName = d.model_name
+        if ((d as Record<string, unknown>)?.model_name !== undefined) commonUpdates.modelName = (d as Record<string, unknown>).model_name as string
         if (d?.temperature !== undefined) commonUpdates.temperature = d.temperature
         if (d?.max_tokens !== undefined) commonUpdates.maxTokens = d.max_tokens
         if (d?.vision_provider !== undefined) commonUpdates.visionProvider = d.vision_provider

@@ -40,6 +40,14 @@ export interface AgentAdapter {
    */
   isVaultPendingUnlock(): boolean
 
+  /**
+   * Set vault pending unlock state externally.
+   * Called by AgentRouter when an intent-based API call (e.g. nanokvm_login)
+   * returns vault_locked. The adapter will handle the actual vault unlock
+   * + retry on the next sendMessage() call.
+   */
+  setVaultPendingUnlock(pending: boolean, loginMessage?: string, language?: string): void
+
   /** Get agent version string */
   getVersion(): Promise<string>
 

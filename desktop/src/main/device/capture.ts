@@ -61,14 +61,6 @@ let cachedDeviceIndex: number | null = null
 /** Cached Windows DirectShow device name (null = not yet detected) */
 let cachedDshowDeviceName: string | null = null
 
-/** Known USB capture card name patterns */
-const CAPTURE_DEVICE_PATTERNS = [
-  'USB3 Video',
-  'USB2.0 HD UVC',
-  'nanokvm',
-  'capture'  // generic, exclude "screen capture" variants
-]
-
 /** Check if a device name matches known USB capture card patterns */
 function matchesCaptureDevice(name: string): boolean {
   const lower = name.toLowerCase()

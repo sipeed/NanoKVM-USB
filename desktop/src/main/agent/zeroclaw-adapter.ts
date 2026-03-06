@@ -20,7 +20,7 @@ import os from 'os'
 import { AgentAdapter, AgentConfigResult, AgentProvidersResult } from './adapter'
 import { CommonAgentConfig } from '@common/agent-config'
 import type { ConfigSyncService } from './config-sync'
-import { buildNanokvmSystemContext, isLockIntent, isLoginIntent, isScreenCaptureIntent } from '@common/task-prompts'
+import { buildNanokvmSystemContext } from '@common/task-prompts'
 import { vaultManager } from '../vault/manager'
 
 /** Conversation history entry for context management */
@@ -166,11 +166,24 @@ export class ZeroclawAdapter implements AgentAdapter {
   }
 
   /**
+   * Set vault pending unlock state externally.
+   * Called by AgentRouter when an intent-based API call returns vault_locked.
+   */
+  setVaultPendingUnlock(pending: boolean, loginMessage?: string, language?: string): void {
+    this.vaultPendingUnlock = pending
+    this.pendingLoginMessage = loginMessage || null
+    this.pendingLoginLanguage = language || 'en'
+    this.saveVaultPendingState()
+    console.log(`[Zeroclaw] setVaultPendingUnlock: pending=${pending}`)
+  }
+
+  /**
    * Send message — `zeroclaw agent -m "msg"`
    *
-   * zeroclaw has no session ID concept. In one-shot mode (-m), each invocation
-   * is stateless. We manage conversation history in the adapter and include
-   * recent context in the prompt.
+   * NOTE: Intent detection (lock/login/screen_capture) is handled by AgentRouter
+   * BEFORE this method is called. This method handles:
+   *   1. Vault pending unlock (master password intercept)
+   *   2. General conversation via zeroclaw Rust binary
    */
   async sendMessage(message: string, language: string, _sessionId?: string): Promise<string> {
     // ── Vault pending unlock: intercept master password ─────────────────
@@ -181,47 +194,16 @@ export class ZeroclawAdapter implements AgentAdapter {
       if (unlockResult !== null) {
         // Unlock succeeded (or failed with explanation) — return the result message.
         // If there was a pending login request, retry it now.
+        // The router will re-enter sendMessage() → AgentRouter detects login intent → API call.
         if (unlockResult.success && this.pendingLoginMessage) {
-          const retryMsg = this.pendingLoginMessage
-          const retryLang = this.pendingLoginLanguage || language
           this.pendingLoginMessage = null
           this.pendingLoginLanguage = 'en'
           this.saveVaultPendingState()
-          // Small delay before retrying
-          await new Promise((r) => setTimeout(r, 500))
-          return this.sendMessage(retryMsg, retryLang, _sessionId)
+          return unlockResult.message + '\nログインを再試行します...'
         }
         this.pendingLoginMessage = null
         return unlockResult.message
       }
-    }
-
-    // ── Intent-based direct API call ────────────────────────────────────
-    // zeroclaw's LLM doesn't have built-in NanoKVM tools (unlike picoclaw's Go
-    // binary). When user intent is clearly lock/login, call /v1/actions directly
-    // from the adapter — bypassing the LLM entirely for reliable execution.
-    // This mirrors picoclaw's behavior where Go binary handles these via tools.
-
-    // Lock intent: "ロック", "ロックして", "lock" etc.
-    // Check isLockIntent first, then exclude login-related keywords to avoid
-    // "ロック解除" being matched as lock intent.
-    if (isLockIntent(message) && !isLoginIntent(message)) {
-      console.log('[Zeroclaw] Detected lock intent — calling /v1/actions directly')
-      return this.callActionsApiDirect({ action: 'nanokvm_lock' }, language)
-    }
-
-    // Login intent: "ログイン", "ロック解除", "sign in" etc.
-    if (isLoginIntent(message)) {
-      console.log('[Zeroclaw] Detected login intent — calling /v1/actions directly')
-      return this.callActionsApiDirect({ action: 'nanokvm_login' }, language)
-    }
-
-    // Screen capture intent: "画面確認して", "スクリーンショット" etc.
-    // Bypass LLM entirely — gpt-4o-mini refuses screen_capture in natural language.
-    // Call /api/screen/analyze directly (capture + Vision LLM description).
-    if (isScreenCaptureIntent(message)) {
-      console.log('[Zeroclaw] Detected screen capture intent — calling /api/screen/analyze directly')
-      return this.callScreenAnalyzeApiDirect(language)
     }
 
     this.history.push({ role: 'user', content: message, timestamp: Date.now() })
@@ -233,164 +215,24 @@ export class ZeroclawAdapter implements AgentAdapter {
     this.history.push({ role: 'assistant', content: response, timestamp: Date.now() })
     this.trimHistory()
 
-    // ── Detect vault_locked response from /v1/actions nanokvm_login ──────
-    // zeroclaw calls POST /v1/actions { action: "nanokvm_login" } and gets back
-    // { success: false, error: "vault_locked", user_message: "..." }.
-    // The LLM will then ask the user for master password; we intercept the next
-    // message to unlock the vault and retry automatically.
+    // ── Detect vault_locked in LLM output (edge case) ────────────────────
+    // If the LLM independently decided to call nanokvm_login and got vault_locked,
+    // detect it here and enable vault pending for the next message.
     if (
       response.includes('vault_locked') ||
       response.includes('マスターパスワード') ||
       response.includes('master password') ||
       response.includes('🔐')
     ) {
-      console.log('[Zeroclaw] Detected vault_locked response — enabling vault pending unlock')
+      console.log('[Zeroclaw] Detected vault_locked in LLM output — enabling vault pending unlock')
       this.vaultPendingUnlock = true
-      this.pendingLoginMessage = message // retry the original request after unlock
+      this.pendingLoginMessage = message
       this.pendingLoginLanguage = language
       this.saveVaultPendingState()
-
-      // Override the LLM's varied response with the standardized message that
-      // Chat UI's isVaultPasswordMode checks for (exact match on "マスターパスワードを入力してください").
-      // Without this, the LLM might say "マスターパスワードを教えてください" etc. which won't trigger the mask.
       return '🔐 マスターパスワードを入力してください'
     }
 
     return response
-  }
-
-  /**
-   * Call /v1/actions API directly from the adapter (bypassing the LLM).
-   *
-   * zeroclaw's Rust binary has no built-in NanoKVM tools — it only has generic
-   * tools (bash, filesystem). When we detect lock/login intent, we call the API
-   * server directly, just like picoclaw's Go binary does via its built-in tools.
-   *
-   * If the API returns vault_locked (login without vault unlocked), we set
-   * vaultPendingUnlock and return the standardized mask prompt.
-   */
-  private async callActionsApiDirect(
-    request: { action: string; params?: Record<string, unknown> },
-    language: string
-  ): Promise<string> {
-    try {
-      const http = await import('http')
-      const payload = JSON.stringify(request)
-
-      const responseBody = await new Promise<string>((resolve, reject) => {
-        const req = http.request(
-          {
-            hostname: '127.0.0.1',
-            port: 18792,
-            path: '/v1/actions',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-          },
-          (res) => {
-            let data = ''
-            res.on('data', (chunk) => { data += chunk })
-            res.on('end', () => resolve(data))
-          }
-        )
-        req.on('error', reject)
-        req.write(payload)
-        req.end()
-      })
-
-      const json = JSON.parse(responseBody) as Record<string, unknown>
-      console.log(`[Zeroclaw] /v1/actions response: success=${json.success}, action=${request.action}`)
-
-      if (json.success) {
-        // Successful action — return the server's message
-        const data = json.data as Record<string, unknown> | undefined
-        const message = (data?.message as string) || (json.message as string) || `✅ ${request.action} を実行しました`
-        this.history.push({ role: 'user', content: `[${request.action}]`, timestamp: Date.now() })
-        this.history.push({ role: 'assistant', content: message, timestamp: Date.now() })
-        this.trimHistory()
-        return message
-      } else {
-        // Failed — check for vault_locked
-        const errorCode = (json.error as string) || 'unknown_error'
-        if (errorCode === 'vault_locked') {
-          console.log('[Zeroclaw] /v1/actions returned vault_locked — enabling vault pending unlock')
-          this.vaultPendingUnlock = true
-          this.pendingLoginMessage = `[${request.action}]`
-          this.pendingLoginLanguage = language
-          this.saveVaultPendingState()
-          return '🔐 マスターパスワードを入力してください'
-        }
-
-        const userMessage = (json.user_message as string) || (json.message as string) || `❌ ${request.action} に失敗しました: ${errorCode}`
-        return userMessage
-      }
-    } catch (err) {
-      console.error(`[Zeroclaw] /v1/actions call failed for ${request.action}:`, err)
-      return `❌ API呼び出しに失敗しました: ${err instanceof Error ? err.message : String(err)}`
-    }
-  }
-
-  /**
-   * Call /api/screen/analyze directly (screen capture + Vision LLM description).
-   * Bypasses the LLM when screen capture intent is detected, because gpt-4o-mini
-   * refuses to execute screen_capture via JSON in natural language responses.
-   */
-  private async callScreenAnalyzeApiDirect(language: string): Promise<string> {
-    try {
-      const http = await import('http')
-      const prompt =
-        language === 'ja'
-          ? '画面の内容を詳しく説明してください。何が表示されているか、重要な情報（テキスト、ウィンドウ、ダイアログなど）を教えてください。'
-          : 'Describe the screen contents in detail. What is displayed, including important information like text, windows, dialogs, etc.'
-      const payload = JSON.stringify({ prompt })
-
-      const responseBody = await new Promise<string>((resolve, reject) => {
-        const req = http.request(
-          {
-            hostname: '127.0.0.1',
-            port: 18792,
-            path: '/api/screen/analyze',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-          },
-          (res) => {
-            let data = ''
-            res.on('data', (chunk) => { data += chunk })
-            res.on('end', () => resolve(data))
-          }
-        )
-        req.on('error', reject)
-        req.write(payload)
-        req.end()
-      })
-
-      const json = JSON.parse(responseBody) as Record<string, unknown>
-      console.log(`[Zeroclaw] /api/screen/analyze: success=${json.success}`)
-
-      if (json.success) {
-        const result = (json.result as string) || '画面の分析が完了しましたが、結果が空でした。'
-        return `📷 ${result}`
-      } else {
-        const error = (json.error as string) || 'unknown'
-        const rejectReason = (json.rejectReason as string) || ''
-        if (error === 'Vision not configured') {
-          return '📷 画面のキャプチャは成功しましたが、Vision LLM が設定されていないため内容を説明できません。設定から Vision LLM を有効にしてください。'
-        }
-        if (error === 'Screen capture failed') {
-          // Black/frozen: Windows PC likely in sleep → HID wake was attempted (server-side)
-          if (rejectReason.includes('black/no-signal') || rejectReason.includes('zero bytes')) {
-            return '❌ 画面キャプチャが黒フレームを返しました（ウェイク後もスリープ状態）。\n\nWindows PC がスリープから復帰できなかった可能性があります。PC の電源が入っているか、NanoKVM-USB が正しく接続されているか確認してください。'
-          }
-          if (rejectReason.includes('frozen')) {
-            return '❌ ビデオストリームがフリーズしています。\n\nウェイク信号を送りましたが復帰できませんでした。NanoKVM-USB の接続と Windows PC の状態を確認してください。'
-          }
-          return `❌ 画面のキャプチャに失敗しました。NanoKVM-USB が接続されているか確認してください。(理由: ${rejectReason || 'unknown'})`
-        }
-        return `❌ 画面分析に失敗しました: ${error}`
-      }
-    } catch (err) {
-      console.error('[Zeroclaw] /api/screen/analyze call failed:', err)
-      return `❌ 画面キャプチャAPIの呼び出しに失敗しました: ${err instanceof Error ? err.message : String(err)}`
-    }
   }
 
   /**

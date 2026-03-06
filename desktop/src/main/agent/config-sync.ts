@@ -13,7 +13,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { CommonAgentConfig, DEFAULT_COMMON_CONFIG } from '@common/agent-config'
+import { CommonAgentConfig } from '@common/agent-config'
 import { AgentType, DEFAULT_AGENT_TYPE } from '@common/agent-types'
 
 /** Persisted format for ~/.nanoclaw/config.json */
