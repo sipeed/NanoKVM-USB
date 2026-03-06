@@ -87,10 +87,8 @@ export class PicoclawManager {
     
     // picoclaw binary path (in app resources)
     if (app.isPackaged) {
-      // Production: app.asar.unpacked/resources/bin/picoclaw
-      const appPath = app.getAppPath() // Points to app.asar
-      const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked')
-      this.picoclawBinary = path.join(unpackedPath, 'resources', 'bin', 'picoclaw')
+      // Production: extraResources copies to Contents/Resources/bin/picoclaw
+      this.picoclawBinary = path.join(process.resourcesPath, 'bin', 'picoclaw')
     } else {
       // Development: desktop/resources/bin/picoclaw
       this.picoclawBinary = path.join(app.getAppPath(), 'resources', 'bin', 'picoclaw')

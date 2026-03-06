@@ -83,9 +83,8 @@ export class ZeroclawAdapter implements AgentAdapter {
 
     // zeroclaw binary path (in app resources)
     if (app.isPackaged) {
-      const appPath = app.getAppPath()
-      const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked')
-      this.binaryPath = path.join(unpackedPath, 'resources', 'bin', 'zeroclaw')
+      // Production: extraResources copies to Contents/Resources/bin/zeroclaw
+      this.binaryPath = path.join(process.resourcesPath, 'bin', 'zeroclaw')
     } else {
       this.binaryPath = path.join(app.getAppPath(), 'resources', 'bin', 'zeroclaw')
     }
