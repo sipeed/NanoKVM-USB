@@ -1,0 +1,48 @@
+graph TB
+    subgraph OperatorPC["🖥️ 操作用 PC"]
+        subgraph ElectronApp["NanoKVM-USB Desktop App (Electron)"]
+            subgraph RendererUI["Renderer Process"]
+                ChatUI["💬 Chat UI<br>(React)"]
+                KeyMouse["⌨️🖱️ Keyboard / Mouse"]
+                AgentUI["🤖 AI エージェント<br>(選択式)"]
+                VideoPreview["📺 映像プレビュー<br>(UVC → canvas)"]
+            end
+            subgraph MainProcess["Main Process (Node.js)"]
+                SerialPort["🔌 SerialPort<br>(HID 送信)"]
+                APIServer["🌐 API Server (:18792)"]
+                VaultMgr["🔐 Vault Mgr"]
+                ffmpeg["🎬 ffmpeg<br>(ロック画面キャプチャ)"]
+            end
+        end
+    end
+
+    subgraph NanoKVMUSB["📦 NanoKVM-USB ドングル"]
+        HIDDevice["⌨️ USB HID<br>Keyboard / Mouse"]
+        HDMICapture["📺 HDMI Capture<br>(UVC)"]
+    end
+
+    subgraph TargetPC["🖥️ 対象 PC (Windows)"]
+        Desktop["🪟 Windows デスクトップ"]
+    end
+
+    %% ── 上から下への制御パス ──
+    ChatUI --> APIServer
+    KeyMouse --> SerialPort
+    AgentUI --> APIServer
+
+    SerialPort -- "⬇ USB Serial (HID レポート)" --> HIDDevice
+    HIDDevice -- "⬇ USB HID (キー入力 / マウス)" --> Desktop
+
+    %% ── 下から上への映像パス ──
+    Desktop -. "⬆ HDMI ケーブル (映像出力)" .-> HDMICapture
+    HDMICapture -. "⬆ USB (UVC) 映像ストリーム" .-> VideoPreview
+    HDMICapture -. "⬆ USB (UVC) ffmpeg 直接取得" .-> ffmpeg
+
+    %% Styles
+    style OperatorPC fill:#e8f4fd,stroke:#4a90d9,stroke-width:2px
+    style ElectronApp fill:#f3e5f5,stroke:#9c27b0
+    style RendererUI fill:#fce4ec,stroke:#e91e63
+    style MainProcess fill:#e3f2fd,stroke:#2196f3
+    style NanoKVMUSB fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
+    style TargetPC fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    style ffmpeg fill:#fff8e1,stroke:#ffc107

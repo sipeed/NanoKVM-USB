@@ -151,6 +151,15 @@ export class PicoclawManager {
   }
 
   /**
+   * Check if vault_pending_unlock flag is active.
+   * Used by PicoclawAdapter.isVaultPendingUnlock() for AgentRouter metadata
+   * (enables Telegram deleteMessage on password messages).
+   */
+  getVaultPendingUnlock(): boolean {
+    return this.vaultPendingUnlock
+  }
+
+  /**
    * Initialize picoclaw (run onboard if needed)
    */
   async initialize(): Promise<void> {
@@ -275,12 +284,35 @@ export class PicoclawManager {
    */
   async stop(): Promise<void> {
     if (!this.process) {
+      // Even if gateway isn't running, clear vault state on cleanup
+      if (this.vaultPendingUnlock) {
+        this.vaultPendingUnlock = false
+        this.pendingLoginMessage = null
+        this.saveVaultPendingState()
+      }
+      if (vaultManager.isUnlocked()) {
+        vaultManager.lock()
+        console.log('[Picoclaw] Vault locked on cleanup (was still unlocked)')
+      }
       return
     }
 
     console.log('[Picoclaw] Stopping gateway...')
     this.process.kill()
     this.process = null
+
+    // Clear vault pending state
+    if (this.vaultPendingUnlock) {
+      this.vaultPendingUnlock = false
+      this.pendingLoginMessage = null
+      this.saveVaultPendingState()
+    }
+
+    // Lock vault if still unlocked (prevents vault leaking across agent switches)
+    if (vaultManager.isUnlocked()) {
+      vaultManager.lock()
+      console.log('[Picoclaw] Vault locked on cleanup (was still unlocked)')
+    }
 
     // Wait for graceful shutdown
     await new Promise((resolve) => setTimeout(resolve, 500))

@@ -4,7 +4,7 @@ import { useAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 
 import { IpcEvents } from '@common/ipc-events'
-import { chatMessagesAtom, chatExpandedAtom, chatLoadingAtom, ChatMessage } from '@renderer/jotai/chat'
+import { chatMessagesAtom, chatExpandedAtom, chatLoadingAtom, agentTypeAtom, ChatMessage } from '@renderer/jotai/chat'
 
 interface RateLimitPopupData {
   waitSeconds: number
@@ -116,6 +116,7 @@ export const Chat = (): ReactElement => {
   const [messages, setMessages] = useAtom(chatMessagesAtom)
   const [expanded, setExpanded] = useAtom(chatExpandedAtom)
   const [loading, setLoading] = useAtom(chatLoadingAtom)
+  const [agentType] = useAtom(agentTypeAtom)
   const [input, setInput] = useState('')
   const [sessionId, setSessionId] = useState(() => `chat-${Date.now()}`)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -197,7 +198,7 @@ export const Chat = (): ReactElement => {
       const currentLanguage = i18n.language || 'en'
       
       const result = await window.electron.ipcRenderer.invoke(
-        IpcEvents.PICOCLAW_SEND_MESSAGE, 
+        IpcEvents.AGENT_SEND_MESSAGE, 
         messageText,
         currentLanguage,
         sessionId
@@ -268,7 +269,9 @@ export const Chat = (): ReactElement => {
       <div className="flex items-center justify-between rounded-t-lg bg-neutral-800 px-4 py-3">
         <div className="flex items-center space-x-2">
           <MessageCircle size={20} className="text-blue-500" />
-          <span className="font-semibold text-white">{t('chat.title')}</span>
+          <span className="font-semibold text-white">
+            {t('chat.title')} ({agentType})
+          </span>
         </div>
         <div className="flex space-x-2">
           <button

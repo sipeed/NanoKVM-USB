@@ -1,0 +1,46 @@
+sequenceDiagram
+    actor User as 👤 ユーザー
+    participant Input as 💬 Chat UI / 📱 Telegram
+    participant Router as 🔀 AgentRouter
+    participant Adapter as 🤖 Adapter
+    participant Vault as 🔐 VaultManager
+    participant API as 🌐 API Server<br>(:18792)
+    participant HID as ⌨️ NanoKVM-USB
+    participant Target as 🖥️ 対象PC
+
+    User->>Input: "ログイン" / "ロック解除"
+    Input->>Router: sendMessage("ログイン", ...)
+
+    Note over Router: isLoginIntent() = true<br>→ LLM バイパス
+
+    Router->>Adapter: sendMessage()
+    Adapter->>API: POST /v1/actions<br>{ action: "nanokvm_login" }
+    API->>Vault: getCredential()
+
+    alt Vault ロック中
+        Vault-->>API: vault_locked
+        API-->>Adapter: HTTP 403 vault_locked
+        Adapter-->>Router: "🔐 マスターパスワードを入力してください"
+        Router-->>Input: パスワード入力モード
+        Note over Input: Chat UI: マスク入力 ●●●●●●<br>Telegram: 受信後メッセージ削除
+
+        User->>Input: マスターパスワード入力
+        Input->>Router: sendMessage("password123", ...)
+        Router->>Adapter: sendMessage()
+        Adapter->>Vault: unlock("password123")
+        Vault-->>Adapter: 解錠成功
+        Adapter->>API: POST /v1/actions<br>{ action: "nanokvm_login" }
+        API->>Vault: getCredential()
+        Vault-->>API: PIN
+    else Vault 解錠済み
+        Vault-->>API: PIN
+    end
+
+    API->>HID: PIN 入力 HID レポート
+    HID->>Target: ロック画面解除
+
+    Note over API: 15秒待機後<br>Vision LLM で画面検証
+
+    API-->>Adapter: { status: "LOGIN_SUCCESS" }
+    Adapter-->>Router: "✅ ログインしました"
+    Router-->>Input: 結果表示

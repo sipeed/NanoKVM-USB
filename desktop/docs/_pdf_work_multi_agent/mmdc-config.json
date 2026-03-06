@@ -1,0 +1,7 @@
+{
+  "theme": "default",
+  "themeVariables": {
+    "fontFamily": "\"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"YuGothic\", \"Yu Gothic\", Meiryo, \"Apple Color Emoji\", \"Segoe UI Emoji\", sans-serif",
+    "fontSize": "14px"
+  }
+}

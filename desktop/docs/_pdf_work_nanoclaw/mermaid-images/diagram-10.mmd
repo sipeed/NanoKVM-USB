@@ -1,0 +1,22 @@
+sequenceDiagram
+    actor User as 👤 ユーザー
+    participant UI as ⚡ 設定画面
+    participant Main as 🖥️ Main Process
+    participant GH as 🐙 gh CLI
+    participant Browser as 🌐 ブラウザ
+
+    User->>UI: 「🔑 GitHub 認証を開始」クリック
+    UI->>Main: IPC: INITIATE_GITHUB_AUTH
+    Main->>GH: spawn: gh auth login -h github.com -p https -w
+    GH-->>Main: one-time code「XXXX-XXXX」
+    Main-->>UI: { code: "XXXX-XXXX", url }
+    UI->>Browser: shell.openExternal(github.com/login/device)
+    User->>Browser: コードを入力 → 認証を許可
+
+    loop 3秒間隔ポーリング (最大5分)
+        UI->>Main: IPC: DETECT_GITHUB_AUTH
+        Main->>GH: gh auth token
+        GH-->>Main: gho_xxxxx
+    end
+
+    UI->>UI: ✅ GitHub 認証済み → 自動保存

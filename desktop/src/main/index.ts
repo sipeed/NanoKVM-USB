@@ -9,6 +9,11 @@ import * as events from './events'
 import { PicoclawManager } from './picoclaw/manager'
 import { ModelUpdater } from './picoclaw/model-updater'
 import { ApiServer } from './api/server'
+import { AgentRouter } from './agent/router'
+import { PicoclawAdapter } from './agent/picoclaw-adapter'
+import { ZeroclawAdapter } from './agent/zeroclaw-adapter'
+import { ConfigSyncService } from './agent/config-sync'
+import { TelegramService } from './telegram/service'
 
 // Redirect all console methods to electron-log so they appear in main.log
 console.log = log.log
@@ -19,6 +24,9 @@ let mainWindow: BrowserWindow
 let picoclawManager: PicoclawManager
 let modelUpdater: ModelUpdater
 let apiServer: ApiServer
+let agentRouter: AgentRouter
+let configSyncService: ConfigSyncService
+let telegramService: TelegramService
 
 interface WindowState {
   width: number
@@ -160,8 +168,48 @@ app.whenReady().then(() => {
 
   // Initialize picoclaw manager
   picoclawManager = new PicoclawManager()
-  modelUpdater = new ModelUpdater()
-  events.registerPicoclawHandlers(picoclawManager, modelUpdater)
+
+  // Initialize config sync service (shared settings)
+  configSyncService = new ConfigSyncService()
+  configSyncService.initialize()
+
+  // Initialize model updater (uses shared config for provider API keys)
+  modelUpdater = new ModelUpdater(configSyncService)
+  events.registerPicoclawHandlers(picoclawManager, modelUpdater, configSyncService)
+
+  // Initialize agent router (multi-agent abstraction layer)
+  agentRouter = new AgentRouter()
+  agentRouter.register(new PicoclawAdapter(picoclawManager))
+  agentRouter.register(new ZeroclawAdapter(configSyncService))
+
+  // Restore saved agent type from shared config
+  const savedAgentType = configSyncService.getAgentType()
+  if (savedAgentType !== agentRouter.getType()) {
+    // Only switch if the saved type has a registered adapter
+    try {
+      agentRouter.setType(savedAgentType)
+    } catch {
+      log.warn(`[Main] Saved agent type "${savedAgentType}" not available, using default`)
+    }
+  }
+
+  events.registerAgentHandlers(agentRouter, configSyncService)
+
+  // Initialize TelegramService (agent-independent)
+  telegramService = new TelegramService(agentRouter)
+  events.registerTelegramHandlers(telegramService)
+
+  // Auto-start Telegram if previously enabled in shared config
+  const sharedConfig = configSyncService.getConfig()
+  if (sharedConfig.telegram?.enabled && sharedConfig.telegram?.botToken) {
+    telegramService.configure({
+      botToken: sharedConfig.telegram.botToken,
+      userId: sharedConfig.telegram.userId
+    })
+    telegramService.start().catch((err) => {
+      log.error('[Main] Failed to auto-start TelegramService:', err)
+    })
+  }
 
   // Initialize API server
   apiServer = new ApiServer({ port: 18792, host: '127.0.0.1' })
@@ -179,8 +227,8 @@ app.whenReady().then(() => {
   // Set main window for API server
   apiServer.setMainWindow(mainWindow)
 
-  // Auto-start Telegram gateway if previously enabled
-  picoclawManager.autoStartGatewayIfEnabled()
+  // NOTE: Telegram auto-start is handled above via TelegramService
+  // (replaces picoclawManager.autoStartGatewayIfEnabled())
 
   // Initialize model update scheduler
   modelUpdater.initialize()
@@ -196,6 +244,11 @@ app.on('window-all-closed', () => {
   // Stop picoclaw when app closes
   if (picoclawManager) {
     picoclawManager.stop().catch((err) => log.error('Failed to stop picoclaw:', err))
+  }
+
+  // Stop TelegramService
+  if (telegramService) {
+    telegramService.stop().catch((err) => log.error('Failed to stop TelegramService:', err))
   }
 
   // Stop model updater scheduler

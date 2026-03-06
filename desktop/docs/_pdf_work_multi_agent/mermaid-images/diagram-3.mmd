@@ -1,0 +1,17 @@
+sequenceDiagram
+    participant CUI as Chat UI (React)
+    participant IPC as IPC
+    participant Router as AgentRouter
+    participant Mgr as Manager
+    participant Bin as Agent Binary<br>(one-shot)
+
+    CUI->>IPC: invoke(AGENT_SEND_MESSAGE, text)
+    IPC->>Router: sendMessage(text, lang, sessionId)
+    Router->>Mgr: sendMessage(text, lang, sessionId)
+    Mgr->>Bin: spawn agent -m "text" (one-shot)
+    Bin-->>Mgr: stdout → 応答テキスト
+    Mgr-->>Router: 応答
+    Router-->>IPC: 応答
+    IPC-->>CUI: 応答表示
+
+    Note over Router: Chat UI も Telegram も<br>Router → Manager → Binary の<br>同一パスを通る

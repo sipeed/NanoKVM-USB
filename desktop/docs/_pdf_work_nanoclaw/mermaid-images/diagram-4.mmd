@@ -1,0 +1,19 @@
+flowchart TD
+    Start["ログイン/ロック解除<br>コマンド受信"] --> CheckVault{"Vault 状態"}
+
+    CheckVault -- "解錠済み" --> GetCred["PIN 取得"]
+    CheckVault -- "ロック中" --> AskPassword["🔐 マスターパスワードを<br>入力してください"]
+
+    AskPassword --> UserInput["ユーザーがパスワード入力"]
+    UserInput --> TryUnlock["Vault 解錠試行"]
+    TryUnlock -- "成功" --> GetCred
+    TryUnlock -- "失敗" --> WrongPW["❌ パスワードが違います<br>再入力してください"]
+    WrongPW --> UserInput
+
+    GetCred --> ExecuteHID["HID で PIN 入力"]
+    ExecuteHID --> VisionVerify["Vision LLM で検証"]
+    VisionVerify --> AutoLock["60秒後に自動ロック"]
+
+    style AskPassword fill:#fff3e0,stroke:#ff9800
+    style WrongPW fill:#ffebee,stroke:#f44336
+    style AutoLock fill:#e8f5e9,stroke:#4caf50

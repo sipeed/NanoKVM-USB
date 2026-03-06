@@ -1,0 +1,107 @@
+
+/* ===== ベースフォント（日本語・絵文字対応） ===== */
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "YuGothic", "Yu Gothic", "Meiryo", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 10pt;
+  line-height: 1.6;
+  color: #1a1a1a;
+}
+
+h1 { font-size: 20pt; border-bottom: 2px solid #333; padding-bottom: 4px; margin-top: 24pt; }
+h2 { font-size: 15pt; border-bottom: 1px solid #888; padding-bottom: 2px; margin-top: 18pt; }
+h3 { font-size: 12pt; margin-top: 12pt; }
+h4 { font-size: 10.5pt; }
+
+/* ===== コードブロック ===== */
+pre, code {
+  font-family: "Menlo", "Courier New", monospace;
+  font-size: 8pt;
+  background: #f6f8fa;
+  border-radius: 4px;
+}
+pre {
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ===== テーブル ===== */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 9pt;
+  margin: 10px 0;
+}
+th {
+  background: #f0f0f0;
+  padding: 5px 8px;
+  border: 1px solid #ccc;
+  text-align: left;
+}
+td {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+}
+
+/* ===== Blockquote ===== */
+blockquote {
+  border-left: 3px solid #4a90d9;
+  margin: 8px 0;
+  padding: 4px 12px;
+  background: #f0f7ff;
+  font-size: 9pt;
+  color: #333;
+}
+
+/* ===== 図が改ページで切れないようにする ===== */
+.figure-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  text-align: center;
+  margin: 8pt 0;
+}
+.figure-block img {
+  max-width: 100%;
+  max-height: 210mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+img {
+  max-width: 100%;
+  max-height: 210mm;
+  width: auto;
+  height: auto;
+}
+
+/* テーブルも途中で切れないよう */
+table {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* pre/code ブロックも切れないよう */
+pre {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* 見出しの直後で改ページしない */
+h2, h3, h4 {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+/* hr は区切り線 */
+hr {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 16pt 0;
+}
+
+/* ASCII アート風ダイアグラム (pre で囲まれたテキスト図) */
+pre {
+  font-size: 7.5pt;
+  line-height: 1.3;
+}

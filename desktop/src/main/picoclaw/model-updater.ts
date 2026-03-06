@@ -3,11 +3,11 @@ import http from 'http'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import type { PicoclawConfig } from './manager'
+import type { ConfigSyncService } from '../agent/config-sync'
 
 /**
  * Model Update Schedule configuration.
- * Stored in ~/.picoclaw/config.json under "model_update" key.
+ * Stored in ~/.nanoclaw/model-update-schedule.json.
  */
 export interface ModelUpdateSchedule {
   /** 'daily' | 'weekly' | 'monthly' */
@@ -172,14 +172,16 @@ const VISION_FALLBACKS: Record<string, string[]> = {
 }
 
 export class ModelUpdater {
-  private configPath: string
+  private configSync: ConfigSyncService
   private timer: ReturnType<typeof setTimeout> | null = null
+  private schedulePath: string
   private statusPath: string
 
-  constructor() {
-    const pioclawHome = path.join(os.homedir(), '.picoclaw')
-    this.configPath = path.join(pioclawHome, 'config.json')
-    this.statusPath = path.join(pioclawHome, 'model-update-status.json')
+  constructor(configSync: ConfigSyncService) {
+    this.configSync = configSync
+    const nanoclawHome = path.join(os.homedir(), '.nanoclaw')
+    this.schedulePath = path.join(nanoclawHome, 'model-update-schedule.json')
+    this.statusPath = path.join(nanoclawHome, 'model-update-status.json')
   }
 
   /**
@@ -210,9 +212,9 @@ export class ModelUpdater {
    */
   getSchedule(): ModelUpdateSchedule {
     try {
-      const config = this.readConfig()
-      const schedule = config.model_update?.schedule
-      if (schedule) {
+      if (fs.existsSync(this.schedulePath)) {
+        const content = fs.readFileSync(this.schedulePath, 'utf-8')
+        const schedule = JSON.parse(content) as Partial<ModelUpdateSchedule>
         return {
           frequency: schedule.frequency || DEFAULT_SCHEDULE.frequency,
           hour: schedule.hour ?? DEFAULT_SCHEDULE.hour,
@@ -231,12 +233,7 @@ export class ModelUpdater {
    * Update schedule configuration and restart the scheduler.
    */
   setSchedule(schedule: ModelUpdateSchedule): void {
-    const config = this.readConfig()
-    if (!config.model_update) {
-      config.model_update = {}
-    }
-    config.model_update.schedule = schedule
-    this.writeConfig(config)
+    this.saveSchedule(schedule)
 
     // Restart scheduler
     this.stop()
@@ -276,17 +273,17 @@ export class ModelUpdater {
     autoSwitchDetails?: string
   }> {
     console.log('[ModelUpdater] Starting model list update...')
-    const config = this.readConfig()
+    const config = this.configSync.getConfig()
     const results: Array<{ provider: string; modelCount: number; error?: string }> = []
 
     // Determine which providers to check — always include ALL providers with API keys
-    const chatProvider = config.agents?.defaults?.provider
-    const visionProvider = config.agents?.defaults?.vision_provider
+    const chatProvider = config.provider
+    const visionProvider = config.visionProvider
     const providersToCheck = new Set<string>()
 
     // Always check all configured providers that have API keys and supported endpoints
     for (const [provider, providerConfig] of Object.entries(config.providers || {})) {
-      if (PROVIDER_API_ENDPOINTS[provider] && (providerConfig as Record<string, string>)?.api_key) {
+      if (PROVIDER_API_ENDPOINTS[provider] && providerConfig?.apiKey) {
         providersToCheck.add(provider)
       }
     }
@@ -298,7 +295,7 @@ export class ModelUpdater {
     const fetchedModels: Record<string, string[]> = {}
     for (const provider of providersToCheck) {
       try {
-        const apiKey = config.providers?.[provider]?.api_key || ''
+        const apiKey = config.providers?.[provider]?.apiKey || ''
         const models = await this.fetchModels(provider, apiKey)
         fetchedModels[provider] = models.map((m) => m.id)
         results.push({ provider, modelCount: models.length })
@@ -316,7 +313,7 @@ export class ModelUpdater {
 
     // Check chat model
     if (chatProvider && fetchedModels[chatProvider]) {
-      const currentModel = config.agents?.defaults?.model || ''
+      const currentModel = config.model || ''
       const availableModels = fetchedModels[chatProvider]
       if (currentModel && availableModels.length > 0 && !availableModels.includes(currentModel)) {
         const newModel = this.findBestFallback(chatProvider, availableModels, false)
@@ -324,9 +321,7 @@ export class ModelUpdater {
           console.log(
             `[ModelUpdater] Chat model "${currentModel}" no longer available. Switching to "${newModel}"`
           )
-          if (!config.agents) config.agents = {}
-          if (!config.agents.defaults) config.agents.defaults = {}
-          config.agents.defaults.model = newModel
+          this.configSync.updateConfig({ model: newModel })
           autoSwitched = true
           autoSwitchDetails = `チャットモデル: ${currentModel} → ${newModel}`
         }
@@ -335,7 +330,7 @@ export class ModelUpdater {
 
     // Check vision model
     if (visionProvider && fetchedModels[visionProvider]) {
-      const currentVisionModel = config.agents?.defaults?.vision_model || ''
+      const currentVisionModel = config.visionModel || ''
       const availableModels = fetchedModels[visionProvider]
       if (
         currentVisionModel &&
@@ -347,9 +342,7 @@ export class ModelUpdater {
           console.log(
             `[ModelUpdater] Vision model "${currentVisionModel}" no longer available. Switching to "${newModel}"`
           )
-          if (!config.agents) config.agents = {}
-          if (!config.agents.defaults) config.agents.defaults = {}
-          config.agents.defaults.vision_model = newModel
+          this.configSync.updateConfig({ visionModel: newModel })
           autoSwitched = true
           const detail = `Visionモデル: ${currentVisionModel} → ${newModel}`
           autoSwitchDetails = autoSwitchDetails
@@ -359,15 +352,8 @@ export class ModelUpdater {
       }
     }
 
-    // Save config if auto-switched
-    if (autoSwitched) {
-      this.writeConfig(config)
-    }
-
-    // Save cached model lists
-    if (!config.model_update) config.model_update = {}
-    config.model_update.cached_models = fetchedModels
-    this.writeConfig(config)
+    // Save cached model lists to shared config
+    this.configSync.updateConfig({ cachedModels: fetchedModels })
 
     // Update status
     const status: ModelUpdateStatus = {
@@ -390,8 +376,8 @@ export class ModelUpdater {
    */
   getCachedModels(provider: string): string[] {
     try {
-      const config = this.readConfig()
-      return config.model_update?.cached_models?.[provider] || []
+      const config = this.configSync.getConfig()
+      return config.cachedModels?.[provider] || []
     } catch {
       return []
     }
@@ -399,24 +385,16 @@ export class ModelUpdater {
 
   // --- Private helpers ---
 
-  private readConfig(): PicoclawConfig {
+  private saveSchedule(schedule: ModelUpdateSchedule): void {
     try {
-      if (fs.existsSync(this.configPath)) {
-        const content = fs.readFileSync(this.configPath, 'utf-8')
-        return JSON.parse(content) as PicoclawConfig
+      const dir = path.dirname(this.schedulePath)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
       }
-    } catch {
-      // ignore
+      fs.writeFileSync(this.schedulePath, JSON.stringify(schedule, null, 2))
+    } catch (err) {
+      console.error('[ModelUpdater] Failed to save schedule:', err)
     }
-    return {}
-  }
-
-  private writeConfig(config: PicoclawConfig): void {
-    const configDir = path.dirname(this.configPath)
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true })
-    }
-    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2))
   }
 
   private saveStatus(status: ModelUpdateStatus): void {

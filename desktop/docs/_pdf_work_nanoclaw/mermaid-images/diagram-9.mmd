@@ -1,0 +1,31 @@
+flowchart LR
+    subgraph Source1["① Go 静的リスト"]
+        GoCmd["picoclaw providers"]
+        GoModels["defaults.go 定義済み"]
+        GoCmd --> GoModels
+    end
+
+    subgraph Source2["② UI メタデータ"]
+        UIMeta["PROVIDER_UI_META"]
+        UILabels["ラベル・Vision フラグ"]
+        UIMeta --> UILabels
+    end
+
+    subgraph Source3["③ API 動的取得"]
+        APIFetch["model-updater.ts"]
+        CachedModels["cached_models"]
+        APIFetch --> CachedModels
+    end
+
+    GoModels --> Merge["buildProviderOptions()<br>3ソースマージ"]
+    UILabels --> Merge
+    CachedModels --> Merge
+
+    Merge --> Dedup["Set ベース重複排除"]
+    Dedup --> ChatDropdown["💬 Chat LLM ドロップダウン"]
+    Dedup --> VisionFilter["vision フラグフィルタ"]
+    VisionFilter --> VisionDropdown["👁️ Vision LLM ドロップダウン"]
+
+    style Source1 fill:#e8f4fd,stroke:#4a90d9
+    style Source2 fill:#fff3e0,stroke:#ff9800
+    style Source3 fill:#e8f5e9,stroke:#4caf50

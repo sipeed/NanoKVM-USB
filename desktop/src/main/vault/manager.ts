@@ -48,12 +48,18 @@ const AUTH_TAG_LEN = 16
 
 // --- Vault Manager ---
 
+/** Auto-lock timeout: re-lock vault if credential is not consumed within this period */
+const VAULT_AUTO_LOCK_MS = 60_000 // 60 seconds
+
 export class VaultManager {
   /** Decrypted credential (held in memory while unlocked) */
   private credential: VaultCredential | null = null
 
   /** Derived encryption key (held in memory while unlocked) */
   private derivedKey: Buffer | null = null
+
+  /** Auto-lock timer — re-locks vault if credential is not used within timeout */
+  private autoLockTimer: ReturnType<typeof setTimeout> | null = null
 
   // --- Status ---
 
@@ -135,6 +141,10 @@ export class VaultManager {
       this.credential = JSON.parse(plaintext) as VaultCredential
       this.derivedKey = key
       console.log('[Vault] Unlocked successfully')
+
+      // Start auto-lock timer — re-lock if credential is not consumed
+      // (e.g. agent can't call API, user switches agents, etc.)
+      this.startAutoLockTimer()
     } catch {
       // GCM auth tag mismatch → wrong password
       throw new Error('Master password is incorrect')
@@ -147,6 +157,7 @@ export class VaultManager {
    * Lock the vault — clear in-memory credential and key.
    */
   lock(): void {
+    this.clearAutoLockTimer()
     this.credential = null
     if (this.derivedKey) {
       // Zero out key buffer for security
@@ -154,6 +165,34 @@ export class VaultManager {
       this.derivedKey = null
     }
     console.log('[Vault] Locked')
+  }
+
+  // --- Auto-lock timer ---
+
+  /**
+   * Start the auto-lock timer. If the vault credential is not consumed
+   * (via getCredential → login → lock) within the timeout, auto-lock it.
+   * This prevents vault from staying unlocked indefinitely if:
+   *   - The agent can't execute the login action (e.g. zeroclaw has no HTTP tool)
+   *   - The user switches agents while vault is unlocked
+   *   - An unexpected error prevents the login flow from completing
+   */
+  private startAutoLockTimer(): void {
+    this.clearAutoLockTimer()
+    this.autoLockTimer = setTimeout(() => {
+      if (this.isUnlocked()) {
+        console.log(`[Vault] Auto-lock: vault was unlocked for ${VAULT_AUTO_LOCK_MS / 1000}s without being used — locking`)
+        this.lock()
+      }
+    }, VAULT_AUTO_LOCK_MS)
+  }
+
+  /** Clear the auto-lock timer */
+  private clearAutoLockTimer(): void {
+    if (this.autoLockTimer) {
+      clearTimeout(this.autoLockTimer)
+      this.autoLockTimer = null
+    }
   }
 
   // --- Get Credential ---

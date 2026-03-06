@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant UI as Settings UI
+    participant Sync as ConfigSyncService
+    participant PC as ~/.picoclaw/config.json
+    participant ZC as ~/.zeroclaw/config.toml
+    participant NC as ~/.nanoclaw/config.json
+
+    UI->>Sync: updateConfig({ provider: "openai", model: "gpt-4o" })
+    Sync->>NC: 共通設定を更新
+    alt agent_type == "picoclaw"
+        Sync->>PC: JSON形式で書き込み<br>agents.defaults.provider = "openai"<br>agents.defaults.model = "gpt-4o"
+    else agent_type == "zeroclaw"
+        Sync->>ZC: TOML形式で書き込み<br>default_provider = "openai"<br>default_model = "gpt-4o"
+    end
+
+    UI->>Sync: setAgentType("zeroclaw")
+    Sync->>NC: agent_type = "zeroclaw" を保存
+    Sync->>ZC: 現在の共通LLM設定をTOML形式で書き込み
+    Note over Sync: picoclaw gateway が動作中なら停止

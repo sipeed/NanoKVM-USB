@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant UI as Settings UI
+    participant IPC as IPC (Main Process)
+    participant Router as AgentRouter
+    participant Agent as AgentAdapter
+
+    Note over UI: 設定画面初期表示 or エージェント切り替え
+
+    UI->>IPC: invoke(AGENT_SET_TYPE, "zeroclaw")
+    IPC->>Router: setType("zeroclaw")
+    Router->>Agent: initialize()
+    Agent-->>Router: 初期化完了
+    Router-->>IPC: { success: true }
+    IPC-->>UI: setType結果
+
+    UI->>IPC: invoke(AGENT_GET_VERSION)
+    IPC->>Router: getVersion()
+    Router->>Agent: getVersion()
+    Note over Agent: picoclaw: `picoclaw version`<br>zeroclaw: `zeroclaw --version`
+    Agent-->>Router: "v0.3.3"
+    Router-->>IPC: { success: true, version: "v0.3.3" }
+    IPC-->>UI: バージョンバッジを更新
+
+    Note over UI: タイトル横に [zeroclaw v0.3.3] と表示

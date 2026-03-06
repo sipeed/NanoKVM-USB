@@ -60,5 +60,22 @@ export enum IpcEvents {
   VAULT_SAVE = 'vault-save',
   VAULT_GET_CREDENTIAL = 'vault-get-credential',
   VAULT_CHANGE_PASSWORD = 'vault-change-password',
-  VAULT_DELETE = 'vault-delete'
+  VAULT_DELETE = 'vault-delete',
+
+  // === Agent common (multi-agent abstraction layer) ===
+  // @see docs/multi-agent-spec.md Section 7.1
+  AGENT_GET_TYPE = 'agent:getType',
+  AGENT_SET_TYPE = 'agent:setType',
+  AGENT_SEND_MESSAGE = 'agent:sendMessage',
+  AGENT_GET_CONFIG = 'agent:getConfig',
+  AGENT_UPDATE_CONFIG = 'agent:updateConfig',
+  AGENT_GET_VERSION = 'agent:getVersion',
+  AGENT_GET_PROVIDERS = 'agent:getProviders',
+  AGENT_GET_STATUS = 'agent:getStatus',
+  AGENT_TEST_CONNECTION = 'agent:testConnection',
+
+  // === Telegram (agent-independent) ===
+  TELEGRAM_START = 'telegram:start',
+  TELEGRAM_STOP = 'telegram:stop',
+  TELEGRAM_STATUS = 'telegram:status'
 }

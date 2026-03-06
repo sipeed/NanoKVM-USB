@@ -2,8 +2,13 @@ import { ipcMain } from 'electron'
 import { IpcEvents } from '@common/ipc-events'
 import { PicoclawManager, PicoclawConfig } from '../picoclaw/manager'
 import { ModelUpdater, ModelUpdateSchedule } from '../picoclaw/model-updater'
+import type { ConfigSyncService } from '../agent/config-sync'
 
-export function registerPicoclawHandlers(manager: PicoclawManager, modelUpdater: ModelUpdater): void {
+export function registerPicoclawHandlers(
+  manager: PicoclawManager,
+  modelUpdater: ModelUpdater,
+  configSync?: ConfigSyncService
+): void {
   // Start picoclaw gateway
   ipcMain.handle(IpcEvents.PICOCLAW_START, async () => {
     try {
@@ -68,6 +73,30 @@ export function registerPicoclawHandlers(manager: PicoclawManager, modelUpdater:
   ipcMain.handle(IpcEvents.PICOCLAW_UPDATE_CONFIG, (_event, updates: Partial<PicoclawConfig>) => {
     try {
       manager.updateConfig(updates)
+
+      // spec §3.3: ConfigSyncService (nanoclaw共通設定) にも反映する
+      if (configSync) {
+        const commonUpdates: Parameters<typeof configSync.updateConfig>[0] = {}
+        const d = updates.agents?.defaults
+        if (d?.provider !== undefined) commonUpdates.provider = d.provider
+        if (d?.model !== undefined) commonUpdates.model = d.model
+        if (d?.model_name !== undefined) commonUpdates.modelName = d.model_name
+        if (d?.temperature !== undefined) commonUpdates.temperature = d.temperature
+        if (d?.max_tokens !== undefined) commonUpdates.maxTokens = d.max_tokens
+        if (d?.vision_provider !== undefined) commonUpdates.visionProvider = d.vision_provider
+        if (d?.vision_model !== undefined) commonUpdates.visionModel = d.vision_model
+        if (updates.providers !== undefined) {
+          const providers: Record<string, { apiKey: string; apiBase: string }> = {}
+          for (const [k, v] of Object.entries(updates.providers)) {
+            providers[k] = { apiKey: v.api_key || '', apiBase: v.api_base || '' }
+          }
+          commonUpdates.providers = providers
+        }
+        if (Object.keys(commonUpdates).length > 0) {
+          configSync.updateConfig(commonUpdates)
+        }
+      }
+
       return { success: true }
     } catch (error) {
       console.error('[IPC] Failed to update picoclaw config:', error)

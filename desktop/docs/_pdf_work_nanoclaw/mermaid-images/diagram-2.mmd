@@ -1,0 +1,25 @@
+sequenceDiagram
+    actor User as 👤 ユーザー
+    participant Input as 💬 Chat UI / 📱 Telegram
+    participant Router as 🔀 AgentRouter
+    participant Adapter as 🤖 Adapter
+    participant API as 🌐 API Server<br>(:18792)
+    participant HID as ⌨️ NanoKVM-USB<br>(HID)
+    participant Target as 🖥️ 対象PC
+
+    User->>Input: "ロック" / "画面をロックして"
+    Input->>Router: sendMessage("ロック", ...)
+
+    Note over Router: isLockIntent() = true<br>→ LLM バイパス
+
+    Router->>Adapter: sendMessage()
+    Adapter->>API: POST /v1/actions<br>{ action: "nanokvm_lock" }
+    API->>HID: Win+L HID レポート送信
+    HID->>Target: Windows ロック
+
+    Note over API: 3秒待機後<br>Vision LLM で画面検証
+
+    API-->>Adapter: { status: "LOCK_SCREEN" }
+    Adapter-->>Router: "✅ 画面をロックしました"
+    Router-->>Input: 結果表示
+    Input-->>User: ✅ ロック成功

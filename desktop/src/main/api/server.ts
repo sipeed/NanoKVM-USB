@@ -2,6 +2,12 @@ import { createServer, IncomingMessage, ServerResponse } from 'http'
 import { BrowserWindow, ipcMain } from 'electron'
 import { IpcEvents } from '@common/ipc-events'
 import { isVisionConfigured, getVisionSetupMessage, analyzeScreenWithVision, getVisionLanguage } from '../picoclaw/vision'
+import {
+  VISION_PROMPT_LOCK,
+  VISION_PROMPT_LOGIN,
+  VISION_PROMPT_EMAIL_COMPOSE,
+  VISION_PROMPT_EMAIL_SENT
+} from '@common/task-prompts'
 import { isFfmpegCaptureAvailable, captureFrameNative } from '../device/capture'
 import { loginToWindows } from '../device/login'
 import { vaultManager } from '../vault/manager'
@@ -108,6 +114,8 @@ export class ApiServer {
       await this.handleVaultGetCredential(req, res)
     } else if (req.method === 'GET' && url.pathname === '/api/vault/status') {
       await this.handleVaultStatus(req, res)
+    } else if (req.method === 'POST' && url.pathname === '/v1/actions') {
+      await this.handleComputerUseActions(req, res)
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'Not found' }))
@@ -275,76 +283,17 @@ export class ApiServer {
     try {
       const body = await this.readBody(req)
       const { password: rawPassword, username: rawUsername } = JSON.parse(body)
-
-      // --- Vault integration ---
-      // When vault is configured, ALWAYS use vault credentials regardless of
-      // what password the agent provides. This prevents the LLM from needing
-      // to know about @vault and ensures PINs never travel through chat channels.
-      let password: string
-      let username: string
-
-      if (vaultManager.isConfigured()) {
-        // Vault is configured — use vault credentials exclusively
-        if (!vaultManager.isUnlocked()) {
-          // Vault is locked — return vault_locked error.
-          // The agent will ask the user for the master password in chat.
-          // gateway (Telegram) / manager.ts (ChatUI) intercepts the next message
-          // and sends it directly to the Vault API, bypassing the LLM.
-          console.log('[API Server] Vault is configured but locked — returning vault_locked error')
-          res.writeHead(403, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({
-            error: 'vault_locked',
-            message: 'マスターパスワードが必要です',
-            user_message: '🔐 マスターパスワードを入力してください'
-          }))
-          return
-        }
-
-        const credential = vaultManager.getCredential()
-        if (!credential || !credential.pin) {
-          res.writeHead(400, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({
-            error: 'vault_empty',
-            message: 'No credential stored in vault'
-          }))
-          return
-        }
-
-        password = credential.pin
-        username = credential.username || ''
-        console.log('[API Server] Using vault credential for login (PIN masked, agent-provided password ignored)')
-      } else {
-        // Vault not configured: use password provided directly in the request
-        if (typeof rawPassword !== 'string' || rawPassword === '') {
-          res.writeHead(400, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'password field is required' }))
-          return
-        }
-        password = rawPassword
-        username = typeof rawUsername === 'string' ? rawUsername.trim() : ''
+      const result = await this.performLogin(rawPassword, rawUsername)
+      if (!result.success) {
+        const statusCode = result.errorCode === 'vault_locked' ? 403 : 400
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          error: result.errorCode || 'login_failed',
+          message: result.error,
+          user_message: result.userMessage
+        }))
+        return
       }
-
-      // Sanitize username: reject OS names, bot names, emoji, and non-ASCII
-      if (username && !ApiServer.isValidUsername(username)) {
-        console.warn(`[API Server] Ignoring invalid username "${username}", using PIN-only mode`)
-        username = ''
-      }
-
-      // Run login sequence in main process (Node.js timers are NOT frozen by macOS lock)
-      // skipWake=true: picoclaw already confirmed LOCK_SCREEN via screen_check,
-      // meaning the PC is awake — skip the 5s S3 wake delay.
-      console.log('[API Server] Starting login sequence in main process (skipWake=true)...')
-      await loginToWindows(password, username || undefined, true)
-      console.log('[API Server] Login sequence completed')
-
-      // Re-lock the vault after successful login.
-      // Spec: "毎回マスターパスワードを要求 — セッション保持なし"
-      // This ensures the next login attempt requires master password again.
-      if (vaultManager.isConfigured() && vaultManager.isUnlocked()) {
-        vaultManager.lock()
-        console.log('[API Server] Vault re-locked after login (one-time use)')
-      }
-
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true }))
     } catch (err) {
@@ -352,6 +301,157 @@ export class ApiServer {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: String(err) }))
     }
+  }
+
+  /**
+   * Shared login implementation — called by both /api/keyboard/login (picoclaw)
+   * and /v1/actions nanokvm_login (zeroclaw).
+   *
+   * Handles vault integration and username sanitization.
+   */
+  private async performLogin(
+    rawPassword?: string,
+    rawUsername?: string
+  ): Promise<{ success: boolean; errorCode?: string; error?: string; userMessage?: string }> {
+    let password: string
+    let username: string
+
+    if (vaultManager.isConfigured()) {
+      if (!vaultManager.isUnlocked()) {
+        console.log('[API Server] Vault is configured but locked — returning vault_locked error')
+        return {
+          success: false,
+          errorCode: 'vault_locked',
+          error: 'マスターパスワードが必要です',
+          userMessage: '🔐 マスターパスワードを入力してください'
+        }
+      }
+      const credential = vaultManager.getCredential()
+      if (!credential?.pin) {
+        return { success: false, errorCode: 'vault_empty', error: 'No credential stored in vault' }
+      }
+      password = credential.pin
+      username = credential.username || ''
+      console.log('[API Server] Using vault credential for login (PIN masked)')
+    } else {
+      if (typeof rawPassword !== 'string' || rawPassword === '') {
+        return { success: false, errorCode: 'no_password', error: 'password field is required' }
+      }
+      password = rawPassword
+      username = typeof rawUsername === 'string' ? rawUsername.trim() : ''
+    }
+
+    if (username && !ApiServer.isValidUsername(username)) {
+      console.warn(`[API Server] Ignoring invalid username "${username}", using PIN-only mode`)
+      username = ''
+    }
+
+    console.log('[API Server] Starting login sequence in main process (skipWake=true)...')
+    await loginToWindows(password, username || undefined, true)
+    console.log('[API Server] Login sequence completed')
+
+    // Re-lock vault after login (one-time use per spec)
+    if (vaultManager.isConfigured() && vaultManager.isUnlocked()) {
+      vaultManager.lock()
+      console.log('[API Server] Vault re-locked after login (one-time use)')
+    }
+
+    return { success: true }
+  }
+
+  /**
+   * Shared email send implementation — called by /v1/actions nanokvm_send_email.
+   * Automates Outlook on the remote Windows PC via keyboard sequences.
+   *
+   * ⚠️ ASCII only: HID keyboard cannot type Japanese/Unicode characters.
+   */
+  private async performSendEmail(
+    to: string,
+    subject: string,
+    body: string
+  ): Promise<{ success: boolean; status: string; message: string }> {
+    if (!this.mainWindow) {
+      return { success: false, status: 'NO_WINDOW', message: 'Main window not available' }
+    }
+
+    const send = (channel: string, data?: unknown): void => {
+      this.mainWindow!.webContents.send(channel, data)
+    }
+    const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+    console.log(`[API Server] nanokvm_send_email: to=${to} subject=${subject}`)
+
+    // Step 1: Open Outlook via Windows Search
+    send('api:keyboard:shortcut', ['MetaLeft', 'KeyS'])
+    await wait(1000)
+    send('api:keyboard:type', 'outlook')
+    await wait(500)
+    send('api:keyboard:shortcut', ['Enter'])
+    await wait(5000)
+
+    // Step 2: Close search bar focus (so Ctrl+N goes to Outlook, not search)
+    send('api:keyboard:shortcut', ['Escape'])
+    await wait(500)
+
+    // Step 3: New email
+    send('api:keyboard:shortcut', ['ControlLeft', 'KeyN'])
+    await wait(2000)
+
+    // Step 4: Verify compose window is open
+    const composeCapture = await this.requestScreenCapture()
+    if (composeCapture.dataUrl && isVisionConfigured()) {
+      const lang = getVisionLanguage()
+      const composeAnalysis = await analyzeScreenWithVision(composeCapture.dataUrl, VISION_PROMPT_EMAIL_COMPOSE, lang)
+      const isOpen = composeAnalysis.toUpperCase().includes('COMPOSE_OPEN') && !composeAnalysis.toUpperCase().includes('COMPOSE_NOT_OPEN')
+      if (!isOpen) {
+        // Retry once
+        send('api:keyboard:shortcut', ['Escape'])
+        await wait(500)
+        send('api:keyboard:shortcut', ['ControlLeft', 'KeyN'])
+        await wait(2000)
+        const retryCapture = await this.requestScreenCapture()
+        if (retryCapture.dataUrl) {
+          const retryAnalysis = await analyzeScreenWithVision(retryCapture.dataUrl, VISION_PROMPT_EMAIL_COMPOSE, lang)
+          if (!retryAnalysis.toUpperCase().includes('COMPOSE_OPEN') || retryAnalysis.toUpperCase().includes('COMPOSE_NOT_OPEN')) {
+            return { success: false, status: 'COMPOSE_NOT_OPEN', message: '❌ 新規メール作成画面が開きませんでした。Outlookが起動しているか確認してください。' }
+          }
+        }
+      }
+    }
+
+    // Step 5: Type recipient, subject, body
+    send('api:keyboard:type', to)
+    await wait(300)
+    send('api:keyboard:shortcut', ['Tab'])
+    await wait(300)
+    send('api:keyboard:type', subject)
+    await wait(300)
+    send('api:keyboard:shortcut', ['Tab'])
+    await wait(300)
+    send('api:keyboard:type', body)
+    await wait(500)
+
+    // Step 6: Send
+    send('api:keyboard:shortcut', ['ControlLeft', 'Enter'])
+    await wait(3000)
+
+    // Step 7: Verify sent
+    if (isVisionConfigured()) {
+      const lang = getVisionLanguage()
+      const sentCapture = await this.requestScreenCapture()
+      if (sentCapture.dataUrl) {
+        const sentPrompt = 'Outlookでメール送信後の画面状態を確認してください。\n1行目に分類キーワードのみ回答:\n- SENT_SUCCESS — 送信完了（コンポーズウィンドウが消えた、送信済みフォルダに表示等）\n- SEND_ERROR — 送信エラーダイアログが表示されている\n- COMPOSE_OPEN — コンポーズウィンドウがまだ開いている'
+        const sentAnalysis = await analyzeScreenWithVision(sentCapture.dataUrl, sentPrompt, lang)
+        const upper = sentAnalysis.toUpperCase()
+        if (upper.includes('SENT_SUCCESS')) {
+          return { success: true, status: 'SENT_SUCCESS', message: '✅ メール送信完了' }
+        } else if (upper.includes('SEND_ERROR')) {
+          return { success: false, status: 'SEND_ERROR', message: '❌ 送信エラーが発生しました。Outlookの画面を確認してください。' }
+        }
+      }
+    }
+
+    return { success: true, status: 'SENT', message: '✅ メール送信操作を実行しました' }
   }
 
   private async handleMouseClick(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -682,50 +782,13 @@ export class ApiServer {
         : ''
       let prompt: string
       if (action === 'lock') {
-        prompt =
-          'Is this a lock screen or a desktop?\n' +
-          'Lock screen indicators:\n' +
-          '- Windows: large clock/time, date, wallpaper background, no taskbar\n' +
-          '- macOS: large time display centered, date below, wallpaper background, no Dock\n' +
-          'Desktop indicators:\n' +
-          '- Windows: taskbar at bottom with icons\n' +
-          '- macOS: menu bar at top (Apple logo) and Dock at bottom with icons\n\n' +
-          'Answer with ONLY one word: LOCK_SCREEN or DESKTOP' + langInstruction
+        prompt = VISION_PROMPT_LOCK + langInstruction
       } else if (action === 'login') {
-        prompt =
-          'After a login attempt, what is currently shown on screen?\n' +
-          'Look carefully for these specific indicators:\n' +
-          '- Windows: TASKBAR at bottom (thin bar with icons) = LOGIN_SUCCESS\n' +
-          '- macOS: Menu bar at top + Dock at bottom = LOGIN_SUCCESS\n' +
-          '- Desktop icons, open windows, Start menu = LOGIN_SUCCESS\n' +
-          '- "PIN is incorrect" or "password is incorrect" error text = LOGIN_FAILED\n' +
-          '- Large clock display, user avatar with PIN/password input field = LOCK_SCREEN\n\n' +
-          'IMPORTANT: If you see a taskbar/Dock/menu bar, it is LOGIN_SUCCESS.\n\n' +
-          'Answer with ONLY one word: LOGIN_SUCCESS or LOGIN_FAILED or LOCK_SCREEN' + langInstruction
+        prompt = VISION_PROMPT_LOGIN + langInstruction
       } else if (action === 'email_compose') {
-        prompt =
-          'Look at the screen. Is a new email compose/draft form currently visible in Microsoft Outlook?\n\n' +
-          'A new email COMPOSE FORM has ALL of the following:\n' +
-          '  - A "To:" or "宛先:" address field (for entering recipient email address)\n' +
-          '  - A "Subject:" or "件名:" text field\n' +
-          '  - A large blank area for typing the email body\n\n' +
-          'It may appear as a separate popup window OR as a full-screen/maximized compose view.\n\n' +
-          'This is NOT a compose form:\n' +
-          '  - The Outlook inbox list showing received emails (no blank To/Subject/Body entry fields)\n' +
-          '  - A read-only email view / reading pane (showing content of a received email)\n' +
-          '  - A dialog box or settings panel\n\n' +
-          'Answer on line 1 with ONLY the classification keyword:\n' +
-          '- COMPOSE_OPEN  — A compose form with blank To/Subject/Body fields is visible\n' +
-          '- COMPOSE_NOT_OPEN — No compose form open (inbox view, reading pane, dialog, or other)\n' +
-          'Line 2+: one sentence describing what is actually visible on screen.' + langInstruction
+        prompt = VISION_PROMPT_EMAIL_COMPOSE + langInstruction
       } else if (action === 'email_sent') {
-        prompt =
-          'After pressing Ctrl+Enter to send an email in Outlook, what is the current screen state?\n\n' +
-          'Answer on line 1 with ONLY the classification keyword:\n' +
-          '- SENT_SUCCESS  — Send complete (compose window closed, returned to Inbox/mail list)\n' +
-          '- SEND_ERROR    — Error dialog is visible (e.g. delivery failure, auth error)\n' +
-          '- COMPOSE_OPEN  — Compose window is still open (email may not have been sent)\n' +
-          'Line 2+: one sentence explanation.' + langInstruction
+        prompt = VISION_PROMPT_EMAIL_SENT + langInstruction
       } else if (action === 'email_outlook_active') {
         prompt =
           'Is Microsoft Outlook the active, frontmost window on this Windows screen?\n\n' +
@@ -1256,6 +1319,290 @@ export class ApiServer {
       console.error('[API Server] Screen verify error:', err)
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: String(err) }))
+    }
+  }
+
+  /**
+   * POST /v1/actions — zeroclaw computer_use compatible endpoint.
+   *
+   * Accepts actions: key_type, key_press, screen_capture, mouse_move, mouse_click, mouse_drag.
+   * Request format: { action, params?, policy?, metadata? }
+   * Response format: { success, data?, error? }
+   *
+   * @see docs/multi-agent-spec.md Section 5.3, Section 12.1
+   */
+  private async handleComputerUseActions(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req)
+      const request = JSON.parse(body) as {
+        action: string
+        params?: Record<string, unknown>
+        policy?: Record<string, unknown>
+        metadata?: Record<string, unknown>
+      }
+
+      if (!request.action) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: false, error: 'action is required' }))
+        return
+      }
+
+      console.log(`[API Server] /v1/actions: action=${request.action}, params=${JSON.stringify(request.params || {})}`)
+
+      switch (request.action) {
+        case 'key_type': {
+          const text = request.params?.text as string
+          if (!text || typeof text !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'params.text is required for key_type' }))
+            return
+          }
+          if (!this.mainWindow) {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'Main window not available' }))
+            return
+          }
+          console.log(`[API Server] /v1/actions key_type: sending ${text.length} chars`)
+          this.mainWindow.webContents.send('api:keyboard:type', text)
+          await new Promise((r) => setTimeout(r, text.length * 220 + 600))
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: {} }))
+          return
+        }
+
+        case 'key_press': {
+          const key = request.params?.key as string
+          if (!key || typeof key !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'params.key is required for key_press' }))
+            return
+          }
+          if (!this.mainWindow) {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'Main window not available' }))
+            return
+          }
+          // Normalize key string — split on "+" for combo keys
+          const keys = this.normalizeKeys(key)
+          console.log(`[API Server] /v1/actions key_press: keys=${JSON.stringify(keys)}`)
+          this.mainWindow.webContents.send('api:keyboard:shortcut', keys)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: {} }))
+          return
+        }
+
+        case 'screen_capture': {
+          if (!this.mainWindow) {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'Main window not available' }))
+            return
+          }
+          const result = await this.requestScreenCapture()
+          if (result.dataUrl) {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, data: { image: result.dataUrl } }))
+          } else {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({
+              success: false,
+              error: `Screen capture failed: ${result.rejectReason || 'unknown'}`
+            }))
+          }
+          return
+        }
+
+        case 'mouse_move': {
+          const x = request.params?.x as number
+          const y = request.params?.y as number
+          if (x === undefined || y === undefined) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'params.x and params.y are required for mouse_move' }))
+            return
+          }
+          if (!this.mainWindow) {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'Main window not available' }))
+            return
+          }
+          this.mainWindow.webContents.send('api:mouse:move', { x, y })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: {} }))
+          return
+        }
+
+        case 'mouse_click': {
+          const cx = request.params?.x as number
+          const cy = request.params?.y as number
+          const button = (request.params?.button as string) || 'left'
+          if (cx === undefined || cy === undefined) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'params.x and params.y are required for mouse_click' }))
+            return
+          }
+          if (!this.mainWindow) {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'Main window not available' }))
+            return
+          }
+          this.mainWindow.webContents.send('api:mouse:click', { x: cx, y: cy, button })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: {} }))
+          return
+        }
+
+        case 'mouse_drag': {
+          const fromX = request.params?.from_x as number
+          const fromY = request.params?.from_y as number
+          const toX = request.params?.to_x as number
+          const toY = request.params?.to_y as number
+          if (fromX === undefined || fromY === undefined || toX === undefined || toY === undefined) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({
+              success: false,
+              error: 'params.from_x, from_y, to_x, to_y are required for mouse_drag'
+            }))
+            return
+          }
+          if (!this.mainWindow) {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'Main window not available' }))
+            return
+          }
+          this.mainWindow.webContents.send('api:mouse:drag', { fromX, fromY, toX, toY })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: {} }))
+          return
+        }
+
+        /**
+         * High-level NanoKVM actions — shared implementation for both picoclaw
+         * (which has these as built-in Go tools) and zeroclaw (which calls them
+         * via computer_use). The actual implementation lives here once.
+         *
+         * @see docs/multi-agent-spec.md Section 5 (HID 操作の統合)
+         * @see docs/picoclaw-lock-login-spec.md
+         */
+        case 'nanokvm_lock': {
+          // Win+L → wait 3s → screen verify
+          if (!this.mainWindow) {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'Main window not available' }))
+            return
+          }
+          console.log('[API Server] /v1/actions nanokvm_lock: sending Win+L')
+          const lockKeys = this.normalizeKeys('Win+L')
+          this.mainWindow.webContents.send('api:keyboard:shortcut', lockKeys)
+          await new Promise((r) => setTimeout(r, 3000))
+
+          // Verify with Vision if configured
+          let lockMessage = '✅ ロック操作を実行しました'
+          let lockStatus = 'LOCK_SENT'
+          if (isVisionConfigured()) {
+            try {
+              const lockCapture = await this.requestScreenCapture()
+              if (lockCapture.dataUrl) {
+                const lang = getVisionLanguage()
+                const lockAnalysis = await analyzeScreenWithVision(lockCapture.dataUrl, VISION_PROMPT_LOCK, lang)
+                console.log(`[API Server] nanokvm_lock Vision result: ${lockAnalysis.substring(0, 80)}`)
+                const upper = lockAnalysis.toUpperCase()
+                if (upper.includes('LOCK_SCREEN')) {
+                  lockStatus = 'LOCK_SCREEN'
+                  lockMessage = '✅ ロック完了: ロック画面が確認できました'
+                } else if (upper.includes('DESKTOP')) {
+                  lockStatus = 'DESKTOP'
+                  lockMessage = '⚠️ ロック未完了: まだデスクトップが表示されています'
+                }
+              }
+            } catch (visionErr) {
+              console.warn('[API Server] nanokvm_lock Vision error (ignoring):', visionErr)
+              // Vision error is non-fatal — Win+L was already sent
+            }
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: { status: lockStatus, message: lockMessage } }))
+          return
+        }
+
+        case 'nanokvm_login': {
+          // Perform full login sequence with vault support
+          // params.password and params.username are optional when vault is configured
+          const loginPassword = request.params?.password as string | undefined
+          const loginUsername = request.params?.username as string | undefined
+          console.log('[API Server] /v1/actions nanokvm_login: starting login sequence')
+          const loginResult = await this.performLogin(loginPassword, loginUsername)
+          if (!loginResult.success) {
+            res.writeHead(loginResult.errorCode === 'vault_locked' ? 403 : 400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({
+              success: false,
+              error: loginResult.errorCode,
+              message: loginResult.error,
+              user_message: loginResult.userMessage,
+              data: { status: loginResult.errorCode }
+            }))
+            return
+          }
+          // Optional: verify login result with Vision
+          let loginMessage = '✅ ログイン操作を実行しました'
+          let loginStatus = 'LOGIN_SENT'
+          if (isVisionConfigured()) {
+            try {
+              await new Promise((r) => setTimeout(r, 3000)) // wait for desktop to render
+              const loginCapture = await this.requestScreenCapture()
+              if (loginCapture.dataUrl) {
+                const lang = getVisionLanguage()
+                const loginAnalysis = await analyzeScreenWithVision(loginCapture.dataUrl, VISION_PROMPT_LOGIN, lang)
+                console.log(`[API Server] nanokvm_login Vision result: ${loginAnalysis.substring(0, 80)}`)
+                const upper = loginAnalysis.toUpperCase()
+                if (upper.includes('LOGIN_SUCCESS') || upper.includes('DESKTOP') || upper.includes('TASKBAR')) {
+                  loginStatus = 'LOGIN_SUCCESS'
+                  loginMessage = '✅ ログイン成功: デスクトップ画面が確認できました'
+                } else if (upper.includes('LOGIN_FAILED') || upper.includes('WRONG') || upper.includes('INCORRECT')) {
+                  loginStatus = 'LOGIN_FAILED'
+                  loginMessage = '❌ ログイン失敗: PIN/パスワードが正しくないようです'
+                } else if (upper.includes('LOCK_SCREEN') || upper.includes('SIGN_IN')) {
+                  loginStatus = 'LOCK_SCREEN'
+                  loginMessage = '⚠️ ログイン未完了: まだサインイン画面が表示されています'
+                }
+              }
+            } catch (visionErr) {
+              console.warn('[API Server] nanokvm_login Vision error (ignoring):', visionErr)
+              // Vision error is non-fatal — login keys were already sent
+            }
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: { status: loginStatus, message: loginMessage } }))
+          return
+        }
+
+        case 'nanokvm_send_email': {
+          // Send email via Outlook (ASCII only)
+          const emailTo = request.params?.to as string
+          const emailSubject = request.params?.subject as string
+          const emailBody = request.params?.body as string
+          if (!emailTo || !emailSubject) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: 'params.to and params.subject are required for nanokvm_send_email' }))
+            return
+          }
+          console.log(`[API Server] /v1/actions nanokvm_send_email: to=${emailTo}`)
+          const emailResult = await this.performSendEmail(emailTo, emailSubject, emailBody || '')
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({
+            success: emailResult.success,
+            data: { status: emailResult.status, message: emailResult.message }
+          }))
+          return
+        }
+
+        default:
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, error: `Unknown action: ${request.action}` }))
+          return
+      }
+    } catch (err) {
+      console.error('[API Server] Error in /v1/actions:', err)
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: false, error: String(err) }))
     }
   }
 

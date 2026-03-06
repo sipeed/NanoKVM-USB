@@ -22,6 +22,11 @@ extraResources:
     filter:
       - ffmpeg
       - ffmpeg.exe
+  - from: resources/bin/
+    to: bin/
+    filter:
+      - zeroclaw
+      - zeroclaw.exe
 
 win:
   executableName: NanoKVM-USB

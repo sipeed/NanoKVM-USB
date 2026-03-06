@@ -1,0 +1,55 @@
+graph TB
+    subgraph Renderer["Renderer Process (React)"]
+        ChatUI["Chat UI"]
+        SettingsUI["Settings UI<br>Agent選択 + LLM設定"]
+        KeyMouse["Keyboard / Mouse<br>直接 HID 操作"]
+        ChatAtoms["Jotai Atoms<br>chatMessages, agentType"]
+    end
+
+    subgraph Main["Main Process (Node.js)"]
+        AgentRouter["AgentRouter<br>アクティブエージェントを自動ルーティング"]
+        TelegramSvc["TelegramService<br>Bot API polling + 応答送信"]
+        PicoclawMgr["PicoclawManager<br>(Go ラッパー)"]
+        ZeroclawMgr["ZeroclawAdapter<br>(Rust ラッパー)"]
+        ConfigSync["ConfigSyncService<br>共通設定 ⇔ 各設定ファイル同期"]
+        ApiServer["ApiServer (:18792)<br>HID操作用ローカルAPI"]
+        VaultMgr["VaultManager<br>AES-256-GCM Vault"]
+        VisionAnalyzer["VisionAnalyzer<br>画面検証 (共通)"]
+        ModelUpdater["ModelUpdater<br>モデルリスト自動更新"]
+        CaptureEngine["CaptureEngine<br>ffmpeg / Renderer IPC"]
+    end
+
+    subgraph Binaries["外部バイナリ (one-shot のみ)"]
+        Picoclaw["picoclaw agent -m<br>(Go バイナリ)"]
+        Zeroclaw["zeroclaw agent -m<br>(Rust バイナリ)"]
+    end
+
+    subgraph External["外部サービス"]
+        Telegram["Telegram Bot API"]
+        LLMProvider["LLM Provider<br>(GitHub Copilot / Groq / OpenAI 等)"]
+    end
+
+    ChatUI -->|"IPC: AGENT_SEND_MESSAGE"| AgentRouter
+    TelegramSvc -->|"sendMessage()"| AgentRouter
+    Telegram -->|"Long-polling"| TelegramSvc
+    TelegramSvc -->|"応答送信"| Telegram
+
+    SettingsUI -->|"IPC: AGENT_UPDATE_CONFIG"| ConfigSync
+    SettingsUI -->|"IPC: AGENT_SET_TYPE"| AgentRouter
+
+    AgentRouter -->|"picoclaw選択時"| PicoclawMgr
+    AgentRouter -->|"zeroclaw選択時"| ZeroclawMgr
+    ConfigSync -->|"JSON書き込み"| PicoclawMgr
+    ConfigSync -->|"TOML書き込み"| ZeroclawMgr
+
+    PicoclawMgr -->|"spawn (one-shot)"| Picoclaw
+    ZeroclawMgr -->|"spawn (one-shot)"| Zeroclaw
+
+    Picoclaw -->|"HTTP"| ApiServer
+    Zeroclaw -->|"HTTP (computer_use)"| ApiServer
+
+    ApiServer -->|"HID送信"| SerialPort["Serial Port → NanoKVM-USB"]
+    ApiServer -->|"screen/capture"| CaptureEngine
+    VisionAnalyzer -->|"Vision LLM API"| LLMProvider
+
+    KeyMouse -->|"IPC: SEND_KEYBOARD/MOUSE"| SerialPort

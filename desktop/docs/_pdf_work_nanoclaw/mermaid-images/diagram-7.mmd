@@ -1,0 +1,30 @@
+flowchart TD
+    Command["🐾 ロック or ログイン<br>コマンド実行"] --> HID["⌨️ HID キー入力送信"]
+
+    HID --> Wait["⏱️ 待機"]
+    Wait -. "Lock: 3秒 / Login: 15秒" .-> WaitNote[" "]
+
+    Wait --> Capture["📺 スクリーンキャプチャ<br>(HDMI → JPEG)"]
+    Capture --> VisionLLM["☁️ Vision LLM<br>画面を解析"]
+
+    VisionLLM --> Result{"判定結果"}
+
+    Result -- "LOCK_SCREEN" --> LockResult{"操作種別"}
+    Result -- "LOGIN_SUCCESS" --> LoginOK["✅ ログイン成功"]
+    Result -- "LOGIN_FAILED" --> LoginFail["❌ ログイン失敗<br>+ Enter でエラー解除"]
+    Result -- "DESKTOP" --> DesktopResult{"操作種別"}
+    Result -- "BLACK_SCREEN" --> Wake["⏰ ウェイクアップ試行<br>マウスクリック+Space"]
+
+    LockResult -- "ロック操作" --> LockOK["✅ ロック成功"]
+    LockResult -- "ログイン操作" --> LockWarn["⚠️ まだロック画面"]
+
+    DesktopResult -- "ロック操作" --> DesktopWarn["⚠️ ロック失敗"]
+    DesktopResult -- "ログイン操作" --> DesktopOK["✅ ログイン成功"]
+
+    Wake --> Retry["4秒待機後<br>再キャプチャ（最大2回）"]
+
+    style LockOK fill:#e8f5e9,stroke:#4caf50
+    style LoginOK fill:#e8f5e9,stroke:#4caf50
+    style DesktopOK fill:#e8f5e9,stroke:#4caf50
+    style LoginFail fill:#ffebee,stroke:#f44336
+    style WaitNote fill:none,stroke:none

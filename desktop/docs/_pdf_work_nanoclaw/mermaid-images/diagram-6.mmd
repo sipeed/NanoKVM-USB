@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant TUser as 📱 Telegram ユーザー
+    participant TG as Telegram Bot API
+    participant TS as TelegramService<br>(Electron Main)
+    participant Router as AgentRouter
+    participant Mgr as Manager
+    participant Bin as Agent Binary<br>(one-shot)
+    participant API as NanoKVM API (:18792)
+    participant HID as Serial Port → NanoKVM-USB
+
+    TUser->>TG: メッセージ送信
+    TG->>TS: getUpdates() レスポンス
+    TS->>TS: ユーザーID検証 (allowedUserIds)
+    TS->>Router: sendMessage(text, lang, sessionId)
+    Router->>Mgr: sendMessage(text, lang, sessionId)
+    Mgr->>Bin: spawn agent -m "text" (one-shot)
+    Bin->>API: HID操作
+    API->>HID: シリアルポート経由で送信
+    Bin-->>Mgr: stdout → 応答テキスト
+    Mgr-->>Router: 応答
+    Router-->>TS: 応答テキスト
+    TS->>TG: sendMessage(chatId, 応答)
+    TG-->>TUser: 応答表示

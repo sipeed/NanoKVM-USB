@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant UI as Settings UI
+    participant Router as AgentRouter
+    participant TS as TelegramService
+    participant OldMgr as 旧 Manager
+    participant NewMgr as 新 Manager
+
+    UI->>Router: setType("zeroclaw")
+    Router->>OldMgr: cleanup()
+    OldMgr-->>Router: 完了
+    Router->>NewMgr: initialize()
+    NewMgr-->>Router: 完了
+    Note over TS: TelegramService は停止不要<br>AgentRouter が宛先を切り替えただけ
+
+    Note over TS: 次のメッセージ受信時...
+    TS->>Router: sendMessage(text, lang, sid)
+    Router->>NewMgr: sendMessage() [zeroclaw]
+    NewMgr-->>Router: 応答
+    Router-->>TS: 応答
+    Note over TS: 同じ Bot Token で新エージェントが自動的に応答

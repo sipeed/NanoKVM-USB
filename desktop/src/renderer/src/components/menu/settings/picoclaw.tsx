@@ -2,9 +2,12 @@ import { ReactElement, useEffect, useRef, useState } from 'react'
 import { Button, Input, message, Select, Space, Tooltip, Switch, Divider, Modal } from 'antd'
 import { ClipboardIcon, ExternalLinkIcon, Eye, EyeOff, Shield, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAtom } from 'jotai'
 
 import { IpcEvents } from '@common/ipc-events'
+import { AgentType } from '@common/agent-types'
 import { stripProtocolPrefix, ensureProtocolPrefix, getProtocolPrefix } from '@common/known-protocols'
+import { agentTypeAtom } from '@renderer/jotai/chat'
 import { ModelUpdateSettings, ModelUpdateSettingsRef } from './model-update'
 
 interface PicoclawConfig {
@@ -107,10 +110,10 @@ const PROVIDER_UI_META: Record<
   groq: {
     models: {
       'llama-3.1-8b-instant': { label: 'Llama 3.1 8B Instant 💨 (推奨)', description: '軽量・超高速・トークン節約' },
-      'meta-llama/llama-4-scout-17b-16e-instruct': { label: 'Llama 4 Scout 👁️ (Vision推奨)', description: 'Vision対応・無料・高速・最新', vision: true },
-      'meta-llama/llama-4-maverick-17b-128e-instruct': { label: 'Llama 4 Maverick 👁️', description: 'Vision対応・無料・高品質', vision: true },
-      'llama-3.2-11b-vision-preview': { label: 'Llama 3.2 11B Vision 👁️', description: 'Vision対応・無料・高速', vision: true },
-      'llama-3.3-70b-versatile': { label: 'Llama 3.3 70B', description: '大型・高品質・トークン消費大' },
+      'meta-llama/llama-4-scout-17b-16e-instruct': { label: 'Llama 4 Scout 👁️ ⚠️', description: 'Vision可・エージェント非推奨（Groqでツール呼び出し不安定）', vision: true },
+      'meta-llama/llama-4-maverick-17b-128e-instruct': { label: 'Llama 4 Maverick 👁️ ⚠️', description: 'Vision可・エージェント非推奨（Groqでツール呼び出し不安定）', vision: true },
+      'llama-3.2-11b-vision-preview': { label: 'Llama 3.2 11B Vision 👁️ (Vision推奨)', description: 'Vision+ツール呼び出し対応・エージェント動作確認済', vision: true },
+      'llama-3.3-70b-versatile': { label: 'Llama 3.3 70B (テキスト推奨)', description: '大型・高品質・ツール呼び出し安定・128K' },
       'mixtral-8x7b-32768': { label: 'Mixtral 8x7B', description: '中型・バランス' }
     }
   },
@@ -267,7 +270,8 @@ const FALLBACK_PROVIDERS: ProviderOption[] = [
     apiUrl: 'https://console.groq.com/keys', authMethod: 'api_key',
     models: [
       { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant 💨 (推奨)', description: '軽量・超高速', vision: false },
-      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', description: '大型・高品質', vision: false }
+      { value: 'llama-3.2-11b-vision-preview', label: 'Llama 3.2 11B Vision 👁️ (Vision推奨)', description: 'Vision+ツール呼び出し対応', vision: true },
+      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (テキスト推奨)', description: '大型・高品質・ツール呼び出し安定', vision: false }
     ]
   },
   {
@@ -294,6 +298,10 @@ const FALLBACK_PROVIDERS: ProviderOption[] = [
 
 export const PicoclawSettings = (): ReactElement => {
   const { t } = useTranslation()
+
+  // Agent type (shared via Jotai atom)
+  const [agentType, setAgentType] = useAtom(agentTypeAtom)
+  const [agentVersion, setAgentVersion] = useState<string>('')
 
   const [loading, setLoading] = useState(false)
   const [config, setConfig] = useState<PicoclawConfig>({})
@@ -401,8 +409,7 @@ export const PicoclawSettings = (): ReactElement => {
   const [telegramEnabled, setTelegramEnabled] = useState<boolean>(false)
   const [telegramToken, setTelegramToken] = useState<string>('')
   const [telegramUserId, setTelegramUserId] = useState<string>('')
-  const [gatewayRunning, setGatewayRunning] = useState<boolean>(false)
-  const [picoclawVersion, setPicoclawVersion] = useState<string>('')
+  const [telegramRunning, setTelegramRunning] = useState<boolean>(false)
 
   // Vision LLM settings (separate from chat LLM)
   const [visionProvider, setVisionProvider] = useState<string>('')
@@ -635,12 +642,49 @@ export const PicoclawSettings = (): ReactElement => {
   }
 
   useEffect(() => {
+    loadAgentType()
     loadProviders()
     loadConfig()
-    loadGatewayStatus()
+    loadTelegramStatus()
     loadVersion()
     loadVaultStatus()
   }, [])
+
+  // Reload version when agent type changes
+  useEffect(() => {
+    loadVersion()
+  }, [agentType])
+
+  /** Load agent type from backend */
+  async function loadAgentType(): Promise<void> {
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.AGENT_GET_TYPE)
+      if (result.success && result.type) {
+        setAgentType(result.type as AgentType)
+      }
+    } catch (err) {
+      console.error('Failed to load agent type:', err)
+    }
+  }
+
+  /** Handle agent type change */
+  async function handleAgentTypeChange(value: AgentType): Promise<void> {
+    setLoading(true)
+    try {
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.AGENT_SET_TYPE, value)
+      if (result.success) {
+        setAgentType(value)
+        message.success(t('settings.picoclaw.agentSwitched', { agent: value }))
+      } else {
+        message.error(result.error || t('settings.picoclaw.agentSwitchFailed'))
+      }
+    } catch (err) {
+      console.error('Failed to switch agent type:', err)
+      message.error(String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function loadProviders(): Promise<void> {
     try {
@@ -719,23 +763,26 @@ export const PicoclawSettings = (): ReactElement => {
 
   async function loadVersion(): Promise<void> {
     try {
-      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GET_VERSION)
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.AGENT_GET_VERSION)
       if (result.success && result.version) {
-        setPicoclawVersion(result.version)
+        setAgentVersion(result.version)
+      } else {
+        setAgentVersion('')
       }
     } catch (err) {
-      console.error('Failed to load picoclaw version:', err)
+      console.error('Failed to load agent version:', err)
+      setAgentVersion('')
     }
   }
 
-  async function loadGatewayStatus(): Promise<void> {
+  async function loadTelegramStatus(): Promise<void> {
     try {
-      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_GATEWAY_STATUS)
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.TELEGRAM_STATUS)
       if (result.success && result.status) {
-        setGatewayRunning(result.status.running || false)
+        setTelegramRunning(result.status.running || false)
       }
     } catch (err) {
-      console.error('Failed to load gateway status:', err)
+      console.error('Failed to load telegram status:', err)
     }
   }
 
@@ -869,18 +916,8 @@ export const PicoclawSettings = (): ReactElement => {
         message.success(t('settings.picoclaw.saved'))
         await loadConfig()
 
-        // Auto-restart gateway if it's running so it picks up the new config
-        if (gatewayRunning) {
-          try {
-            await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_STOP_GATEWAY)
-            await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_START_GATEWAY)
-            message.info('Telegram Gatewayを再起動しました（新しい設定を適用）')
-          } catch (restartErr) {
-            console.error('Failed to restart gateway:', restartErr)
-            message.warning('Gateway再起動に失敗しました。手動で再起動してください。')
-            setGatewayRunning(false)
-          }
-        }
+        // TelegramService is agent-independent — no restart needed on config save.
+        // It routes through AgentRouter which always uses the active adapter.
       } else {
         message.error(result.error || 'Failed to save config')
       }
@@ -900,23 +937,25 @@ export const PicoclawSettings = (): ReactElement => {
 
     setLoading(true)
     try {
-      // Save first
+      // Save first so the handler reads the latest values
       await handleSave()
 
-      // Test with a simple message
+      // Test the API key directly — avoids zeroclaw overhead (context size, binary spawn, etc.)
       const result = await window.electron.ipcRenderer.invoke(
-        IpcEvents.PICOCLAW_SEND_MESSAGE,
-        'Hello! Please respond with a short greeting.'
+        IpcEvents.AGENT_TEST_CONNECTION,
+        provider,
+        apiKey,
+        model
       )
 
       if (result.success) {
-        message.success(t('settings.picoclaw.testSuccess'))
-        console.log('Picoclaw response:', result.response)
+        const latency = result.latencyMs ? ` (${result.latencyMs}ms)` : ''
+        message.success(t('settings.picoclaw.testSuccess') + latency)
       } else {
         message.error(result.error || 'Test failed')
       }
     } catch (err) {
-      console.error('Failed to test picoclaw:', err)
+      console.error('Failed to test connection:', err)
       message.error(String(err))
     } finally {
       setLoading(false)
@@ -934,16 +973,16 @@ export const PicoclawSettings = (): ReactElement => {
       // Save config first
       await handleSave()
 
-      // Start gateway
-      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_START_GATEWAY)
+      // Start TelegramService
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.TELEGRAM_START)
       if (result.success) {
-        message.success('Telegram Gateway起動中...')
-        setGatewayRunning(true)
+        message.success('Telegram 起動中...')
+        setTelegramRunning(true)
       } else {
-        message.error(result.error || 'Gateway起動失敗')
+        message.error(result.error || 'Telegram 起動失敗')
       }
     } catch (err) {
-      console.error('Failed to start gateway:', err)
+      console.error('Failed to start Telegram:', err)
       message.error(String(err))
     } finally {
       setLoading(false)
@@ -953,15 +992,15 @@ export const PicoclawSettings = (): ReactElement => {
   async function handleStopGateway(): Promise<void> {
     setLoading(true)
     try {
-      const result = await window.electron.ipcRenderer.invoke(IpcEvents.PICOCLAW_STOP_GATEWAY)
+      const result = await window.electron.ipcRenderer.invoke(IpcEvents.TELEGRAM_STOP)
       if (result.success) {
-        message.success('Telegram Gateway停止しました')
-        setGatewayRunning(false)
+        message.success('Telegram 停止しました')
+        setTelegramRunning(false)
       } else {
-        message.error(result.error || 'Gateway停止失敗')
+        message.error(result.error || 'Telegram 停止失敗')
       }
     } catch (err) {
-      console.error('Failed to stop gateway:', err)
+      console.error('Failed to stop Telegram:', err)
       message.error(String(err))
     } finally {
       setLoading(false)
@@ -1054,9 +1093,9 @@ export const PicoclawSettings = (): ReactElement => {
       <div>
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-semibold">{t('settings.picoclaw.title')}</h2>
-          {picoclawVersion && (
+          {agentVersion && (
             <span className="rounded bg-neutral-700 px-2 py-0.5 text-xs text-neutral-400">
-              picoclaw {picoclawVersion}
+              {agentType} {agentVersion}
             </span>
           )}
         </div>
@@ -1064,6 +1103,26 @@ export const PicoclawSettings = (): ReactElement => {
       </div>
 
       <div className="space-y-4">
+        {/* Agent Type Selection */}
+        <div>
+          <label className="mb-2 block text-sm font-medium">
+            {t('settings.picoclaw.agentType')}
+          </label>
+          <Select
+            value={agentType}
+            onChange={(value) => handleAgentTypeChange(value as AgentType)}
+            className="w-full"
+            size="large"
+            options={[
+              { value: 'picoclaw', label: `⚙️ ${t('settings.picoclaw.agentTypePicoclaw')}` },
+              { value: 'zeroclaw', label: `🦀 ${t('settings.picoclaw.agentTypeZeroclaw')}` }
+            ]}
+          />
+          <p className="mt-1 text-xs text-neutral-500">
+            {t('settings.picoclaw.agentTypeHint')}
+          </p>
+        </div>
+
         {/* Provider Selection */}
         <div>
           <label className="mb-2 block text-sm font-medium">
@@ -1612,7 +1671,7 @@ export const PicoclawSettings = (): ReactElement => {
         {/* Telegram Bot Settings */}
         <Divider />
         <div>
-          <h3 className="mb-4 text-lg font-semibold">Telegram Bot設定</h3>
+          <h3 className="mb-4 text-lg font-semibold">📡 Telegram</h3>
           
           {/* Enable Telegram */}
           <div className="mb-4 flex items-center justify-between">
@@ -1653,27 +1712,27 @@ export const PicoclawSettings = (): ReactElement => {
                 </p>
               </div>
 
-              {/* Gateway Control */}
+              {/* Telegram Control */}
               <div className="rounded-lg bg-neutral-800 p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="font-medium">Gateway状態</span>
-                  <span className={gatewayRunning ? 'text-green-500' : 'text-neutral-500'}>
-                    {gatewayRunning ? '●実行中' : '○停止中'}
+                  <span className="font-medium">Telegram状態</span>
+                  <span className={telegramRunning ? 'text-green-500' : 'text-neutral-500'}>
+                    {telegramRunning ? '●実行中' : '○停止中'}
                   </span>
                 </div>
                 <Space>
-                  {!gatewayRunning ? (
+                  {!telegramRunning ? (
                     <Button type="primary" onClick={handleStartGateway} loading={loading}>
-                      🚀 Gateway起動
+                      🚀 開始
                     </Button>
                   ) : (
                     <Button danger onClick={handleStopGateway} loading={loading}>
-                      ⏹ Gateway停止
+                      ⏹ 停止
                     </Button>
                   )}
                 </Space>
                 <p className="mt-2 text-xs text-neutral-400">
-                  Gateway起動後、Telegramボットにメッセージを送信できます
+                  Telegram開始後、ボットにメッセージを送信できます。エージェント切り替え時も再起動不要です。
                 </p>
               </div>
             </>
