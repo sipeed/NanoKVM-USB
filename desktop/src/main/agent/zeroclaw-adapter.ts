@@ -371,11 +371,19 @@ export class ZeroclawAdapter implements AgentAdapter {
         return `📷 ${result}`
       } else {
         const error = (json.error as string) || 'unknown'
+        const rejectReason = (json.rejectReason as string) || ''
         if (error === 'Vision not configured') {
           return '📷 画面のキャプチャは成功しましたが、Vision LLM が設定されていないため内容を説明できません。設定から Vision LLM を有効にしてください。'
         }
         if (error === 'Screen capture failed') {
-          return '❌ 画面のキャプチャに失敗しました。NanoKVM-USB が接続されているか確認してください。'
+          // macOS locks camera/capture devices when the Mac screen is locked
+          if (rejectReason.includes('black/no-signal') || rejectReason.includes('zero bytes')) {
+            return '❌ 画面キャプチャが黒フレームを返しました。\n\nmacOS はスクリーンロック中、USB キャプチャデバイスへのアクセスを停止します。Mac をロックしたままにしているため、NanoKVM-USB からの映像が取得できない状態です。\n\n👉 Mac のロックを解除してから再度お試しください。'
+          }
+          if (rejectReason.includes('frozen')) {
+            return '❌ ビデオストリームが停止しています（映像フリーズ）。\n\nmacOS のスクリーンロック中は USB キャプチャデバイスへのアクセスが制限されるため、ffmpeg でのキャプチャも黒フレームになります。\n\n👉 Mac のロックを解除してから再度お試しください。'
+          }
+          return `❌ 画面のキャプチャに失敗しました。NanoKVM-USB が接続されているか確認してください。(理由: ${rejectReason || 'unknown'})`
         }
         return `❌ 画面分析に失敗しました: ${error}`
       }

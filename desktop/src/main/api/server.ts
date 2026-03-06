@@ -566,7 +566,7 @@ export class ApiServer {
       const capture = await this.requestScreenCapture()
       if (!capture.dataUrl) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ success: false, error: 'Screen capture failed' }))
+        res.end(JSON.stringify({ success: false, error: 'Screen capture failed', rejectReason: capture.rejectReason || 'unknown' }))
         return
       }
       const lang = getVisionLanguage()
