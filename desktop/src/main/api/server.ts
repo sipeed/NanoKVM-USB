@@ -563,7 +563,27 @@ export class ApiServer {
         res.end(JSON.stringify({ success: false, error: 'Vision not configured' }))
         return
       }
-      const capture = await this.requestScreenCapture()
+
+      // First capture attempt
+      let capture = await this.requestScreenCapture()
+
+      // If black/frozen screen, send HID wake signal to target Windows PC and retry
+      // (same logic as handleScreenVerify — wakes Windows from sleep so HDMI comes back)
+      const isSleepOrFrozen = (reason?: string): boolean =>
+        !!(reason?.includes('black/no-signal') || reason?.includes('solid-color/sleep') ||
+           reason?.includes('zero bytes') || reason?.includes('frozen'))
+
+      const MAX_WAKE_ATTEMPTS = 2
+      for (let attempt = 1; attempt <= MAX_WAKE_ATTEMPTS && !capture.dataUrl && isSleepOrFrozen(capture.rejectReason); attempt++) {
+        console.log(`[API Server] /api/screen/analyze: black/frozen screen, wake attempt ${attempt}/${MAX_WAKE_ATTEMPTS}...`)
+        this.mainWindow!.webContents.send('api:mouse:wake')
+        // Wait for Windows PC to wake and HDMI signal to stabilize
+        await new Promise((r) => setTimeout(r, 4000))
+        console.log(`[API Server] /api/screen/analyze: retrying capture after wake attempt ${attempt}...`)
+        capture = await this.requestScreenCapture()
+        console.log(`[API Server] /api/screen/analyze: retry ${attempt} result = ${capture.dataUrl ? `data(${Math.round(capture.dataUrl.length / 1024)}KB)` : `null (${capture.rejectReason})`}`)
+      }
+
       if (!capture.dataUrl) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ success: false, error: 'Screen capture failed', rejectReason: capture.rejectReason || 'unknown' }))
