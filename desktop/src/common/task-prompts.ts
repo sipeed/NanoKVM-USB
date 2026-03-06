@@ -182,6 +182,27 @@ export function isLockIntent(message: string): boolean {
 }
 
 /**
+ * Detect whether the user message likely intends a screen capture / view operation.
+ */
+export function isScreenCaptureIntent(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('画面') ||
+    lower.includes('スクリーン') ||
+    lower.includes('screen') ||
+    lower.includes('screenshot') ||
+    lower.includes('capture') ||
+    lower.includes('キャプチャ') ||
+    lower.includes('見せて') ||
+    lower.includes('見てみて') ||
+    lower.includes('確認して') ||
+    lower.includes('今どんな') ||
+    lower.includes('何が表示') ||
+    lower.includes('what\'s on')
+  )
+}
+
+/**
  * Detect whether the user message likely intends an email send operation.
  */
 export function isEmailIntent(message: string): boolean {

@@ -20,7 +20,7 @@ import os from 'os'
 import { AgentAdapter, AgentConfigResult, AgentProvidersResult } from './adapter'
 import { CommonAgentConfig } from '@common/agent-config'
 import type { ConfigSyncService } from './config-sync'
-import { buildNanokvmSystemContext, isLockIntent, isLoginIntent } from '@common/task-prompts'
+import { buildNanokvmSystemContext, isLockIntent, isLoginIntent, isScreenCaptureIntent } from '@common/task-prompts'
 import { vaultManager } from '../vault/manager'
 
 /** Conversation history entry for context management */
@@ -216,6 +216,14 @@ export class ZeroclawAdapter implements AgentAdapter {
       return this.callActionsApiDirect({ action: 'nanokvm_login' }, language)
     }
 
+    // Screen capture intent: "画面確認して", "スクリーンショット" etc.
+    // Bypass LLM entirely — gpt-4o-mini refuses screen_capture in natural language.
+    // Call /api/screen/analyze directly (capture + Vision LLM description).
+    if (isScreenCaptureIntent(message)) {
+      console.log('[Zeroclaw] Detected screen capture intent — calling /api/screen/analyze directly')
+      return this.callScreenAnalyzeApiDirect(language)
+    }
+
     this.history.push({ role: 'user', content: message, timestamp: Date.now() })
 
     // Build context-enriched prompt with conversation history + NanoKVM system context
@@ -318,6 +326,62 @@ export class ZeroclawAdapter implements AgentAdapter {
     } catch (err) {
       console.error(`[Zeroclaw] /v1/actions call failed for ${request.action}:`, err)
       return `❌ API呼び出しに失敗しました: ${err instanceof Error ? err.message : String(err)}`
+    }
+  }
+
+  /**
+   * Call /api/screen/analyze directly (screen capture + Vision LLM description).
+   * Bypasses the LLM when screen capture intent is detected, because gpt-4o-mini
+   * refuses to execute screen_capture via JSON in natural language responses.
+   */
+  private async callScreenAnalyzeApiDirect(language: string): Promise<string> {
+    try {
+      const http = await import('http')
+      const prompt =
+        language === 'ja'
+          ? '画面の内容を詳しく説明してください。何が表示されているか、重要な情報（テキスト、ウィンドウ、ダイアログなど）を教えてください。'
+          : 'Describe the screen contents in detail. What is displayed, including important information like text, windows, dialogs, etc.'
+      const payload = JSON.stringify({ prompt })
+
+      const responseBody = await new Promise<string>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port: 18792,
+            path: '/api/screen/analyze',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+          },
+          (res) => {
+            let data = ''
+            res.on('data', (chunk) => { data += chunk })
+            res.on('end', () => resolve(data))
+          }
+        )
+        req.on('error', reject)
+        req.write(payload)
+        req.end()
+      })
+
+      const json = JSON.parse(responseBody) as Record<string, unknown>
+      console.log(`[Zeroclaw] /api/screen/analyze: success=${json.success}`)
+
+      if (json.success) {
+        const result = (json.result as string) || '画面の分析が完了しましたが、結果が空でした。'
+        return `📷 ${result}`
+      } else {
+        const error = (json.error as string) || 'unknown'
+        if (error === 'Vision not configured') {
+          return '📷 画面のキャプチャは成功しましたが、Vision LLM が設定されていないため内容を説明できません。設定から Vision LLM を有効にしてください。'
+        }
+        if (error === 'Screen capture failed') {
+          return '❌ 画面のキャプチャに失敗しました。NanoKVM-USB が接続されているか確認してください。'
+        }
+        return `❌ 画面分析に失敗しました: ${error}`
+      }
+    } catch (err) {
+      console.error('[Zeroclaw] /api/screen/analyze call failed:', err)
+      return `❌ 画面キャプチャAPIの呼び出しに失敗しました: ${err instanceof Error ? err.message : String(err)}`
     }
   }
 
