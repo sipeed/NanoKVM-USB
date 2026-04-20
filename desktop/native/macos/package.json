@@ -1,0 +1,8 @@
+{
+  "name": "nanokvm-mouse-hook",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "node-addon-api": "^8.0.0"
+  }
+}

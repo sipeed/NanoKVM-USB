@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Logi Options+ back gesture",
+    "eventType": 29,
+    "fields": [
+      { "field": 132, "equals": 4 },
+      { "field": 115, "equals": 4 }
+    ],
+    "emit": "side"
+  },
+  {
+    "name": "Logi Options+ forward gesture",
+    "eventType": 29,
+    "fields": [
+      { "field": 132, "equals": 4 },
+      { "field": 115, "equals": 8 }
+    ],
+    "emit": "extra"
+  }
+]

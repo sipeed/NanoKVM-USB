@@ -4,6 +4,8 @@ import { SerialPort } from './serial-port'
 export class Device {
   addr: number
   serialPort: SerialPort
+  private lastAbsX: number = 0
+  private lastAbsY: number = 0
 
   constructor() {
     this.addr = 0x00
@@ -27,9 +29,20 @@ export class Device {
   async sendMouseData(report: number[]): Promise<void> {
     if (report.length === 0) return
 
+    // Absolute reports declare 5 buttons; track last position so side-button
+    // injections from the main process don't teleport the cursor.
+    if (report[0] === 0x02 && report.length >= 7) {
+      this.lastAbsX = report[2] | (report[3] << 8)
+      this.lastAbsY = report[4] | (report[5] << 8)
+    }
+
     const cmdEvent = report[0] === 0x01 ? CmdEvent.SEND_MS_REL_DATA : CmdEvent.SEND_MS_ABS_DATA
     const cmdData = new CmdPacket(this.addr, cmdEvent, report).encode()
     await this.serialPort.write(cmdData)
+  }
+
+  getLastAbsPosition(): { x: number; y: number } {
+    return { x: this.lastAbsX, y: this.lastAbsY }
   }
 }
 
