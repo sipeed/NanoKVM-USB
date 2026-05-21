@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 
-import { isKeyboardEnableAtom } from '@/jotai/keyboard';
+import { isKeyboardEnableAtom, keyboardLayoutAtom } from '@/jotai/keyboard';
 import { getOperatingSystem } from '@/libs/browser';
 import { device } from '@/libs/device';
 import { KeyboardReport } from '@/libs/keyboard/keyboard.ts';
-import { isModifier } from '@/libs/keyboard/keymap.ts';
+import { getKeycode, isModifier } from '@/libs/keyboard/keymap.ts';
+import { sendTextAsKeyboardReports } from '@/libs/keyboard/layout.ts';
 
 interface AltGrState {
   active: boolean;
@@ -17,6 +18,7 @@ const ALTGR_THRESHOLD_MS = 10;
 export const Keyboard = () => {
   const os = getOperatingSystem();
   const isKeyboardEnabled = useAtomValue(isKeyboardEnableAtom);
+  const keyboardLayout = useAtomValue(keyboardLayoutAtom);
 
   const keyboardRef = useRef(new KeyboardReport());
   const pressedKeys = useRef(new Set<string>());
@@ -35,6 +37,7 @@ export const Keyboard = () => {
 
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('paste', handlePaste);
     document.addEventListener('compositionstart', handleCompositionStart);
     document.addEventListener('compositionend', handleCompositionEnd);
     window.addEventListener('blur', handleBlur);
@@ -47,10 +50,22 @@ export const Keyboard = () => {
       // Skip during IME composition
       if (isComposing.current || event.isComposing) return;
 
+      if (isPasteShortcut(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        await pasteFromClipboard();
+        return;
+      }
+
       event.preventDefault();
       event.stopPropagation();
 
       const code = normalizeKeyCode(event, os);
+      if (shouldTypePrintableFallback(event, code)) {
+        await typeText(event.key);
+        return;
+      }
+
       if (!code || pressedKeys.current.has(code)) {
         return;
       }
@@ -83,6 +98,9 @@ export const Keyboard = () => {
       event.stopPropagation();
 
       const code = normalizeKeyCode(event, os);
+      if (shouldTypePrintableFallback(event, code)) {
+        return;
+      }
 
       // Handle AltGr state for Windows
       if (altGrState.current?.active) {
@@ -122,6 +140,21 @@ export const Keyboard = () => {
       isComposing.current = false;
     }
 
+    async function handlePaste(event: ClipboardEvent): Promise<void> {
+      if (!isKeyboardEnabled) return;
+      if (isComposing.current) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      let text = event.clipboardData?.getData('text/plain');
+      if (!text) {
+        text = await navigator.clipboard.readText();
+      }
+
+      await typeText(text);
+    }
+
     // Release all keys when window loses focus
     async function handleBlur(): Promise<void> {
       await releaseKeys();
@@ -152,9 +185,31 @@ export const Keyboard = () => {
       await device.sendKeyboardData(report);
     }
 
+    async function pasteFromClipboard(): Promise<void> {
+      try {
+        const text = await navigator.clipboard.readText();
+        await typeText(text);
+      } catch (e) {
+        console.log(e);
+      }
+    }
+
+    async function typeText(text: string): Promise<void> {
+      if (!text) return;
+
+      await releaseKeys();
+      await sendTextAsKeyboardReports(
+        text,
+        keyboardLayout,
+        (report) => device.sendKeyboardData(report),
+        50
+      );
+    }
+
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
+      document.removeEventListener('paste', handlePaste);
       document.removeEventListener('compositionstart', handleCompositionStart);
       document.removeEventListener('compositionend', handleCompositionEnd);
       window.removeEventListener('blur', handleBlur);
@@ -162,7 +217,7 @@ export const Keyboard = () => {
 
       releaseKeys();
     };
-  }, [isKeyboardEnabled]);
+  }, [isKeyboardEnabled, keyboardLayout]);
 
   function normalizeKeyCode(event: KeyboardEvent, os?: string): string {
     if (event.code) {
@@ -196,6 +251,18 @@ export const Keyboard = () => {
     const kb = keyboardRef.current;
     const report = event.type === 'keydown' ? kb.keyDown(event.code) : kb.keyUp(event.code);
     await device.sendKeyboardData(report);
+  }
+
+  function isPasteShortcut(event: KeyboardEvent): boolean {
+    return (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'v';
+  }
+
+  function shouldTypePrintableFallback(event: KeyboardEvent, code: string): boolean {
+    return isPrintableKey(event.key) && (!code || (!isModifier(code) && getKeycode(code) === undefined));
+  }
+
+  function isPrintableKey(key: string): boolean {
+    return Array.from(key).length === 1 || key === '\n' || key === '\t';
   }
 
   return <></>;

@@ -46,6 +46,9 @@ const en = {
     },
     keyboard: {
       paste: 'Paste',
+      layout: 'Keyboard layout',
+      layoutUs: 'US',
+      layoutDe: 'Deutsch',
       virtualKeyboard: 'Keyboard',
       shortcut: {
         title: 'Shortcuts',

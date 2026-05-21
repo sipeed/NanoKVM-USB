@@ -39,6 +39,9 @@ const de = {
     },
     keyboard: {
       paste: 'Einfügen',
+      layout: 'Tastaturlayout',
+      layoutUs: 'US',
+      layoutDe: 'Deutsch',
       virtualKeyboard: 'Virtuelle Tastatur',
       shortcut: {
         title: 'Tastenkürzel',

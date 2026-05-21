@@ -1,4 +1,6 @@
 import type { Resolution } from '@renderer/types'
+import type { KeyboardLayout } from '@renderer/libs/keyboard/layout'
+import { DEFAULT_KEYBOARD_LAYOUT, normalizeKeyboardLayout } from '@renderer/libs/keyboard/layout'
 
 import { getWithExpiry, setWithExpiry } from './expiry'
 
@@ -17,6 +19,7 @@ const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval'
 const BAUD_RATE_KEY = 'nanokvm-usb-baud-rate'
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode'
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcuts'
+const KEYBOARD_LAYOUT_KEY = 'nanokvm-usb-keyboard-layout'
 
 export function getLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_KEY)
@@ -174,6 +177,7 @@ export function clearAllSettings(): void {
   localStorage.removeItem(SKIP_UPDATE_KEY)
   localStorage.removeItem(MOUSE_SCROLL_INTERVAL_KEY)
   localStorage.removeItem(BAUD_RATE_KEY)
+  localStorage.removeItem(KEYBOARD_LAYOUT_KEY)
 }
 
 export function getMouseJigglerMode(): 'enable' | 'disable' {
@@ -191,4 +195,12 @@ export function getShortcuts(): string | null {
 
 export function setShortcuts(shortcuts: string): void {
   localStorage.setItem(KEYBOARD_SHORTCUT_KEY, shortcuts)
+}
+
+export function getKeyboardLayout(): KeyboardLayout {
+  return normalizeKeyboardLayout(localStorage.getItem(KEYBOARD_LAYOUT_KEY) ?? DEFAULT_KEYBOARD_LAYOUT)
+}
+
+export function setKeyboardLayout(layout: KeyboardLayout): void {
+  localStorage.setItem(KEYBOARD_LAYOUT_KEY, layout)
 }

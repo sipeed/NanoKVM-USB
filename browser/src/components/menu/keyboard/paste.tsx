@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { ClipboardIcon } from 'lucide-react';
+import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 
+import { keyboardLayoutAtom } from '@/jotai/keyboard.ts';
 import { device } from '@/libs/device';
-import { CharCodes, ShiftChars } from '@/libs/keyboard/charCodes.ts';
-import { getModifierBit } from '@/libs/keyboard/keymap.ts';
+import { sendTextAsKeyboardReports } from '@/libs/keyboard/layout.ts';
 
 export const Paste = () => {
   const { t } = useTranslation();
+  const keyboardLayout = useAtomValue(keyboardLayoutAtom);
   const [isLoading, setIsLoading] = useState(false);
 
   async function paste(): Promise<void> {
@@ -18,21 +20,7 @@ export const Paste = () => {
       const text = await navigator.clipboard.readText();
       if (!text) return;
 
-      for (const char of text) {
-        const ascii = char.charCodeAt(0);
-
-        const code = CharCodes[ascii];
-        if (!code) continue;
-
-        let modifier = 0;
-        if ((ascii >= 65 && ascii <= 90) || ShiftChars[ascii]) {
-          modifier |= getModifierBit('ShiftLeft');
-        }
-
-        await send(modifier, code);
-        await new Promise((r) => setTimeout(r, 50));
-        await send(0, 0);
-      }
+      await sendTextAsKeyboardReports(text, keyboardLayout, send, 50);
     } catch (e) {
       console.log(e);
     } finally {
@@ -40,9 +28,8 @@ export const Paste = () => {
     }
   }
 
-  async function send(modifier: number, code: number): Promise<void> {
-    const keys = [modifier, 0, code, 0, 0, 0, 0, 0];
-    await device.sendKeyboardData(keys);
+  async function send(report: number[]): Promise<void> {
+    await device.sendKeyboardData(report);
   }
 
   return (

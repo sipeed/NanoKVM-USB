@@ -8,6 +8,7 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
+    "test:keyboard": "node --test src/renderer/src/libs/keyboard/layout.test.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
@@ -92,7 +93,7 @@
       "minimatch@<9.0.6": ">=9.0.6",
       "minimatch@>=10.0.0 <10.2.1": ">=10.2.1",
       "tar@<7.5.8": ">=7.5.8",
-      "ajv@<6.14.0": ">=6.14.0",
+      "ajv@<6.14.0": "6.14.0",
       "lodash@<4.17.23": ">=4.17.23",
       "@isaacs/brace-expansion@<=5.0.0": ">=5.0.1"
     }
