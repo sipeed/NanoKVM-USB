@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Select } from 'antd';
 import { useAtom, useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +20,7 @@ export const Video = ({ setErrMsg }: VideoProps) => {
   const [videoState, setVideoState] = useAtom(videoStateAtom);
 
   const [devices, setDevices] = useState<MediaDevice[]>([]);
+  const autoSelectAttempted = useRef(false);
 
   useEffect(() => {
     getDevices();
@@ -51,13 +52,21 @@ export const Video = ({ setErrMsg }: VideoProps) => {
       });
 
       setDevices(mediaDevices);
+
+      if (!autoSelectAttempted.current) {
+        autoSelectAttempted.current = true;
+        const savedDeviceId = storage.getVideoDevice();
+        if (savedDeviceId && mediaDevices.some((d) => d.videoId === savedDeviceId)) {
+          selectVideoDevice(savedDeviceId, mediaDevices);
+        }
+      }
     } catch (err) {
       console.log(err);
       setErrMsg(t('camera.failed'));
     }
   }
 
-  async function selectVideo(videoId: string) {
+  async function selectVideoDevice(videoId: string, deviceList: MediaDevice[]) {
     if (videoState === 'connecting') return;
 
     if (!videoId) {
@@ -65,7 +74,7 @@ export const Video = ({ setErrMsg }: VideoProps) => {
       return;
     }
 
-    const device = devices.find((d) => d.videoId === videoId);
+    const device = deviceList.find((d) => d.videoId === videoId);
     if (!device) {
       return;
     }
@@ -88,6 +97,10 @@ export const Video = ({ setErrMsg }: VideoProps) => {
     setVideoState('connected');
     setVideoDeviceId(videoId);
     storage.setVideoDevice(videoId);
+  }
+
+  async function selectVideo(videoId: string) {
+    return selectVideoDevice(videoId, devices);
   }
 
   return (

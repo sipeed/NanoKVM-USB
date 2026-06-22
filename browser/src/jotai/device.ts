@@ -10,7 +10,7 @@ export const resolutionAtom = atom<Resolution>({
   height: 1080
 });
 
-export const videoScaleAtom = atom<number>(1.0);
+export const videoScaleAtom = atom<number>(0);
 
 export const videoRotationAtom = atom<Rotation>(0);
 

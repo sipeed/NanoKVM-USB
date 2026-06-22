@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CpuIcon, Loader2Icon } from 'lucide-react';
 
 import { device } from '@/libs/device';
+import * as storage from '@/libs/storage';
 
 export const SerialPort = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -13,6 +14,9 @@ export const SerialPort = () => {
     try {
       const port = await navigator.serial.requestPort();
       await device.serialPort.init({ port });
+
+      const info = port.getInfo();
+      storage.setSerialPort(info.usbVendorId, info.usbProductId);
     } finally {
       setIsLoading(false);
     }
