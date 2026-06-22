@@ -12,6 +12,7 @@ const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode';
 const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
 const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
 const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
+const SERIAL_PORT_KEY = 'nanokvm-usb-serial-port';
 const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcut';
 
 export function getLanguage() {
@@ -154,4 +155,27 @@ export function getMouseJigglerMode(): 'enable' | 'disable' {
 
 export function setMouseJigglerMode(jiggler: 'enable' | 'disable'): void {
   localStorage.setItem(MOUSE_JIGGLER_MODE_KEY, jiggler);
+}
+
+export type SerialPortInfo = {
+  vendorId?: number;
+  productId?: number;
+};
+
+export function getSerialPort(): SerialPortInfo | null {
+  const data = localStorage.getItem(SERIAL_PORT_KEY);
+  if (!data) return null;
+  try {
+    return window.JSON.parse(data) as SerialPortInfo;
+  } catch {
+    return null;
+  }
+}
+
+export function setSerialPort(vendorId?: number, productId?: number): void {
+  localStorage.setItem(SERIAL_PORT_KEY, window.JSON.stringify({ vendorId, productId }));
+}
+
+export function removeSerialPort(): void {
+  localStorage.removeItem(SERIAL_PORT_KEY);
 }
