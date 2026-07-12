@@ -28,6 +28,10 @@ const nl = {
       resolution: 'Resolutie',
       scale: 'Schaal',
       customResolution: 'Aangepast',
+      capture: 'Ongecomprimeerd (exp.)',
+      captureFailed: 'Ongecomprimeerde opname mislukt',
+      captureDevice: 'Opnameapparaat',
+      sharpness: 'Scherpte',
       device: 'Apparaat',
       custom: {
         title: 'Aangepaste resolutie',

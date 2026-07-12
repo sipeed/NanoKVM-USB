@@ -53,6 +53,9 @@ export const Video = ({ setMsg }: VideoProps): ReactElement => {
       setDevices(mediaDevices)
 
       if (autoOpen) {
+        // Capture mode owns the device via ffmpeg (App.tsx) — don't also open
+        // it through getUserMedia at startup.
+        if (storage.getCaptureMode()) return
         const videoId = storage.getVideoDevice()
         if (!videoId) return
         const device = mediaDevices.find((d) => d.videoId === videoId)

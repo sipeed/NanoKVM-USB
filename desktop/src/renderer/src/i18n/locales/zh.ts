@@ -27,6 +27,10 @@ const zh = {
       resolution: '分辨率',
       scale: '缩放',
       customResolution: '自定义',
+      capture: '无压缩（实验性）',
+      captureFailed: '无压缩采集失败',
+      captureDevice: '采集设备',
+      sharpness: '锐度',
       device: '设备',
       custom: {
         title: '自定义分辨率',

@@ -23,6 +23,10 @@ const zh_tw = {
     video: {
       resolution: '解析度',
       customResolution: '自訂',
+      capture: '無壓縮（實驗性）',
+      captureFailed: '無壓縮擷取失敗',
+      captureDevice: '擷取裝置',
+      sharpness: '銳利度',
       device: '裝置',
       custom: {
         title: '自訂解析度',

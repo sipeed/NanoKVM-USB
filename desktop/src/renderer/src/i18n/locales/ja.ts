@@ -28,6 +28,10 @@ const ja = {
       resolution: '解像度',
       scale: '拡大縮小',
       customResolution: 'カスタム',
+      capture: '非圧縮（実験的）',
+      captureFailed: '非圧縮キャプチャに失敗しました',
+      captureDevice: 'キャプチャデバイス',
+      sharpness: 'シャープネス',
       device: 'デバイス',
       custom: {
         title: 'カスタム解像度',

@@ -6,6 +6,9 @@ const LANGUAGE_KEY = 'nanokvm-usb-language'
 const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id'
 const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-video-resolution'
 const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale'
+const CAPTURE_MODE_KEY = 'nanokvm-usb-capture-mode'
+const CAPTURE_DEVICE_KEY = 'nanokvm-usb-capture-device'
+const SHARPNESS_KEY = 'nanokvm-usb-sharpness'
 const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-custom-resolution'
 const SERIAL_PORT_KEY = 'nanokvm-serial-port'
 const IS_MENU_OPEN_KEY = 'nanokvm-is-menu-open'
@@ -77,6 +80,31 @@ export function getVideoScale(): number | null {
 
 export function setVideoScale(scale: number): void {
   localStorage.setItem(VIDEO_SCALE_KEY, String(scale))
+}
+
+export function getCaptureMode(): boolean {
+  return localStorage.getItem(CAPTURE_MODE_KEY) === 'true'
+}
+
+export function setCaptureMode(enabled: boolean): void {
+  localStorage.setItem(CAPTURE_MODE_KEY, enabled ? 'true' : 'false')
+}
+
+export function getCaptureDevice(): string {
+  return localStorage.getItem(CAPTURE_DEVICE_KEY) || ''
+}
+
+export function setCaptureDevice(name: string): void {
+  localStorage.setItem(CAPTURE_DEVICE_KEY, name)
+}
+
+export function getSharpness(): number {
+  const value = Number(localStorage.getItem(SHARPNESS_KEY))
+  return Number.isFinite(value) && localStorage.getItem(SHARPNESS_KEY) !== null ? value : 0.5
+}
+
+export function setSharpness(value: number): void {
+  localStorage.setItem(SHARPNESS_KEY, String(value))
 }
 
 export function getSerialPort(): string | null {

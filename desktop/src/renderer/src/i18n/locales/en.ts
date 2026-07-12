@@ -28,6 +28,10 @@ const en = {
       resolution: 'Resolution',
       scale: 'Scale',
       customResolution: 'Custom',
+      capture: 'Uncompressed (exp.)',
+      captureFailed: 'Uncompressed capture failed',
+      captureDevice: 'Capture Device',
+      sharpness: 'Sharpness',
       device: 'Device',
       custom: {
         title: 'Custom Resolution',

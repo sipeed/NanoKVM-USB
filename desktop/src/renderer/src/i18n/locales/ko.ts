@@ -20,6 +20,10 @@ const ko = {
       resolution: '해상도',
       scale: '배율',
       customResolution: '사용자 정의',
+      capture: '무압축 (실험적)',
+      captureFailed: '무압축 캡처 실패',
+      captureDevice: '캡처 장치',
+      sharpness: '선명도',
       device: '장치',
       custom: {
         title: '사용자 정의 해상도',

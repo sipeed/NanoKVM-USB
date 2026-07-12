@@ -31,13 +31,16 @@ export const Absolute = (): ReactElement => {
       const clientX = event.clientX
       const clientY = event.clientY
 
-      if (!screen.videoWidth || !screen.videoHeight) {
+      // capture mode renders a <canvas> (no videoWidth); fall back to its buffer size
+      const iw = screen.videoWidth || screen.width
+      const ih = screen.videoHeight || screen.height
+      if (!iw || !ih) {
         const x = (clientX - rect.left) / rect.width
         const y = (clientY - rect.top) / rect.height
         return { x, y }
       }
 
-      const videoRatio = screen.videoWidth / screen.videoHeight
+      const videoRatio = iw / ih
       const elementRatio = rect.width / rect.height
 
       let renderedWidth = rect.width

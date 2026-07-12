@@ -7,3 +7,7 @@ out
 
 .idea
 .vscode
+
+# compiled native capture helper (pnpm build:capture)
+resources/nanokvm-capture
+*.tsbuildinfo

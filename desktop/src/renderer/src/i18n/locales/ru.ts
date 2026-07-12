@@ -28,6 +28,10 @@ const ru = {
       resolution: 'Разрешение',
       scale: 'Масштаб',
       customResolution: 'Пользовательское',
+      capture: 'Без сжатия (эксп.)',
+      captureFailed: 'Сбой захвата без сжатия',
+      captureDevice: 'Устройство захвата',
+      sharpness: 'Резкость',
       device: 'Видеоустройство',
       custom: {
         title: 'Пользовательское разрешение',

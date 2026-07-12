@@ -1,5 +1,13 @@
 import { electronAPI } from '@electron-toolkit/preload'
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+
+import { IpcEvents } from '../common/ipc-events'
+
+// MessagePorts cannot cross the contextBridge, so forward the capture channel's
+// port directly into the page via window.postMessage (with transfer).
+ipcRenderer.on(IpcEvents.CAPTURE_PORT, (e, meta) => {
+  window.postMessage({ type: 'capture-port', meta }, '*', e.ports)
+})
 
 // Custom APIs for renderer
 const api = {}

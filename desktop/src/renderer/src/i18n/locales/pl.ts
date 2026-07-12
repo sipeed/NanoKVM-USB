@@ -20,6 +20,10 @@ const pl = {
     video: {
       resolution: 'Rozdzielczość',
       customResolution: 'Niestandardowa',
+      capture: 'Bez kompresji (eksp.)',
+      captureFailed: 'Przechwytywanie bez kompresji nie powiodło się',
+      captureDevice: 'Urządzenie przechwytujące',
+      sharpness: 'Ostrość',
       device: 'Urządzenie',
       custom: {
         title: 'Niestandardowa rozdzielczość',

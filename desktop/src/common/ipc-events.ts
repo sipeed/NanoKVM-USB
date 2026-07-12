@@ -6,6 +6,12 @@ export enum IpcEvents {
   REQUEST_MEDIA_PERMISSION = 'request-media-permission',
   SET_FULL_SCREEN = 'set-full-screen',
 
+  GET_CAPTURE_DEVICES = 'get-capture-devices',
+  START_CAPTURE = 'start-capture',
+  STOP_CAPTURE = 'stop-capture',
+  CAPTURE_PORT = 'capture-port',
+  CAPTURE_ERROR = 'capture-error',
+
   GET_SERIAL_PORTS = 'get-serial-ports',
   OPEN_SERIAL_PORT = 'open-serial-port',
   OPEN_SERIAL_PORT_RSP = 'open-serial-port-rsp',

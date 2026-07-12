@@ -28,6 +28,10 @@ const be = {
       resolution: 'Resolutie',
       scale: 'Schaal',
       customResolution: 'Aangepast',
+      capture: 'Без сціскання (эксп.)',
+      captureFailed: 'Захоп без сціскання не ўдаўся',
+      captureDevice: 'Прылада захопу',
+      sharpness: 'Рэзкасць',
       device: 'Toestel',
       custom: {
         title: 'Aangepaste resolutie',

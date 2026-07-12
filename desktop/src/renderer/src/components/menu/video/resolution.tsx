@@ -1,11 +1,11 @@
 import React, { ReactElement, useEffect, useState } from 'react'
 import { Button, Divider, InputNumber, Modal, Popover } from 'antd'
 import clsx from 'clsx'
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { RatioIcon, Trash2Icon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { resolutionAtom } from '@renderer/jotai/device'
+import { captureModeAtom, resolutionAtom } from '@renderer/jotai/device'
 import { isKeyboardEnableAtom } from '@renderer/jotai/keyboard'
 import { camera } from '@renderer/libs/media/camera'
 import * as storage from '@renderer/libs/storage'
@@ -15,6 +15,7 @@ export const Resolution = (): ReactElement => {
   const { t } = useTranslation()
 
   const [resolution, setResolution] = useAtom(resolutionAtom)
+  const captureMode = useAtomValue(captureModeAtom)
   const setIsKeyboardEnable = useSetAtom(isKeyboardEnableAtom)
 
   const [isOpen, setIsOpen] = useState(false)
@@ -66,16 +67,20 @@ export const Resolution = (): ReactElement => {
   }
 
   async function updateResolution(w: number, h: number): Promise<void> {
-    try {
-      await camera.updateResolution(w, h)
-    } catch (err) {
-      console.log(err)
-      return
-    }
+    // In capture mode the ffmpeg session owns the device; App.tsx restarts it
+    // when the resolution atom changes — don't touch the getUserMedia camera.
+    if (!captureMode) {
+      try {
+        await camera.updateResolution(w, h)
+      } catch (err) {
+        console.log(err)
+        return
+      }
 
-    const video = document.getElementById('video') as HTMLVideoElement
-    if (!video) return
-    video.srcObject = camera.getStream()
+      const video = document.getElementById('video') as HTMLVideoElement
+      if (!video) return
+      video.srcObject = camera.getStream()
+    }
 
     setResolution({ width: w, height: h })
     storage.setVideoResolution(w, h)

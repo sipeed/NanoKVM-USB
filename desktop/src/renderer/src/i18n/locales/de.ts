@@ -28,6 +28,10 @@ const de = {
       resolution: 'Auflösung',
       scale: 'Skalierung',
       customResolution: 'Benutzerdefiniert',
+      capture: 'Unkomprimiert (exp.)',
+      captureFailed: 'Unkomprimierte Aufnahme fehlgeschlagen',
+      captureDevice: 'Aufnahmegerät',
+      sharpness: 'Schärfe',
       device: 'Gerät',
       custom: {
         title: 'Benutzerdefinierte Aufösung',

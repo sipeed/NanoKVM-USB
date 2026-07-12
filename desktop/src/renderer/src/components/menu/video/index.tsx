@@ -2,15 +2,21 @@ import { ReactElement } from 'react'
 import { Popover } from 'antd'
 import { MonitorIcon } from 'lucide-react'
 
+import { Capture } from './capture'
+import { CaptureDevice } from './capture-device'
 import { Device } from './device'
 import { Resolution } from './resolution'
 import { Scale } from './scale'
+import { Sharpness } from './sharpness'
 
 export const Video = (): ReactElement => {
   const content = (
     <div className="flex flex-col space-y-1">
       <Resolution />
       <Scale />
+      <Capture />
+      <CaptureDevice />
+      <Sharpness />
       <Device />
     </div>
   )

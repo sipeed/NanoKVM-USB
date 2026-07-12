@@ -5,22 +5,28 @@ import { useAtom, useAtomValue } from 'jotai'
 import { VideoIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { resolutionAtom, videoDeviceIdAtom } from '@renderer/jotai/device'
+import { captureModeAtom, resolutionAtom, videoDeviceIdAtom } from '@renderer/jotai/device'
 import { camera } from '@renderer/libs/media/camera'
 import * as storage from '@renderer/libs/storage'
 import type { MediaDevice } from '@renderer/types'
 
-export const Device = (): ReactElement => {
+export const Device = (): ReactElement | null => {
   const { t } = useTranslation()
   const resolution = useAtomValue(resolutionAtom)
+  const captureMode = useAtomValue(captureModeAtom)
   const [videoDeviceId, setVideoDeviceId] = useAtom(videoDeviceIdAtom)
 
   const [devices, setDevices] = useState<MediaDevice[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    getDevices()
-  }, [])
+    // In capture mode the native helper owns the device: don't touch
+    // getUserMedia (even enumerating here opens the camera briefly), and show
+    // only the Capture Device picker.
+    if (!captureMode) getDevices()
+  }, [captureMode])
+
+  if (captureMode) return null
 
   async function getDevices(): Promise<void> {
     try {

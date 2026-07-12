@@ -20,6 +20,10 @@ const pt_br = {
     video: {
       resolution: 'Resolução',
       customResolution: 'Personalizada',
+      capture: 'Sem compressão (exp.)',
+      captureFailed: 'Falha na captura sem compressão',
+      captureDevice: 'Dispositivo de captura',
+      sharpness: 'Nitidez',
       device: 'Dispositivo',
       custom: {
         title: 'Resolução Personalizada',

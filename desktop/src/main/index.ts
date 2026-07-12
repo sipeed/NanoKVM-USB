@@ -19,7 +19,10 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      // Keep the capture canvas (rAF-driven) updating when the window is not
+      // focused — a KVM is often in the background while you use the target.
+      backgroundThrottling: false
     }
   })
 
@@ -54,6 +57,7 @@ app.whenReady().then(() => {
 
   events.registerApp()
   events.registerSerialPort()
+  events.registerCapture()
 
   createWindow()
 
