@@ -40,7 +40,10 @@ export const Resolution = (): ReactElement => {
 
   useEffect(() => {
     setIsKeyboardEnable(!isOpen)
-  }, [isOpen])
+    return () => {
+      setIsKeyboardEnable(true)
+    }
+  }, [isOpen, setIsKeyboardEnable])
 
   function showModal(): void {
     setWidth(0)
