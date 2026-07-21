@@ -73,7 +73,12 @@ export const Recorder = ({
     setIsKeyboardEnable(!isModalOpen)
     setIsRecording(isModalOpen)
 
-    if (!isModalOpen) return
+    if (!isModalOpen) {
+      return () => {
+        setIsKeyboardEnable(true)
+        setIsRecording(false)
+      }
+    }
 
     const timer = setTimeout(() => {
       inputRef.current?.focus()
@@ -81,8 +86,10 @@ export const Recorder = ({
 
     return () => {
       clearTimeout(timer)
+      setIsKeyboardEnable(true)
+      setIsRecording(false)
     }
-  }, [isModalOpen])
+  }, [isModalOpen, setIsKeyboardEnable, setIsRecording])
 
   useEffect(() => {
     if (!isFocused) return

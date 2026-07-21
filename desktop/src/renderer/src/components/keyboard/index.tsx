@@ -20,6 +20,7 @@ export const Keyboard = (): ReactElement => {
   const pressedKeys = useRef(new Set<string>())
   const altGrState = useRef<AltGrState | null>(null)
   const isComposing = useRef(false)
+  const lastIgnoredReason = useRef<string | null>(null)
 
   useEffect(() => {
     initAltGr()
@@ -33,18 +34,26 @@ export const Keyboard = (): ReactElement => {
     document.addEventListener('keyup', handleKeyUp)
     document.addEventListener('compositionstart', handleCompositionStart)
     document.addEventListener('compositionend', handleCompositionEnd)
+    document.addEventListener('compositioncancel', handleCompositionCancel)
     window.addEventListener('blur', handleBlur)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     // Key down event
     async function handleKeyDown(event: KeyboardEvent): Promise<void> {
-      if (!isKeyboardEnabled) return
+      if (!isKeyboardEnabled) {
+        logIgnoredKey('disabled', event)
+        return
+      }
 
       // Skip during IME composition
-      if (isComposing.current || event.isComposing) return
+      if (isComposing.current || event.isComposing) {
+        logIgnoredKey('composing', event)
+        return
+      }
 
       event.preventDefault()
       event.stopPropagation()
+      lastIgnoredReason.current = null
 
       // Fallback for Japanese keyboards with Microsoft IME where event.code is empty for right Shift
       let code = event.code
@@ -75,12 +84,19 @@ export const Keyboard = (): ReactElement => {
 
     // Key up event
     async function handleKeyUp(event: KeyboardEvent): Promise<void> {
-      if (!isKeyboardEnabled) return
+      if (!isKeyboardEnabled) {
+        logIgnoredKey('disabled', event)
+        return
+      }
 
-      if (isComposing.current || event.isComposing) return
+      if (isComposing.current || event.isComposing) {
+        logIgnoredKey('composing', event)
+        return
+      }
 
       event.preventDefault()
       event.stopPropagation()
+      lastIgnoredReason.current = null
 
       // Fallback for Japanese keyboards with Microsoft IME where event.code is empty for right Shift
       let code = event.code
@@ -119,11 +135,18 @@ export const Keyboard = (): ReactElement => {
     // Composition start event
     function handleCompositionStart(): void {
       isComposing.current = true
+      lastIgnoredReason.current = null
+      console.debug('[keyboard] composition started')
     }
 
     // Composition end event
     function handleCompositionEnd(): void {
-      isComposing.current = false
+      resetComposition('compositionend')
+    }
+
+    // Composition cancel event
+    function handleCompositionCancel(): void {
+      resetComposition('compositioncancel')
     }
 
     // Release all keys when window loses focus
@@ -140,6 +163,8 @@ export const Keyboard = (): ReactElement => {
 
     // Release all keys
     async function releaseKeys(): Promise<void> {
+      resetComposition('releaseKeys')
+
       for (const code of pressedKeys.current) {
         await handleKeyEvent({ type: 'keyup', code })
       }
@@ -156,11 +181,36 @@ export const Keyboard = (): ReactElement => {
       await sendReport(report)
     }
 
+    function resetComposition(reason: string): void {
+      if (isComposing.current) {
+        console.debug(`[keyboard] composition reset: ${reason}`)
+      }
+
+      isComposing.current = false
+      lastIgnoredReason.current = null
+    }
+
+    function logIgnoredKey(reason: string, event: KeyboardEvent): void {
+      const detail = `${reason}:${event.type}:${event.code || event.key}`
+      if (lastIgnoredReason.current === detail) return
+
+      lastIgnoredReason.current = detail
+      console.warn('[keyboard] physical key ignored', {
+        reason,
+        type: event.type,
+        code: event.code,
+        key: event.key,
+        isComposing: event.isComposing,
+        compositionLocked: isComposing.current
+      })
+    }
+
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       document.removeEventListener('keyup', handleKeyUp)
       document.removeEventListener('compositionstart', handleCompositionStart)
       document.removeEventListener('compositionend', handleCompositionEnd)
+      document.removeEventListener('compositioncancel', handleCompositionCancel)
       window.removeEventListener('blur', handleBlur)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
 
