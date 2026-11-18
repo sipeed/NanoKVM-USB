@@ -3,6 +3,11 @@ name: Create Tag and Release
 on:
   workflow_dispatch:
     inputs:
+      tag:
+        description: 'Optional tag name (default: v<version>-<short_sha>)'
+        required: false
+        type: string
+        default: ''
       prerelease:
         description: 'Mark as pre-release'
         required: false
@@ -14,6 +19,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: write
+
 env:
   NODE_VERSION: '20'
 
@@ -23,24 +31,39 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.version.outputs.tag }}
+      release_version: ${{ steps.version.outputs.release_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Read version from package.json
+      - name: Determine tag and version
         id: version
         run: |
-          VERSION=$(jq -r .version desktop/package.json)
-          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          BASE_VERSION=$(jq -r .version desktop/package.json)
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          INPUT_TAG="${{ inputs.tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="v${BASE_VERSION}-${SHORT_SHA}"
+          fi
+          RELEASE_VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "release_version=${RELEASE_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a ${{ steps.version.outputs.tag }} -m "Release ${{ steps.version.outputs.tag }}"
-          git push origin ${{ steps.version.outputs.tag }}
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists, skipping creation."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" -m "Release ${TAG}"
+            git push origin "${TAG}"
+          fi
 
   build-browser:
     name: Build Browser Bundle
@@ -95,18 +118,11 @@ jobs:
             target: windows
             build_script: build:win-full
             artifact_name: desktop-windows
-          - os: macos-latest
-            target: macos
-            build_script: build:mac-full
-            artifact_name: desktop-macos
     defaults:
       run:
         working-directory: desktop
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -124,15 +140,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential python3 libudev-dev rpm
 
-      - name: Import Code-Signing Certificates
-        if: startsWith(matrix.os, 'macos')
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
       - name: Install dependencies
         run: npm install
+
+      - name: Set package version for release artifacts
+        shell: bash
+        run: node -e "const fs = require('fs'); const p = JSON.parse(fs.readFileSync('package.json', 'utf8')); p.version = process.env.RELEASE_VERSION; fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');"
+        env:
+          RELEASE_VERSION: ${{ needs.create-tag.outputs.release_version }}
 
       - name: Build desktop package
         run: npm run ${{ matrix.build_script }}
@@ -146,8 +161,6 @@ jobs:
             desktop/dist/*.AppImage
             desktop/dist/*.deb
             desktop/dist/*.rpm
-            desktop/dist/*.dmg
-            desktop/dist/*-mac.zip
             desktop/dist/latest*.yml
           if-no-files-found: error
 
