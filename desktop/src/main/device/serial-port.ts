@@ -80,12 +80,24 @@ export class SerialPort {
   }
 
   async write(data: number[]): Promise<void> {
-    if (!this.port?.isOpen) {
-      return
+    const port = this.port
+    if (!port?.isOpen) {
+      throw new Error('Serial port not initialized')
     }
 
     const uint8Array = new Uint8Array(data)
-    this.port.write(uint8Array)
+    await new Promise<void>((resolve, reject) => {
+      port.write(uint8Array, (err) => {
+        if (err) {
+          if (this.isDisconnectError(err)) {
+            this.handleDisconnect()
+          }
+          reject(err)
+        } else {
+          resolve()
+        }
+      })
+    })
   }
 
   async read(minSize: number, sleep: number = 0): Promise<number[]> {
