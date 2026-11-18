@@ -68,6 +68,7 @@ async function sendKeyboard(_: IpcMainInvokeEvent, report: number[]): Promise<vo
     await device.sendKeyboardData(report)
   } catch (error) {
     console.error('Error sending keyboard data:', error)
+    throw error
   }
 }
 
