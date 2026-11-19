@@ -1,9 +1,0 @@
-@import './base.css';
-
-@layer tailwind-base, antd;
-
-@layer tailwind-base {
-  @tailwind base;
-}
-
-@import 'tailwindcss';

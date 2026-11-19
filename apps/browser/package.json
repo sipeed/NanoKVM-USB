@@ -1,0 +1,24 @@
+{
+  "name": "@nanokvm/browser",
+  "private": true,
+  "version": "1.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ant-design/cssinjs": "~2.1.2",
+    "@nanokvm/core": "workspace:*",
+    "@nanokvm/ui": "workspace:*",
+    "antd": "6.7.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  }
+}

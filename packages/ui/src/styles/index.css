@@ -1,0 +1,20 @@
+/*
+ * Tailwind v4 入口：必须显式 @source 声明共享包与两个 app 的源码目录，
+ * 否则这些目录里的类名会被 Tailwind 的内容检测裁掉。
+ */
+@import 'tailwindcss';
+@import './keyboard.css';
+
+@source '../../../../packages/ui/src';
+@source '../../../../packages/core/src';
+@source '../../../../apps/browser/src';
+@source '../../../../apps/desktop/src/renderer/src';
+
+@layer theme, base, components, antd, utilities;
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: #000;
+}

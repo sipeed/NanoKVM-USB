@@ -6,4 +6,4 @@ services:
     image: sipeed/nanokvm-usb:latest
     container_name: nanokvm-usb
     ports:
-      - "9000:80"   
+      - '9000:80'
