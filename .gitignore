@@ -8,3 +8,19 @@
 *.njsproj
 *.sln
 *.sw?
+
+# Dependencies / build output
+node_modules/
+dist/
+out/
+release/
+*.tsbuildinfo
+.eslintcache
+*.log
+
+# 本地诊断 / 测试临时产物（勿提交）
+# - .tmp-*：临时解包、测试目录（如 .tmp-e35 内含 Electron dist 的 default_app.asar）
+# - ca.txt / cae.txt：运行 Electron 时捕获的 stdout / stderr 日志
+ca.txt
+cae.txt
+.tmp-*

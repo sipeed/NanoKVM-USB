@@ -1,0 +1,8 @@
+node_modules
+dist
+out
+release
+pnpm-lock.yaml
+*.tsbuildinfo
+.eslintcache
+docs

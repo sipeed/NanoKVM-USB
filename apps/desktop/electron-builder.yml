@@ -1,0 +1,69 @@
+appId: com.sipeed.usbkvm
+productName: NanoKVM-USB
+
+directories:
+  buildResources: build
+
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+
+asarUnpack:
+  - resources/**
+
+win:
+  executableName: NanoKVM-USB
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-${os}-${arch}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+mac:
+  # dmg 用于安装，zip 用于 electron-updater 自动更新（缺一不可）
+  # 显式带 arch，避免 x64/arm64 的 zip 同名覆盖
+  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+  target:
+    - dmg
+    - zip
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSCameraUsageDescription: Application requests access to the device's camera.
+    NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  notarize: false
+
+dmg:
+  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+  sign: true
+
+linux:
+  # 包名是 @nanokvm/desktop，构建 Linux 时必须显式指定合法的可执行文件名
+  executableName: nanokvm-usb
+  target:
+    - AppImage
+    - deb
+    - rpm
+  maintainer: sipeed.com
+  category: Utility
+  artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
+
+npmRebuild: false
+
+afterSign: './notarize.js'
+
+publish:
+  provider: github
+  owner: sipeed
+  repo: NanoKVM-USB

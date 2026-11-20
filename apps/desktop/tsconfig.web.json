@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/renderer/src/**/*", "src/preload/*.d.ts"]
+}
