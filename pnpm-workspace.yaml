@@ -1,0 +1,36 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - 'tools/*'
+
+# pnpm 10+ 起，overrides 不再从 package.json 的 pnpm 字段读取
+overrides:
+  '@babel/helpers@<7.26.10': '^7.26.10'
+  '@babel/runtime@<7.26.10': '^7.26.10'
+  '@eslint/plugin-kit@<0.3.4': '>=0.3.4'
+  '@isaacs/brace-expansion@<=5.0.0': '>=5.0.1'
+  ajv@<6.14.0: '>=6.14.0'
+  brace-expansion@>=1.0.0 <=1.1.11: '>=1.1.12'
+  brace-expansion@>=2.0.0 <=2.0.1: '>=2.0.2'
+  esbuild@<=0.24.2: '>=0.25.0'
+  form-data@>=4.0.0 <4.0.4: '>=4.0.4'
+  lodash@<4.17.23: '>=4.17.23'
+  minimatch@<9.0.6: '>=9.0.6'
+  minimatch@>=10.0.0 <10.2.1: '>=10.2.1'
+  tar@<7.5.8: '>=7.5.8'
+  tmp@<=0.2.3: '>=0.2.4'
+
+# pnpm 11+ 用 allowBuilds 取代 onlyBuiltDependencies（后者已被静默忽略）
+allowBuilds:
+  electron: true
+  esbuild: true
+  electron-winstaller: true
+  '@serialport/bindings-cpp': true
+
+minimumReleaseAgeExclude:
+  - electron@45.4.1
+  - i18next@27.2.1
+  - lucide-react@1.75.0
+  - '@vitest/mocker@5.1.1'
+  - '@vitest/spy@5.1.1'
+  - vitest@5.1.1

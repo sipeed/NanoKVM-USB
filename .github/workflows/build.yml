@@ -10,91 +10,135 @@ on:
       - main
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
+  PNPM_VERSION: '12.21.0'
+
+# 同一分支的重复 push / PR 只保留最新一次构建
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  detect-changes:
-    name: Detect Changed Paths
+  quality:
+    name: Quality (lint / format / typecheck / test)
     runs-on: ubuntu-latest
-    outputs:
-      browser: ${{ steps.filter.outputs.browser }}
-      desktop: ${{ steps.filter.outputs.desktop }}
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v7
 
-      - name: Filter changes
-        id: filter
-        uses: dorny/paths-filter@v3
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
         with:
-          filters: |
-            browser:
-              - 'browser/**'
-            desktop:
-              - 'desktop/**'
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
 
   build-browser:
     name: Build Browser Bundle
-    needs: detect-changes
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.browser == 'true'
-    defaults:
-      run:
-        working-directory: browser
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build static site
-        run: npm run build
+        run: pnpm --filter @nanokvm/browser build
 
       - name: Upload browser dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-dist
-          path: browser/dist
+          path: apps/browser/dist
           if-no-files-found: error
 
   build-desktop:
-    name: Build Desktop Apps
-    needs: detect-changes
+    name: Build Desktop (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    if: needs.detect-changes.outputs.desktop == 'true'
+    timeout-minutes: 45
+    env:
+      # 固定缓存目录，避免 Electron / electron-builder 每次重新下载工具链
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: linux
+            arch: x64
             build_script: build:linux
-            artifact_name: desktop-linux
+            artifact_name: desktop-linux-x64
           - os: windows-latest
             target: windows
+            arch: x64
             build_script: build:win
-            artifact_name: desktop-windows
-    defaults:
-      run:
-        working-directory: desktop
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            artifact_name: desktop-windows-x64
+          - os: macos-latest
+            target: macos-x64
+            arch: x64
+            build_script: build:mac-unsigned-x64
+          - os: macos-latest
+            target: macos-arm64
+            arch: arm64
+            build_script: build:mac-unsigned-arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Cache Electron and electron-builder toolchains
+        uses: actions/cache@v6
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ matrix.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-${{ runner.os }}-${{ runner.arch }}-${{ matrix.arch }}-
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
 
       - name: Install Linux build dependencies
         if: matrix.os == 'ubuntu-latest'
@@ -103,14 +147,39 @@ jobs:
           sudo apt-get install -y build-essential python3 libudev-dev rpm
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build desktop package
-        run: npm run ${{ matrix.build_script }}
+        if: matrix.os != 'macos-latest'
+        run: pnpm --filter @nanokvm/desktop run ${{ matrix.build_script }}
 
-      - name: Upload desktop artifacts
-        uses: actions/upload-artifact@v4
+      - name: Build desktop package (macOS, unsigned)
+        if: matrix.os == 'macos-latest'
+        env:
+          # CI 只验证 macOS 能构建；不签名、不公证，避免依赖发布证书
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm --filter @nanokvm/desktop run ${{ matrix.build_script }}
+
+      - name: Upload Linux/Windows installers
+        if: matrix.os != 'macos-latest'
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
-          path: desktop/dist
+          path: |
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.rpm
+            apps/desktop/dist/latest*.yml
+          if-no-files-found: error
+
+      - name: Upload macOS installers
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-macos-${{ matrix.arch }}
+          path: |
+            apps/desktop/dist/*-${{ matrix.arch }}.dmg
+            apps/desktop/dist/*-${{ matrix.arch }}.zip
+            apps/desktop/dist/latest*.yml
           if-no-files-found: error
