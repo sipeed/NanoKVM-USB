@@ -146,13 +146,16 @@ export class SerialPort {
   async write(data: number[]): Promise<void> {
     const port = this.port
     if (!port?.isOpen) {
-      return
+      throw new Error('Serial port not initialized')
     }
 
     await new Promise<void>((resolve, reject) => {
       port.write(new Uint8Array(data), (err) => {
         if (err) {
           console.error('Error writing serial port data:', err)
+          if (this.isDisconnectError(err)) {
+            this.handleDisconnect()
+          }
           reject(err)
         } else {
           resolve()
