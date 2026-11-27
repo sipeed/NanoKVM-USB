@@ -1,0 +1,48 @@
+{
+  "name": "@nanokvm/desktop",
+  "version": "1.2.0",
+  "description": "NanoKVM-USB Desktop",
+  "main": "./out/main/index.js",
+  "author": "sipeed.com",
+  "homepage": "https://github.com/sipeed/NanoKVM-USB",
+  "scripts": {
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
+    "start": "electron-vite preview",
+    "dev": "electron-vite dev",
+    "build": "pnpm run typecheck && electron-vite build",
+    "build:unpack": "pnpm run build && electron-builder --dir --publish never",
+    "build:win": "pnpm run build && electron-builder --win --publish never",
+    "build:mac": "pnpm run build && electron-builder --mac --publish never",
+    "build:mac-unsigned-x64": "pnpm run build && electron-builder --mac --x64 --publish never -c.mac.forceCodeSigning=false",
+    "build:mac-unsigned-arm64": "pnpm run build && electron-builder --mac --arm64 --publish never -c.mac.forceCodeSigning=false",
+    "build:linux": "pnpm run build && electron-builder --linux --publish never",
+    "build:win-full": "pnpm run build && electron-builder --win --x64 --arm64 --publish never",
+    "build:mac-full": "pnpm run build && electron-builder --mac --x64 --arm64 --publish never",
+    "build:linux-full": "pnpm run build && electron-builder --linux --x64 --arm64 --publish never",
+    "dev:nosandbox": "electron-vite dev --noSandbox",
+    "start:nosandbox": "electron-vite preview --noSandbox"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "4.0.0",
+    "electron-log": "5.4.4",
+    "electron-updater": "6.8.11",
+    "serialport": "13.0.0"
+  },
+  "devDependencies": {
+    "@ant-design/cssinjs": "~2.1.2",
+    "@electron-toolkit/tsconfig": "2.0.0",
+    "@electron/notarize": "3.1.2",
+    "@nanokvm/core": "workspace:*",
+    "@nanokvm/ui": "workspace:*",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "antd": "6.7.1",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0",
+    "electron-vite": "6.0.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

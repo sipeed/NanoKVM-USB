@@ -1,0 +1,38 @@
+{
+  "name": "nanokvm-usb",
+  "private": true,
+  "version": "1.2.0",
+  "description": "NanoKVM-USB desktop and browser applications",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=12.0.0"
+  },
+  "scripts": {
+    "dev:desktop": "pnpm --filter @nanokvm/desktop dev",
+    "dev:browser": "pnpm --filter @nanokvm/browser dev",
+    "build": "pnpm --filter @nanokvm/browser build && pnpm --filter @nanokvm/desktop build",
+    "build:browser": "pnpm --filter @nanokvm/browser build",
+    "build:desktop": "pnpm --filter @nanokvm/desktop build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "lint": "node tools/lint/node_modules/eslint/bin/eslint.js --cache --config eslint.config.mjs apps packages",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev:desktop:nosandbox": "pnpm --filter @nanokvm/desktop dev:nosandbox",
+    "start:desktop:nosandbox": "pnpm --filter @nanokvm/desktop start:nosandbox"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "4.7.1",
+    "@tailwindcss/vite": "4.3.5",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "prettier": "3.10.1",
+    "prettier-plugin-tailwindcss": "0.8.1",
+    "tailwindcss": "4.3.5",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}
