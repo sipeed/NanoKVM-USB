@@ -66,17 +66,23 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Release version: ${VERSION} (tag: ${TAG})"
 
-      - name: Refuse to overwrite an existing release
+      - name: Refuse to overwrite an existing release with published assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" >/dev/null 2>&1; then
-            echo "::error::Release ${TAG} already exists. Refusing to overwrite already-published assets."
-            echo "::error::Bump the version and create a new tag instead of re-running against an existing release."
-            exit 1
+          RELEASE_DATA=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>/dev/null || true)
+          if [ -n "$RELEASE_DATA" ]; then
+            ASSETS_COUNT=$(echo "$RELEASE_DATA" | jq '.assets | length')
+            if [ "$ASSETS_COUNT" -gt 0 ]; then
+              echo "::error::Release ${TAG} already exists with ${ASSETS_COUNT} published assets. Refusing to overwrite."
+              echo "::error::Bump the version and create a new tag instead of re-running against an already-published release."
+              exit 1
+            fi
+            echo "Release ${TAG} exists but has no published assets yet. Proceeding with release build."
+          else
+            echo "Release ${TAG} does not exist yet."
           fi
-          echo "Release ${TAG} does not exist yet."
 
       - name: Create tag if it does not exist
         if: github.event_name != 'push'
@@ -295,16 +301,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Refuse to overwrite an existing release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.create-tag.outputs.release_tag }}
-        run: |
-          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" >/dev/null 2>&1; then
-            echo "::error::Release ${TAG} already exists. Refusing to overwrite already-published assets."
-            exit 1
-          fi
-
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
@@ -313,7 +309,7 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R release-artifacts
 
-      - name: Create Release
+      - name: Create or update Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.create-tag.outputs.release_tag }}
@@ -321,7 +317,7 @@ jobs:
           draft: ${{ inputs.draft || false }}
           prerelease: ${{ inputs.prerelease || false }}
           fail_on_unmatched_files: false
-          overwrite_files: false
+          overwrite_files: true
           files: |
             release-artifacts/**/*
           generate_release_notes: true
