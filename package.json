@@ -1,7 +1,7 @@
 {
   "name": "nanokvm-usb",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "NanoKVM-USB desktop and browser applications",
   "packageManager": "pnpm@12.21.0",
   "engines": {
@@ -19,6 +19,7 @@
     "lint": "node tools/lint/node_modules/eslint/bin/eslint.js --cache --config eslint.config.mjs apps packages",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "version:set": "node tools/update-version.mjs",
     "dev:desktop:nosandbox": "pnpm --filter @nanokvm/desktop dev:nosandbox",
     "start:desktop:nosandbox": "pnpm --filter @nanokvm/desktop start:nosandbox"
   },
